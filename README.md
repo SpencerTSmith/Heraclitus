@@ -1,15 +1,17 @@
 # Fix Soon:
 - Better render pass state tracking... maybe push and pop GL state procs? Since we are caching them we'll be able to check those calls and not do em if not necessary
-- Bring sun shadow maps up to the same quality as point shadow maps
 - Split shadow-casting point lights and non-shadow-casting lights... this can just be a bool... but should be separate arrays in the global frame uniform
-- AABB's!!!
+- AABB collision response
+- Batching layer on top of immediate rendering system
 
 
 # Complete:
-- Frames in flight sync, triple buffered persistently mapped buffers
-- Immediate vertex rendering system
-- Text rendering
+- AABB wireframe rendering and collision detection
+- Frames in flight sync, triple-up persistently mapped buffers
+- Immediate vertex rendering system, flushes vertices when needed (switching textures, modes, coordinate space)
+- Text rendering (backed by the immediate system)
 - Point light shadow mapping
+- Sun shadow mapping
 - Full blinn-phong shading model
 - Menu (press ESC)
 - Zoom (scroll wheel)

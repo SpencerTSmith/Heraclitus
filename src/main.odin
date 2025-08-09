@@ -394,20 +394,20 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 5.0, -5.0})
   append(&state.entities, duck2)
 
-  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 5.0, 0.0})
-  // append(&state.entities, helmet)
-  //
-  // helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 5.0, 0.0})
-  // append(&state.entities, helmet2)
-  //
-  // guitar := make_entity("guitar/scene.gltf", position={5.0, 10.0, 0.0}, scale={0.01, 0.01, 0.01})
-  // append(&state.entities, guitar)
+  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 5.0, 0.0})
+  append(&state.entities, helmet)
 
-  // sponza := make_entity("sponza/Sponza.gltf", scale={2.0, 2.0, 2.0})
-  // append(&state.entities, sponza)
+  helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 5.0, 0.0})
+  append(&state.entities, helmet2)
 
-  // floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
-  // append(&state.entities, floor)
+  guitar := make_entity("guitar/scene.gltf", position={5.0, 10.0, 0.0}, scale={0.01, 0.01, 0.01})
+  append(&state.entities, guitar)
+
+  sponza := make_entity("sponza/Sponza.gltf", scale={2.0, 2.0, 2.0})
+  append(&state.entities, sponza)
+
+  floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
+  append(&state.entities, floor)
 
   { // Light placement
     spacing := 15
@@ -493,7 +493,6 @@ main :: proc() {
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
 
-      // Simulate camera collision
       // cam_aabb := camera_world_aabb(state.camera)
       for &e in state.entities {
         entity_aabb := entity_world_aabb(e)
@@ -502,15 +501,13 @@ main :: proc() {
           if &o == &e { continue } // Same entity
           other_aabb := entity_world_aabb(o)
 
+          offset := aabb_min_penetration_vector(entity_aabb, other_aabb)
+
+          e.position += offset
+
           mink := aabb_minkowski_difference(entity_aabb, other_aabb)
           append(&minkowskis, mink)
         }
-
-
-        // if aabbs_intersect(cam_aabb, entity_aabb) {
-        //   intersect_color = RED
-        //   // state.camera.position = state.camera.prev_pos
-        // }
       }
 
       seconds := seconds_since_start()
@@ -518,7 +515,9 @@ main :: proc() {
       state.entities[0].position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
       state.entities[0].position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
 
-      state.entities[0].rotation.y += 4 * cast(f32) seconds * cast(f32) dt_s
+      state.entities[0].rotation.y += 20  * cast(f32) dt_s
+
+      // state.entities[0].scale.y += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
 
       // Update scene objects
       if state.point_lights_on {

@@ -1,9 +1,7 @@
 package main
 
-
-import "core:math/linalg/glsl"
-import "core:log"
 import gl "vendor:OpenGL"
+import "core:math/linalg/glsl"
 
 AABB :: struct {
   min: vec3,
@@ -37,42 +35,10 @@ aabb_minkowski_difference :: proc(a: AABB, b: AABB) -> AABB {
   return result
 }
 
-aabb_min_penetration_vector :: proc(a: AABB, b:AABB) -> (vec: vec3) {
-  overlap_x := min(a.max.x, b.max.x) - max(a.min.x, b.min.x)
-  overlap_y := min(a.max.y, b.max.y) - max(a.min.y, b.min.y)
-  overlap_z := min(a.max.z, b.max.z) - max(a.min.z, b.min.z)
-
-  // If any axes don't overlap than we aren't intersecting
-  if overlap_x <= 0 || overlap_y <= 0 || overlap_z <= 0 {
-    return vec
-  }
-
-  center_a := (a.min + a.max) / 2.0
-  center_b := (b.min + b.max) / 2.0
-  center_d := center_a - center_b // Need this to determine which way the penetration vector should point!
-
-  if overlap_x < overlap_y {
-    if overlap_x < overlap_z { // X is the least
-      vec.x = overlap_x * (1.0 if center_d.x >= 0.0 else -1.0)
-    } else { // z is least
-      vec.z = overlap_z * (1.0 if center_d.z >= 0.0 else -1.0)
-    }
-  } else {
-    if overlap_y < overlap_z { // y is the least
-      vec.y = overlap_y * (1.0 if center_d.y >= 0.0 else -1.0)
-    } else { // z is least
-      vec.z = overlap_z * (1.0 if center_d.z >= 0.0 else -1.0)
-    }
-  }
-
-  // log.info(vec)
-
-  return vec
-}
-
 transform_aabb :: proc {
   transform_aabb_matrix,
-  transform_aabb_fast,
+  transform_aabb_components,
+  transform_aabb_no_rotate,
 }
 
 transform_aabb_matrix :: proc(aabb: AABB, transform: mat4) -> AABB {
@@ -98,41 +64,30 @@ transform_aabb_matrix :: proc(aabb: AABB, transform: mat4) -> AABB {
   return recalc
 }
 
-// Basically the new aabb can be found by just finding the min and max extents only in the specific
-// axis contribute... we can take advantage of this
+transform_aabb_components :: proc(aabb: AABB, translation, rotation, scale: vec3) -> AABB {
+  translation_mat := glsl.mat4Translate(translation)
+  scale_mat       := glsl.mat4Scale(scale)
+
+  return transform_aabb_matrix(aabb, translation_mat * scale_mat)
+}
+
 transform_aabb_fast :: proc(aabb: AABB, translation, rotation, scale: vec3) -> AABB {
   rotation_y := glsl.mat4Rotate({0.0, 1.0, 0.0}, glsl.radians_f32(rotation.y))
   rotation_x := glsl.mat4Rotate({1.0, 0.0, 0.0}, glsl.radians_f32(rotation.x))
   rotation_z := glsl.mat4Rotate({0.0, 0.0, 1.0}, glsl.radians_f32(rotation.z))
 
-  rot := rotation_y * rotation_x * rotation_z * glsl.mat4Scale(scale)
+  rot_mat := rotation_y * rotation_x * rotation_z
 
-  // From 'Real-Time Collision Detection'
   result: AABB
-  // For each axis
-  for c in 0..<3 {
-    // Do the translation transform first by setting it to the translation
-    // effectively adding it in.
-    result.min[c] = translation[c]
-    result.max[c] = translation[c]
-
-    // Now we rotate... for each component of the rotation in this axis we do the multiplication
-    // Remembering that the min will be composed of the smallest outputs and the max will be composed of the largest
-    for r in 0..<3 {
-      e := rot[c][r] * aabb.min[r]
-      f := rot[c][r] * aabb.max[r]
-
-      if (e < f) {
-        result.min[c] += e
-        result.max[c] += f
-      } else {
-        result.min[c] += f
-        result.max[c] += e
-      }
-    }
+  // For all three
+  for i in 0..<3 {
+    result.min[i] = translation[i]
+    result.max[i] = translation[i]
   }
+}
 
-  return result
+transform_aabb_no_rotate :: proc(aabb: AABB, translation, scale: vec3) -> AABB {
+  return transform_aabb_components(aabb, translation, {0,0,0}, scale)
 }
 
 aabbs_intersect :: proc(a: AABB, b: AABB) -> bool {

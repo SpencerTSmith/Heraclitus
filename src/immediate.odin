@@ -42,7 +42,7 @@ Immediate_State :: struct {
 }
 
 // "Singleton" in c++ terms, but less stupid
-// @(private="file")
+@(private="file")
 immediate: Immediate_State
 
 init_immediate_renderer :: proc() -> (ok: bool) {

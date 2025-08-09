@@ -8,7 +8,6 @@ CAMERA_UP :: vec3{0.0, 1.0, 0.0}
 
 Camera :: struct {
   position:   vec3,
-  prev_pos:   vec3,
   move_speed: f32,
 
   yaw, pitch:  f32, // Degrees
@@ -29,8 +28,16 @@ update_camera :: proc(camera: ^Camera, dt_s: f64) {
     draw_text("Fast Mode", state.default_font, f32(state.window.w / 2), 100, align=.CENTER)
   }
 
-  camera.prev_pos = camera.position
   camera.position += state.input_direction * speed * dt_s
+
+  cam_aabb := camera_world_aabb(camera^)
+  for e in state.entities {
+    entity_aabb := entity_world_aabb(e)
+
+    offset := aabb_min_penetration_vector(cam_aabb, entity_aabb)
+
+    camera.position += offset
+  }
 
   CAMERA_ZOOM_SPEED :: 10.0
   camera.curr_fov_y = glsl.lerp(camera.curr_fov_y, camera.target_fov_y, CAMERA_ZOOM_SPEED * dt_s)
@@ -51,7 +58,7 @@ get_view :: proc(position, forward, up: vec3) -> (view: mat4) {
 }
 
 camera_world_aabb :: proc(c: Camera) -> AABB {
-  world_aabb := transform_aabb(c.aabb, c.position, vec3{1,1,1})
+  world_aabb := transform_aabb(c.aabb, c.position, vec3{0,0,0}, vec3{1,1,1})
 
   return world_aabb
 }

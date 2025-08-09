@@ -42,7 +42,9 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0) {
 // NOTE: This does not ROTATE the aabb!
 entity_world_aabb :: proc(e: Entity) -> AABB {
   model      := get_model(e.model)
-  world_aabb := transform_aabb(model.aabb, e.position, e.rotation, e.scale)
+  // world_aabb := transform_aabb_fast(model.aabb, e.position, e.rotation, e.scale)
+  world_aabb := transform_aabb(model.aabb, entity_model_mat4(e))
+
 
   return world_aabb
 }
