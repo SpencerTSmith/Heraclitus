@@ -181,7 +181,7 @@ init_state :: proc() -> (ok: bool) {
   camera = {
     sensitivity  = 0.2,
     yaw          = 270.0,
-    move_speed   = 8.0,
+    acceleration = 10.0,
     position     = {0.0, 0.0, 5.0},
     curr_fov_y   = 90.0,
     target_fov_y = 90.0,
@@ -214,7 +214,7 @@ init_state :: proc() -> (ok: bool) {
     ambient   = 0.05,
   }
   sun.direction = linalg.normalize(state.sun.direction)
-  sun_on = false
+  sun_on = true
 
   flashlight = {
 
@@ -388,7 +388,7 @@ main :: proc() {
   if !init_state() do return
   defer free_state()
 
-  duck1 := make_entity("duck/Duck.gltf", position={5.0, 5.0, -5.0})
+  duck1 := make_entity("duck/Duck.gltf", flags={.HAS_COLLISION}, position={5.0, 5.0, -10.0})
   append(&state.entities, duck1)
 
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 5.0, -5.0})
@@ -403,7 +403,7 @@ main :: proc() {
   guitar := make_entity("guitar/scene.gltf", position={5.0, 10.0, 0.0}, scale={0.01, 0.01, 0.01})
   append(&state.entities, guitar)
 
-  sponza := make_entity("sponza/Sponza.gltf", scale={2.0, 2.0, 2.0})
+  sponza := make_entity("sponza/Sponza.gltf", flags={}, position={60,0,-60}, scale={2.0, 2.0, 2.0})
   append(&state.entities, sponza)
 
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
@@ -482,10 +482,6 @@ main :: proc() {
       state.bloom_on = !state.bloom_on
     }
 
-    intersect_color := BLUE
-
-    minkowskis := make([dynamic]AABB, context.temp_allocator)
-
     // 'Simulate' (not really doing much right now) if in game mode
     if state.mode == .GAME {
       update_game_input(dt_s)
@@ -493,33 +489,39 @@ main :: proc() {
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
 
-      // cam_aabb := camera_world_aabb(state.camera)
+      //
+      // Collision
+      //
       for &e in state.entities {
+        if .HAS_COLLISION not_in e.flags { continue }
+
         entity_aabb := entity_world_aabb(e)
 
         for &o in state.entities {
           if &o == &e { continue } // Same entity
+
+          if .HAS_COLLISION not_in o.flags { continue }
+
           other_aabb := entity_world_aabb(o)
 
-          offset := aabb_min_penetration_vector(entity_aabb, other_aabb)
+          min_pen := aabb_min_penetration_vector(entity_aabb, other_aabb)
 
-          e.position += offset
-
-          mink := aabb_minkowski_difference(entity_aabb, other_aabb)
-          append(&minkowskis, mink)
+          e.velocity += min_pen
         }
       }
 
       seconds := seconds_since_start()
-      state.entities[0].position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-      state.entities[0].position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      state.entities[0].position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
 
-      state.entities[0].rotation.y += 20  * cast(f32) dt_s
+      //
+      // state.entities[0].position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+      // state.entities[0].position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+      // state.entities[0].position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+      //
+      // state.entities[0].rotation.y += 20  * cast(f32) dt_s
 
       // state.entities[0].scale.y += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
 
-      // Update scene objects
+      // Move da point lights around
       if state.point_lights_on {
         for &pl in state.point_lights {
           pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
@@ -665,21 +667,6 @@ main :: proc() {
           // Draw camera aabb
           // draw_aabb(camera_world_aabb(state.camera), intersect_color)
 
-          origin_box: AABB = {
-            min = {-0.125, -0.125, -0.125},
-            max = { 0.125,  0.125,  0.125}
-          }
-          intersect_origin_color := WHITE
-          for m in minkowskis[:1] {
-
-            if aabb_intersect_point(m, {0,0,0}) {
-              intersect_origin_color = BLUE
-            }
-
-            draw_aabb(m, CORAL)
-          }
-          draw_aabb(origin_box, intersect_origin_color)
-
         }
       }
 
@@ -801,6 +788,7 @@ update_game_input :: proc(dt_s: f64) {
   input_direction = 0.0
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera)
+
   // Z, forward
   if key_down(.W) {
     input_direction += camera_forward
@@ -810,12 +798,12 @@ update_game_input :: proc(dt_s: f64) {
   }
 
   // Y, vertical
-  if key_down(.SPACE) {
-    input_direction += camera_up
-  }
-  if key_down(.LEFT_CONTROL) {
-    input_direction -= camera_up
-  }
+  // if key_down(.SPACE) {
+  //   input_direction += camera_up
+  // }
+  // if key_down(.LEFT_CONTROL) {
+  //   input_direction -= camera_up
+  // }
 
   // X, strafe
   if key_down(.D) {

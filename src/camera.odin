@@ -1,6 +1,7 @@
 package main
 
 import "core:math"
+import "core:log"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 
@@ -8,13 +9,16 @@ CAMERA_UP :: vec3{0.0, 1.0, 0.0}
 
 Camera :: struct {
   position:   vec3,
-  move_speed: f32,
+  velocity:   vec3,
+  acceleration: f32,
 
   yaw, pitch:  f32, // Degrees
   sensitivity: f32,
 
-  curr_fov_y:    f32, // Degrees
-  target_fov_y:  f32, // Degrees
+  curr_fov_y:   f32, // Degrees
+  target_fov_y: f32, // Degrees
+
+  on_ground: bool,
 
   aabb: AABB,
 }
@@ -22,22 +26,49 @@ Camera :: struct {
 update_camera :: proc(camera: ^Camera, dt_s: f64) {
   dt_s := f32(dt_s)
 
-  speed := camera.move_speed
+  acceleration := state.input_direction * camera.acceleration
   if key_down(.LEFT_SHIFT) {
-    speed *= 3.0
+    acceleration *= 3.0
     draw_text("Fast Mode", state.default_font, f32(state.window.w / 2), 100, align=.CENTER)
   }
 
-  camera.position += state.input_direction * speed * dt_s
+  camera.velocity += acceleration * dt_s
 
-  cam_aabb := camera_world_aabb(camera^)
+  GRAVITY :: -9.8
+  camera.velocity.y += GRAVITY * dt_s
+
+  if key_down(.SPACE) && camera.on_ground {
+    camera.velocity.y = 5.0
+    camera.on_ground  = false
+  }
+
+  if camera.on_ground && glsl.length(state.input_direction) == 0 {
+      camera.velocity.x *= 0.85 * dt_s
+      camera.velocity.z *= 0.85 * dt_s
+  }
+
+  wish_pos := camera.position + camera.velocity * dt_s
+
+  cam_aabb      := camera_world_aabb(camera^)
+  wish_cam_aabb := transform_aabb(cam_aabb, wish_pos, vec3{0,0,0}, vec3{1,1,1})
   for e in state.entities {
+    if .HAS_COLLISION not_in e.flags { continue }
+
     entity_aabb := entity_world_aabb(e)
 
-    offset := aabb_min_penetration_vector(cam_aabb, entity_aabb)
+    if aabbs_intersect(wish_cam_aabb, entity_aabb) {
+      offset := aabb_min_penetration_vector(wish_cam_aabb, entity_aabb)
 
-    camera.position += offset
+      wish_pos += offset
+
+      if glsl.normalize(offset).y > 0.1 {
+        camera.on_ground = true
+        camera.velocity.y = 0
+      }
+    }
   }
+
+  camera.position = wish_pos
 
   CAMERA_ZOOM_SPEED :: 10.0
   camera.curr_fov_y = glsl.lerp(camera.curr_fov_y, camera.target_fov_y, CAMERA_ZOOM_SPEED * dt_s)

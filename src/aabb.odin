@@ -1,6 +1,5 @@
 package main
 
-
 import "core:math/linalg/glsl"
 import "core:log"
 import gl "vendor:OpenGL"
@@ -43,6 +42,7 @@ aabb_min_penetration_vector :: proc(a: AABB, b:AABB) -> (vec: vec3) {
   overlap_z := min(a.max.z, b.max.z) - max(a.min.z, b.min.z)
 
   // If any axes don't overlap than we aren't intersecting
+  // and the min vector should be 0
   if overlap_x <= 0 || overlap_y <= 0 || overlap_z <= 0 {
     return vec
   }
@@ -51,21 +51,21 @@ aabb_min_penetration_vector :: proc(a: AABB, b:AABB) -> (vec: vec3) {
   center_b := (b.min + b.max) / 2.0
   center_d := center_a - center_b // Need this to determine which way the penetration vector should point!
 
-  if overlap_x < overlap_y {
-    if overlap_x < overlap_z { // X is the least
-      vec.x = overlap_x * (1.0 if center_d.x >= 0.0 else -1.0)
-    } else { // z is least
-      vec.z = overlap_z * (1.0 if center_d.z >= 0.0 else -1.0)
-    }
-  } else {
-    if overlap_y < overlap_z { // y is the least
-      vec.y = overlap_y * (1.0 if center_d.y >= 0.0 else -1.0)
-    } else { // z is least
-      vec.z = overlap_z * (1.0 if center_d.z >= 0.0 else -1.0)
-    }
+  min_overlap := overlap_x
+  axis := 0 // x
+
+  if overlap_y < min_overlap {
+    min_overlap = overlap_y
+    axis = 1
   }
 
-  // log.info(vec)
+  if overlap_z < min_overlap {
+    min_overlap = overlap_z
+    axis = 2
+  }
+
+  sign: f32 = 1.0 if center_d[axis] >= 0.0 else -1.0
+  vec[axis] = min_overlap * sign
 
   return vec
 }
@@ -99,7 +99,7 @@ transform_aabb_matrix :: proc(aabb: AABB, transform: mat4) -> AABB {
 }
 
 // Basically the new aabb can be found by just finding the min and max extents only in the specific
-// axis contribute... we can take advantage of this
+// axis rotation that contributes... we can take advantage of this
 transform_aabb_fast :: proc(aabb: AABB, translation, rotation, scale: vec3) -> AABB {
   rotation_y := glsl.mat4Rotate({0.0, 1.0, 0.0}, glsl.radians_f32(rotation.y))
   rotation_x := glsl.mat4Rotate({1.0, 0.0, 0.0}, glsl.radians_f32(rotation.x))
