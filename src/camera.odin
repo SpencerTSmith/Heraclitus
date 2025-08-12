@@ -23,55 +23,159 @@ Camera :: struct {
   aabb: AABB,
 }
 
-update_camera :: proc(camera: ^Camera, dt_s: f64) {
-  dt_s := f32(dt_s)
+update_camera_look :: proc(dt_s: f64) {
 
-  acceleration := state.input_direction * camera.acceleration
-  if key_down(.LEFT_SHIFT) {
-    acceleration *= 3.0
-    draw_text("Fast Mode", state.default_font, f32(state.window.w / 2), 100, align=.CENTER)
+  // Don't really need the precision?
+  x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
+  y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
+
+  state.camera.yaw   -= state.camera.sensitivity * x_delta
+  state.camera.pitch -= state.camera.sensitivity * y_delta
+  state.camera.pitch = clamp(state.camera.pitch, -89.0, 89.0)
+
+  if mouse_scrolled_up() {
+    state.camera.target_fov_y -= 5.0
+  }
+  if mouse_scrolled_down() {
+    state.camera.target_fov_y += 5.0
+  }
+  state.camera.target_fov_y = clamp(state.camera.target_fov_y, 10.0, 120)
+
+  CAMERA_ZOOM_SPEED :: 10.0
+  state.camera.curr_fov_y = linalg.lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
+}
+
+update_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
+  input_direction: vec3
+
+  camera_forward, camera_up, camera_right := get_camera_axes(camera^)
+
+  // Z, forward
+  if key_down(.W) {
+    input_direction += camera_forward
+  }
+  if key_down(.S) {
+    input_direction -= camera_forward
   }
 
-  camera.velocity += acceleration * dt_s
+  // Y, vertical
+  if key_down(.SPACE) {
+    input_direction += camera_up
+  }
+  if key_down(.LEFT_CONTROL) {
+    input_direction -= camera_up
+  }
+
+  // X, strafe
+  if key_down(.D) {
+    input_direction += camera_right
+  }
+  if key_down(.A) {
+    input_direction -= camera_right
+  }
+
+  camera.position += input_direction * camera.acceleration * f32(dt_s)
+  camera.velocity  = {0,0,0}
+  camera.on_ground = false
+}
+
+update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
+  using linalg
+
+  dt_s := f32(dt_s)
+
+  wish_dir: vec3
+
+  camera_forward, camera_up, camera_right := get_camera_axes(camera^)
+
+  ground_forward := normalize0(cross(camera_up, camera_right))
+
+  // Z, forward
+  if key_down(.W) {
+    wish_dir += ground_forward
+  }
+  if key_down(.S) {
+    wish_dir -= ground_forward
+  }
+  // X, strafe
+  if key_down(.D) {
+    wish_dir += camera_right
+  }
+  if key_down(.A) {
+    wish_dir -= camera_right
+  }
+
+  wish_dir.y = 0
+  wish_dir = normalize0(wish_dir)
+
+  //
+  // Friction
+  //
+  if camera.on_ground {
+    friction: f32 = 6.0
+    speed := length(camera.velocity)
+    drop  := speed * friction * dt_s
+
+    applied := (vec3{} if speed == 0.0 else camera.velocity / speed) * (speed - drop)
+
+    camera.velocity = applied
+  }
+
+  if length(wish_dir) > 0 {
+    MAX_SPEED :: 20.0
+    curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
+
+    add_speed   := MAX_SPEED - curr_speed_in_wish_dir
+    if add_speed > 0 {
+      accel_speed := camera.acceleration * MAX_SPEED * dt_s
+
+      if accel_speed > add_speed { accel_speed = add_speed }
+      acceleration := wish_dir * accel_speed
+
+      camera.velocity += acceleration
+    }
+  }
 
   GRAVITY :: -9.8
   camera.velocity.y += GRAVITY * dt_s
 
-  if key_down(.SPACE) && camera.on_ground {
+  if key_pressed(.SPACE) && camera.on_ground {
     camera.velocity.y = 5.0
     camera.on_ground  = false
-  }
-
-  if camera.on_ground && glsl.length(state.input_direction) == 0 {
-      camera.velocity.x *= 0.85 * dt_s
-      camera.velocity.z *= 0.85 * dt_s
   }
 
   wish_pos := camera.position + camera.velocity * dt_s
 
   cam_aabb      := camera_world_aabb(camera^)
-  wish_cam_aabb := transform_aabb(cam_aabb, wish_pos, vec3{0,0,0}, vec3{1,1,1})
+  wish_cam_aabb := cam_aabb
+  wish_cam_aabb.min += (wish_pos - camera.position)
+  wish_cam_aabb.max += (wish_pos - camera.position)
+
   for e in state.entities {
     if .HAS_COLLISION not_in e.flags { continue }
-
     entity_aabb := entity_world_aabb(e)
 
     if aabbs_intersect(wish_cam_aabb, entity_aabb) {
       offset := aabb_min_penetration_vector(wish_cam_aabb, entity_aabb)
 
-      wish_pos += offset
+      wish_pos += offset // push the camera out of collision
 
-      if glsl.normalize(offset).y > 0.1 {
+      if linalg.normalize0(offset).y > 0.1 {
         camera.on_ground = true
         camera.velocity.y = 0
       }
+
+      normal := linalg.normalize0(offset)
+      camera.velocity -= linalg.dot(camera.velocity, normal) * normal // velocity gets projected away from collision
     }
   }
 
-  camera.position = wish_pos
+  speed := linalg.length(camera.velocity)
+  if speed < 0.1 {
+    camera.velocity = {0,0,0}
+  }
 
-  CAMERA_ZOOM_SPEED :: 10.0
-  camera.curr_fov_y = glsl.lerp(camera.curr_fov_y, camera.target_fov_y, CAMERA_ZOOM_SPEED * dt_s)
+  camera.position = wish_pos
 }
 
 get_camera_view :: proc(camera: Camera) -> (view: mat4) {

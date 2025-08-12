@@ -89,7 +89,6 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, mat
     aabb = aabb,
   }
 
-
   return model, ok
 }
 

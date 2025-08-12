@@ -18,7 +18,7 @@ WINDOW_DEFAULT_W :: 1280 * 1.75
 WINDOW_DEFAULT_H :: 720  * 1.75
 
 FRAMES_IN_FLIGHT :: 3
-TARGET_FPS :: 240
+TARGET_FPS :: 60
 TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
 
 GL_MAJOR :: 4
@@ -101,8 +101,6 @@ State :: struct {
   default_font:       Font,
 
   bloom_on:           bool,
-
-  input_direction:    vec3,
 }
 
 init_state :: proc() -> (ok: bool) {
@@ -181,11 +179,11 @@ init_state :: proc() -> (ok: bool) {
   camera = {
     sensitivity  = 0.2,
     yaw          = 270.0,
-    acceleration = 10.0,
+    acceleration = 90.0,
     position     = {0.0, 0.0, 5.0},
     curr_fov_y   = 90.0,
     target_fov_y = 90.0,
-    aabb         = {{-1.0, -1.0, -1.0}, {1.0, 1.0, 1.0}}
+    aabb         = {{-1.0, -4.0, -1.0}, {1.0, 2.0, 1.0}}
   }
 
   entities     = make([dynamic]Entity, perm_alloc)
@@ -388,19 +386,19 @@ main :: proc() {
   if !init_state() do return
   defer free_state()
 
-  duck1 := make_entity("duck/Duck.gltf", flags={.HAS_COLLISION}, position={5.0, 5.0, -10.0})
+  duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
   append(&state.entities, duck1)
 
-  duck2 := make_entity("duck/Duck.gltf", position={5.0, 5.0, -5.0})
+  duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 5.0, 0.0})
+  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
   append(&state.entities, helmet)
 
-  helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 5.0, 0.0})
+  helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
   append(&state.entities, helmet2)
 
-  guitar := make_entity("guitar/scene.gltf", position={5.0, 10.0, 0.0}, scale={0.01, 0.01, 0.01})
+  guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 0.0}, scale={0.01, 0.01, 0.01})
   append(&state.entities, guitar)
 
   sponza := make_entity("sponza/Sponza.gltf", flags={}, position={60,0,-60}, scale={2.0, 2.0, 2.0})
@@ -408,6 +406,11 @@ main :: proc() {
 
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
+
+  block := make_entity("", position={0, -2, -10}, scale={10.0, 10.0, 10.0})
+  append(&state.entities, block)
+
+  log.info(state.entities)
 
   { // Light placement
     spacing := 15
@@ -477,15 +480,19 @@ main :: proc() {
     if key_pressed(.P) {
       state.point_lights_on = !state.point_lights_on
     }
+    if key_pressed(.F) {
+      state.flashlight_on = !state.flashlight_on
+    }
 
     if key_pressed(.B) {
       state.bloom_on = !state.bloom_on
     }
 
+    update_camera_look(dt_s)
+
     // 'Simulate' (not really doing much right now) if in game mode
     if state.mode == .GAME {
-      update_game_input(dt_s)
-      update_camera(&state.camera, dt_s)
+      update_camera_game(&state.camera, dt_s)
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
 
@@ -504,22 +511,15 @@ main :: proc() {
 
           other_aabb := entity_world_aabb(o)
 
-          min_pen := aabb_min_penetration_vector(entity_aabb, other_aabb)
+          if aabbs_intersect(entity_aabb, other_aabb) {
+            min_pen := aabb_min_penetration_vector(entity_aabb, other_aabb)
 
-          e.velocity += min_pen
+            e.position += min_pen
+          }
         }
       }
 
       seconds := seconds_since_start()
-
-      //
-      // state.entities[0].position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-      // state.entities[0].position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      // state.entities[0].position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      //
-      // state.entities[0].rotation.y += 20  * cast(f32) dt_s
-
-      // state.entities[0].scale.y += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
 
       // Move da point lights around
       if state.point_lights_on {
@@ -529,6 +529,8 @@ main :: proc() {
           pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
         }
       }
+    } else {
+      update_camera_edit(&state.camera, dt_s)
     }
 
     // Frame sync
@@ -572,7 +574,7 @@ main :: proc() {
 
     // What to draw based on mode
     switch state.mode {
-    case .EDIT:
+    case .EDIT: fallthrough
     case .GAME:
       if state.sun_on {
         begin_shadow_pass(sun_depth_buffer)
@@ -768,58 +770,4 @@ free_state :: proc() {
 
 seconds_since_start :: proc() -> (seconds: f64) {
   return time.duration_seconds(time.since(state.start_time))
-}
-
-update_game_input :: proc(dt_s: f64) {
-  using state
-
-  // Don't really need the precision?
-  x_delta := f32(input.mouse.curr_pos.x - input.mouse.prev_pos.x)
-  y_delta := f32(input.mouse.curr_pos.y - input.mouse.prev_pos.y)
-
-  camera.yaw   -= camera.sensitivity * x_delta
-  camera.pitch -= camera.sensitivity * y_delta
-  camera.pitch = clamp(camera.pitch, -89.0, 89.0)
-
-  if key_pressed(.F) {
-    flashlight_on = !flashlight_on
-  }
-
-  input_direction = 0.0
-
-  camera_forward, camera_up, camera_right := get_camera_axes(camera)
-
-  // Z, forward
-  if key_down(.W) {
-    input_direction += camera_forward
-  }
-  if key_down(.S) {
-    input_direction -= camera_forward
-  }
-
-  // Y, vertical
-  // if key_down(.SPACE) {
-  //   input_direction += camera_up
-  // }
-  // if key_down(.LEFT_CONTROL) {
-  //   input_direction -= camera_up
-  // }
-
-  // X, strafe
-  if key_down(.D) {
-    input_direction += camera_right
-  }
-  if key_down(.A) {
-    input_direction -= camera_right
-  }
-
-  if mouse_scrolled_up() {
-    camera.target_fov_y -= 5.0
-  }
-  if mouse_scrolled_down() {
-    camera.target_fov_y += 5.0
-  }
-  camera.target_fov_y = clamp(camera.target_fov_y, 10.0, 120)
-
-  input_direction = linalg.normalize0(input_direction)
 }

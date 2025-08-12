@@ -41,6 +41,15 @@ Immediate_State :: struct {
   curr_space:    Immediate_Space,
 }
 
+Immediate_Batch :: struct {
+  vertex_base:  int,
+  vertex_count: int,
+
+  mode:    Immediate_Mode,
+  texture: Immediate_Mode,
+  space:   Immediate_Mode,
+}
+
 // "Singleton" in c++ terms, but less stupid
 @(private="file")
 immediate: Immediate_State

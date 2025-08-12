@@ -224,6 +224,7 @@ draw_debug_stats :: proc() {
   template :=
 `
 FPS: %0.4v
+Mode: %v
 Velocity: %0.4v
 Position: %0.4v
 On Ground: %v
@@ -234,6 +235,7 @@ Point Lights: %v
 `
   text := fmt.aprintf(template,
                       state.fps,
+                      state.mode,
                       state.camera.velocity,
                       state.camera.position,
                       state.camera.on_ground,

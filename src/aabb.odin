@@ -42,7 +42,8 @@ aabb_min_penetration_vector :: proc(a: AABB, b:AABB) -> (vec: vec3) {
   overlap_z := min(a.max.z, b.max.z) - max(a.min.z, b.min.z)
 
   // If any axes don't overlap than we aren't intersecting
-  // and the min vector should be 0
+  // and the min vector should be 0, usually before calling this function you will
+  // have checked for intersection, but whatever
   if overlap_x <= 0 || overlap_y <= 0 || overlap_z <= 0 {
     return vec
   }
