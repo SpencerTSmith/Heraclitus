@@ -10,7 +10,6 @@ CAMERA_UP :: vec3{0.0, 1.0, 0.0}
 Camera :: struct {
   position:   vec3,
   velocity:   vec3,
-  acceleration: f32,
 
   yaw, pitch:  f32, // Degrees
   sensitivity: f32,
@@ -74,7 +73,8 @@ update_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
-  camera.position += input_direction * camera.acceleration * f32(dt_s)
+  FREECAM_SPEED :: 35.0
+  camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
   camera.velocity  = {0,0,0}
   camera.on_ground = false
 }
@@ -88,7 +88,7 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
 
-  ground_forward := normalize0(cross(camera_up, camera_right))
+  ground_forward := normalize0(vec3{camera_forward.x, 0, camera_forward.z})
 
   // Z, forward
   if key_down(.W) {
@@ -109,26 +109,25 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   wish_dir = normalize0(wish_dir)
 
   //
-  // Friction
+  // Accelerate!
   //
-  if camera.on_ground {
-    friction: f32 = 6.0
-    speed := length(camera.velocity)
-    drop  := speed * friction * dt_s
-
-    applied := (vec3{} if speed == 0.0 else camera.velocity / speed) * (speed - drop)
-
-    camera.velocity = applied
-  }
-
   if length(wish_dir) > 0 {
-    MAX_SPEED :: 20.0
+    MAX_SPEED :: 40.0
     curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
 
+    // How much to get to max speed from current speed?
     add_speed   := MAX_SPEED - curr_speed_in_wish_dir
-    if add_speed > 0 {
-      accel_speed := camera.acceleration * MAX_SPEED * dt_s
 
+    // If we have room to grow in speed?
+    if add_speed > 0 {
+      GROUND_ACCELERATION :: 10.0
+      AIR_ACCELERATION    :: 2.0
+
+      factor: f32 = GROUND_ACCELERATION if camera.on_ground else AIR_ACCELERATION
+
+      accel_speed := factor * MAX_SPEED * dt_s
+
+      // If we can accelerate to more in this step than max, then just add only enough to get to max
       if accel_speed > add_speed { accel_speed = add_speed }
       acceleration := wish_dir * accel_speed
 
@@ -136,11 +135,33 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
-  GRAVITY :: -9.8
+  //
+  // Friction
+  //
+  if camera.on_ground {
+    FRICTION :: 6.0
+    speed := length(camera.velocity)
+
+    if speed > 1 {
+      drop  := speed * FRICTION * dt_s
+
+      new_speed := speed - drop
+
+      if new_speed < 0 { new_speed = 0 }
+
+      new_speed /= speed
+
+      applied := camera.velocity * new_speed
+
+      camera.velocity = applied
+    }
+  }
+
+  GRAVITY :: -30
   camera.velocity.y += GRAVITY * dt_s
 
-  if key_pressed(.SPACE) && camera.on_ground {
-    camera.velocity.y = 5.0
+  if key_down(.SPACE) && camera.on_ground {
+    camera.velocity.y = 10.0
     camera.on_ground  = false
   }
 

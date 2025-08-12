@@ -179,7 +179,6 @@ init_state :: proc() -> (ok: bool) {
   camera = {
     sensitivity  = 0.2,
     yaw          = 270.0,
-    acceleration = 90.0,
     position     = {0.0, 0.0, 5.0},
     curr_fov_y   = 90.0,
     target_fov_y = 90.0,
