@@ -136,7 +136,7 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   //
-  // Friction
+  // Friction, none in air
   //
   if camera.on_ground {
     FRICTION :: 6.0
@@ -154,13 +154,15 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
       applied := camera.velocity * new_speed
 
       camera.velocity = applied
+    } else {
+      camera.velocity = {0,0,0}
     }
   }
 
   GRAVITY :: -30
   camera.velocity.y += GRAVITY * dt_s
 
-  if key_down(.SPACE) && camera.on_ground {
+  if key_pressed(.SPACE) && camera.on_ground {
     camera.velocity.y = 10.0
     camera.on_ground  = false
   }
@@ -183,17 +185,11 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
       if linalg.normalize0(offset).y > 0.1 {
         camera.on_ground = true
-        camera.velocity.y = 0
       }
 
       normal := linalg.normalize0(offset)
       camera.velocity -= linalg.dot(camera.velocity, normal) * normal // velocity gets projected away from collision
     }
-  }
-
-  speed := linalg.length(camera.velocity)
-  if speed < 0.1 {
-    camera.velocity = {0,0,0}
   }
 
   camera.position = wish_pos
