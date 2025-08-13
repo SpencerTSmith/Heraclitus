@@ -111,8 +111,8 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   //
   // Accelerate!
   //
+  MAX_SPEED :: 40.0
   if length(wish_dir) > 0 {
-    MAX_SPEED :: 40.0
 
     // How fast are we going in the direction we want to go?
     curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
@@ -148,20 +148,22 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   friction: f32 = GROUND_FRICTION if camera.on_ground else AIR_FRICTION
   speed := length(camera.velocity)
 
-  if speed > 1 {
-    // How much speed to lose per frame
-    drop := speed * friction * dt_s
+  if camera.on_ground {
+    if speed > 1 {
+      // How much speed to lose per frame
+      drop := speed * friction * dt_s
 
-    new_speed := speed - drop
+      new_speed := speed - drop
 
-    // Just stop
-    if new_speed < 0 { new_speed = 0 }
+      // Just stop
+      if new_speed < 0 { new_speed = 0 }
 
-    new_speed /= speed
+      new_speed /= speed
 
-    applied := camera.velocity * new_speed
+      applied := camera.velocity * new_speed
 
-    camera.velocity = applied
+      camera.velocity = applied
+    }
   }
 
   //
@@ -174,10 +176,7 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   GRAVITY :: -30
-
-  if !camera.on_ground {
-    camera.velocity.y += GRAVITY * dt_s
-  }
+  camera.velocity.y += GRAVITY * dt_s
 
   //
   // Shitty Collision!
@@ -219,9 +218,13 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
-  // Come to complete stop if going slow enough
-  if length(camera.velocity) < 1 {
-    camera.velocity = {0,0,0}
+  // Come to complete stop if going slow enough horizontally
+  if length(camera.velocity.xz) < 1 {
+    camera.velocity = {0,camera.velocity.y,0}
+  }
+
+  if length(camera.velocity) > MAX_SPEED * 1.2 {
+    draw_text("Speed Excellence!", state.default_font, f32(state.window.w) * 0.5, f32(state.window.h) * 0.1, RED, .CENTER)
   }
 
   camera.position = wish_pos

@@ -130,8 +130,6 @@ update_menu_input :: proc() {
 draw_menu :: proc() {
   using menu
 
-  immediate_flush()
-
   gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
   gl.ClearColor(LEARN_OPENGL_BLUE.r, LEARN_OPENGL_BLUE.g, LEARN_OPENGL_BLUE.b, 1.0)
   gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
@@ -162,7 +160,5 @@ draw_menu :: proc() {
     draw_text(text, item_font, info.position.x, info.position.y,
               color, .CENTER)
   }
-
-  immediate_flush()
 }
 
