@@ -1,6 +1,7 @@
 package main
 
 import "core:log"
+import "core:mem"
 
 import gl "vendor:OpenGL"
 
@@ -28,26 +29,23 @@ Immediate_Space :: enum {
 // NOTE: This is not integrated with the general asset system and deals with actual textures and such...
 Immediate_State :: struct {
   vertex_buffer: GPU_Buffer,
-  vertex_count:  int,
-
-  // This tracks the index from which a flush starts
-  flush_base:   int,
+  vertex_count:  int, // ALL vertices for current frame
 
   shader:        Shader_Program,
   white_texture: Texture,
 
-  curr_mode:     Immediate_Mode,
-  curr_texture:  Texture,
-  curr_space:    Immediate_Space,
+  curr_batch:    ^Immediate_Batch, // Eh, pointer could maybe do index instead?
+  batches:       [dynamic]Immediate_Batch,
 }
 
+// Just a view into the main vertex buffer
 Immediate_Batch :: struct {
-  vertex_base:  int,
-  vertex_count: int,
+  vertex_base:  int, // First vertex in batch
+  vertex_count: int, // How many vertices in batch
 
   mode:    Immediate_Mode,
-  texture: Immediate_Mode,
-  space:   Immediate_Mode,
+  texture: Texture,
+  space:   Immediate_Space,
 }
 
 // "Singleton" in c++ terms, but less stupid
@@ -65,45 +63,44 @@ init_immediate_renderer :: proc() -> (ok: bool) {
     vertex_buffer = vertex_buffer,
     vertex_count  = 0,
     shader        = shader,
+
+    batches = make([dynamic]Immediate_Batch, state.perm_alloc)
   }
 
   white_tex_handle: Texture_Handle
   white_tex_handle, ok = load_texture("white.png")
 
   immediate.white_texture = get_texture(white_tex_handle)^
-  immediate.curr_texture  = immediate.white_texture
 
   return ok
 }
 
-immediate_total_verts :: proc() -> int {
-  return immediate.flush_base + immediate.vertex_count
-}
-
 immediate_frame_reset :: proc() {
   immediate_flush()
-  immediate.flush_base = 0
+  immediate.vertex_count = 0
 }
 
-immediate_set_texture :: proc(texture: Texture) {
-  if immediate.curr_texture.id != texture.id {
-    immediate_flush()
-    immediate.curr_texture = texture
-  }
+// Returns the pointer to the new batch in the batches dynamic array.
+immediate_start_new_batch :: proc(mode: Immediate_Mode, texture: Texture, space: Immediate_Space) -> (batch_pointer: ^Immediate_Batch) {
+  append(&immediate.batches, Immediate_Batch{
+    vertex_base = immediate.vertex_count, // Always on the end.
+
+    mode = mode,
+    texture = texture,
+    space = space,
+  })
+
+  return &immediate.batches[len(immediate.batches) - 1]
 }
 
-immediate_set_mode :: proc(mode: Immediate_Mode) {
-  if immediate.curr_mode != mode {
-    immediate_flush()
+// Starts a new batch if necessary
+immediate_check_current_batch :: proc(wish_mode: Immediate_Mode, wish_texture: Texture, wish_space: Immediate_Space) {
+  if immediate.curr_batch == nil || // Should short circuit and not do any nil dereferences
+     immediate.curr_batch.mode    != wish_mode  ||
+     immediate.curr_batch.space   != wish_space ||
+     immediate.curr_batch.texture != wish_texture {
+    immediate.curr_batch = immediate_start_new_batch(wish_mode, wish_texture, wish_space)
   }
-  immediate.curr_mode = mode
-}
-
-immediate_set_space :: proc(space: Immediate_Space) {
-  if immediate.curr_space != space {
-    immediate_flush()
-  }
-  immediate.curr_space = space
 }
 
 free_immediate_renderer :: proc() {
@@ -111,12 +108,13 @@ free_immediate_renderer :: proc() {
   free_shader_program(&immediate.shader)
 }
 
+// NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right
 immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   assert(state.gl_is_initialized)
   assert(gpu_buffer_is_mapped(immediate.vertex_buffer), "Uninitialized Immediate State")
 
-  if immediate_total_verts() >= MAX_IMMEDIATE_VERTEX_COUNT {
-    log.error("Too many (%v) immediate vertices!!!!!!\n", immediate_total_verts())
+  if immediate.vertex_count + 1 >= MAX_IMMEDIATE_VERTEX_COUNT {
+    log.error("Too many (%v) immediate vertices!!!!!!\n", immediate.vertex_count)
     return
   }
 
@@ -127,20 +125,30 @@ immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   }
 
   vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
-  offset     := immediate.vertex_count + immediate.flush_base
+  // for i in 0..<MAX_IMMEDIATE_VERTEX_COUNT {
+  //     vertex_ptr[i] = Immediate_Vertex{position = {9999,9999,9999}, uv = {}, color = {1,0,1,1}}
+  // }
 
+  // Write into the current batch.
+  offset := immediate.curr_batch.vertex_base + immediate.curr_batch.vertex_count
+
+  // To the gpu buffer!
   vertex_ptr[offset] = vertex
   immediate.vertex_count += 1
+
+  // And remember to add to the current batches count.
+  immediate.curr_batch.vertex_count += 1
 }
 
 // NOTE: A quad so takes in screen coordinates!
+// maybe in future it can be a 3d quad in world space
 immediate_quad :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
                        uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
                        texture: Texture = immediate.white_texture) {
+  wish_mode  := Immediate_Mode.TRIANGLES
+  wish_space := Immediate_Space.SCREEN
 
-  immediate_set_texture(texture)
-  immediate_set_mode(.TRIANGLES)
-  immediate_set_space(.SCREEN)
+  immediate_check_current_batch(wish_mode, texture, wish_space)
 
   top_left := Immediate_Vertex{
     position = {xy.x, xy.y, -state.z_near},
@@ -179,9 +187,11 @@ immediate_line :: proc {
 
 // NOTE: A 2d line so takes in screen coordinates!
 immediate_line_2D :: proc(xy0, xy1: vec2, rgba: vec4 = WHITE) {
-  immediate_set_texture(immediate.white_texture)
-  immediate_set_mode(.LINES)
-  immediate_set_space(.SCREEN)
+  wish_mode    := Immediate_Mode.LINES
+  wish_space   := Immediate_Space.SCREEN
+  wish_texture := immediate.white_texture
+
+  immediate_check_current_batch(wish_mode, wish_texture, wish_space)
 
   immediate_vertex({xy0.x, xy0.y, -state.z_near}, rgba = rgba)
   immediate_vertex({xy1.x, xy1.y, -state.z_near}, rgba = rgba)
@@ -189,44 +199,51 @@ immediate_line_2D :: proc(xy0, xy1: vec2, rgba: vec4 = WHITE) {
 
 // NOTE: 3d line
 immediate_line_3D :: proc(xyz0, xyz1: vec3, rgba: vec4 = WHITE) {
+  wish_mode    := Immediate_Mode.LINES
+  wish_space   := Immediate_Space.WORLD
+  wish_texture := immediate.white_texture
 
-  immediate_set_texture(immediate.white_texture)
-
-  immediate_set_mode(.LINES)
-  immediate_set_space(.WORLD)
+  immediate_check_current_batch(wish_mode, wish_texture, wish_space)
 
   immediate_vertex(xyz0, rgba = rgba)
   immediate_vertex(xyz1, rgba = rgba)
 }
 
 immediate_flush :: proc() {
+  assert(state.began_drawing, "Tried to flush immediate vertex info before we have begun drawing this frame.")
+
   if immediate.vertex_count > 0 {
     bind_shader_program(immediate.shader)
-
-    bind_texture(immediate.curr_texture, "tex")
-
-    switch immediate.curr_space {
-    case .SCREEN:
-      set_shader_uniform("transform", get_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far))
-    case .WORLD:
-      set_shader_uniform("transform", get_camera_perspective(state.camera) * get_camera_view(state.camera))
-    }
-
     bind_vertex_buffer(immediate.vertex_buffer)
     defer unbind_vertex_buffer()
 
-    frame_index  := gpu_buffer_frame_offset(immediate.vertex_buffer) / immediate.vertex_buffer.item_size
-    first_vertex := frame_index + immediate.flush_base // Add the last flush
+    frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
+    for batch in immediate.batches {
+      if batch.vertex_count > 0 {
+        bind_texture(batch.texture, "tex")
 
-    switch immediate.curr_mode {
-    case .TRIANGLES:
-      gl.DrawArrays(gl.TRIANGLES, i32(first_vertex), i32(immediate.vertex_count))
-    case .LINES:
-      gl.DrawArrays(gl.LINES, i32(first_vertex), i32(immediate.vertex_count))
+        // TODO: Make sure we set relevant GL State
+        switch batch.space {
+        case .SCREEN:
+          set_shader_uniform("transform", get_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far))
+        case .WORLD:
+          set_shader_uniform("transform", get_camera_perspective(state.camera) * get_camera_view(state.camera))
+        }
+
+        first_vertex := i32(frame_base + batch.vertex_base)
+        vertex_count := i32(batch.vertex_count)
+
+        switch batch.mode {
+        case .TRIANGLES:
+          gl.DrawArrays(gl.TRIANGLES, first_vertex, vertex_count)
+        case .LINES:
+          gl.DrawArrays(gl.LINES, first_vertex, vertex_count)
+        }
+      }
     }
 
-    // And reset, pushing the base up
-    immediate.flush_base += immediate.vertex_count
-    immediate.vertex_count = 0
+    // And reset
+    clear(&immediate.batches)
+    immediate.curr_batch = nil
   }
 }

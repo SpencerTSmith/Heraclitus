@@ -18,7 +18,7 @@ WINDOW_DEFAULT_W :: 1280 * 1.75
 WINDOW_DEFAULT_H :: 720  * 1.75
 
 FRAMES_IN_FLIGHT :: 3
-TARGET_FPS :: 60
+TARGET_FPS :: 240
 TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
 
 GL_MAJOR :: 4
@@ -65,6 +65,7 @@ State :: struct {
   frame_count:        uint,
   frames:             [FRAMES_IN_FLIGHT]Frame_Info,
   curr_frame_index:   int,
+  began_drawing:      bool,
 
   clear_color:        vec3,
 
@@ -279,6 +280,8 @@ begin_drawing :: proc() {
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
+
+  began_drawing = true
 }
 
 begin_main_pass :: proc() {
@@ -349,6 +352,8 @@ flush_drawing :: proc() {
   frame.fence = gl.FenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
   curr_frame_index = (curr_frame_index + 1) % FRAMES_IN_FLIGHT
 
+  began_drawing = false
+
   glfw.SwapBuffers(state.window.handle)
 }
 
@@ -406,7 +411,7 @@ main :: proc() {
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
 
-  block := make_entity("", position={0, -2, -10}, scale={10.0, 10.0, 10.0})
+  block := make_entity("", position={0, -2, -10}, scale={100.0, 10.0, 10.0})
   append(&state.entities, block)
 
   log.info(state.entities)
@@ -424,7 +429,7 @@ main :: proc() {
           color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
           intensity = 1.0,
           ambient   = 0.001,
-          radius    = 20,
+          radius    = 10,
         })
       }
     }
@@ -659,16 +664,8 @@ main :: proc() {
           }
         }
 
-        if state.draw_debug {
-          // Draw entity aabbs
-          for e in state.entities {
-            draw_aabb(entity_world_aabb(e))
-          }
-
-          // Draw camera aabb
-          // draw_aabb(camera_world_aabb(state.camera), intersect_color)
-
-        }
+        // Flush any accumulated draw calls
+        immediate_flush()
       }
 
       //
@@ -725,9 +722,7 @@ main :: proc() {
       }
 
       // immediate_quad({1800, 100}, 300, 300, uv0 = {1.0, 1.0}, uv1={0.0, 0.0}, texture=state.post_buffer.color_targets[1])
-      // immediate_quad({1800, 100}, 800, 800, uv0 = {1.0, 1.0}, uv1={0.0, 0.0}, texture=state.ping_pong_buffers[0].color_targets[0])
-
-      // immediate_line({1000, 900}, {500, 400}, BLUE)
+      // immediate_quad({1800, 100}, 800, 800, uv0 = {0.0, 1.0}, uv1={1.0, 0.0}, texture=state.ping_pong_buffers[0].color_targets[0])
 
       if state.draw_debug {
         begin_ui_pass()
@@ -735,7 +730,6 @@ main :: proc() {
       }
     case .MENU:
       update_menu_input()
-      begin_drawing()
       draw_menu()
     }
 

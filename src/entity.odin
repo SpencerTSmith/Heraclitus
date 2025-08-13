@@ -45,6 +45,10 @@ entity_has_transparency :: proc(e: Entity) -> bool {
 draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0) {
   model := get_model(e.model)
 
+  if state.draw_debug {
+    draw_aabb(entity_world_aabb(e))
+  }
+
   set_shader_uniform("model", entity_model_mat4(e))
   draw_model(model^, mul_color=color, instances=instances)
 }

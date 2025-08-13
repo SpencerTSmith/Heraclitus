@@ -175,5 +175,5 @@ draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN) {
   immediate_line(corners[7], corners[2], color)
   immediate_line(corners[6], corners[1], color)
 
-  immediate_flush()
+  // immediate_flush()
 }

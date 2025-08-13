@@ -113,22 +113,27 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   //
   if length(wish_dir) > 0 {
     MAX_SPEED :: 40.0
+
+    // How fast are we going in the direction we want to go?
     curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
 
     // How much to get to max speed from current speed?
-    add_speed   := MAX_SPEED - curr_speed_in_wish_dir
+    add_speed := MAX_SPEED - curr_speed_in_wish_dir
 
     // If we have room to grow in speed?
     if add_speed > 0 {
       GROUND_ACCELERATION :: 10.0
-      AIR_ACCELERATION    :: 2.0
+      AIR_ACCELERATION    :: 1.0
 
       factor: f32 = GROUND_ACCELERATION if camera.on_ground else AIR_ACCELERATION
 
       accel_speed := factor * MAX_SPEED * dt_s
 
       // If we can accelerate to more in this step than max, then just add only enough to get to max
-      if accel_speed > add_speed { accel_speed = add_speed }
+      if accel_speed > add_speed {
+        accel_speed = add_speed
+      }
+
       acceleration := wish_dir * accel_speed
 
       camera.velocity += acceleration
@@ -136,43 +141,58 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   //
-  // Friction, none in air
+  // Friction
   //
-  if camera.on_ground {
-    FRICTION :: 6.0
-    speed := length(camera.velocity)
+  GROUND_FRICTION :: 6.0
+  AIR_FRICTION    :: 0.2
+  friction: f32 = GROUND_FRICTION if camera.on_ground else AIR_FRICTION
+  speed := length(camera.velocity)
 
-    if speed > 1 {
-      drop  := speed * FRICTION * dt_s
+  if speed > 1 {
+    // How much speed to lose per frame
+    drop := speed * friction * dt_s
 
-      new_speed := speed - drop
+    new_speed := speed - drop
 
-      if new_speed < 0 { new_speed = 0 }
+    // Just stop
+    if new_speed < 0 { new_speed = 0 }
 
-      new_speed /= speed
+    new_speed /= speed
 
-      applied := camera.velocity * new_speed
+    applied := camera.velocity * new_speed
 
-      camera.velocity = applied
-    } else {
-      camera.velocity = {0,0,0}
-    }
+    camera.velocity = applied
   }
 
-  GRAVITY :: -30
-  camera.velocity.y += GRAVITY * dt_s
+  //
+  // Gravity! and Jumpin'
+  //
 
   if key_pressed(.SPACE) && camera.on_ground {
     camera.velocity.y = 10.0
     camera.on_ground  = false
   }
 
+  GRAVITY :: -30
+
+  if !camera.on_ground {
+    camera.velocity.y += GRAVITY * dt_s
+  }
+
+  //
+  // Shitty Collision!
+  //
   wish_pos := camera.position + camera.velocity * dt_s
 
   cam_aabb      := camera_world_aabb(camera^)
   wish_cam_aabb := cam_aabb
   wish_cam_aabb.min += (wish_pos - camera.position)
   wish_cam_aabb.max += (wish_pos - camera.position)
+
+  if state.draw_debug {
+    draw_aabb(cam_aabb)
+    draw_aabb(wish_cam_aabb, CORAL)
+  }
 
   for e in state.entities {
     if .HAS_COLLISION not_in e.flags { continue }
@@ -183,13 +203,25 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
       wish_pos += offset // push the camera out of collision
 
-      if linalg.normalize0(offset).y > 0.1 {
+      // Surface normal, should be close to this right?
+      normal := normalize0(offset)
+
+      if normal.y > 0.1 {
         camera.on_ground = true
+        camera.velocity.y = 0
+        continue
       }
 
-      normal := linalg.normalize0(offset)
-      camera.velocity -= linalg.dot(camera.velocity, normal) * normal // velocity gets projected away from collision
+      // Reproject velocity
+      OVERBOUNCE :: 1.4
+      reproject := dot(camera.velocity, normal) * OVERBOUNCE
+      camera.velocity -= reproject * normal // Only the velocity thats going into the wall gets subtracted away
     }
+  }
+
+  // Come to complete stop if going slow enough
+  if length(camera.velocity) < 1 {
+    camera.velocity = {0,0,0}
   }
 
   camera.position = wish_pos
