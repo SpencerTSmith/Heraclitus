@@ -9,10 +9,10 @@ AABB :: struct {
   max: vec3,
 }
 
-
-aabb_corners :: proc(aabb: AABB) -> [8]vec3 {
-  min := aabb.min
-  max := aabb.max
+// Factored out into a generic function since we use it elsewhere
+box_corners :: proc(xyz_min, xyz_max: vec3) -> [8]vec3 {
+  min := xyz_min
+  max := xyz_max
   corners := [8]vec3{
     {min.x, min.y, min.z}, // left, bottom, back
     {max.x, min.y, min.z}, // right, bottom, back
@@ -25,6 +25,10 @@ aabb_corners :: proc(aabb: AABB) -> [8]vec3 {
   }
 
   return corners
+}
+
+aabb_corners :: proc(aabb: AABB) -> [8]vec3 {
+  return box_corners(aabb.min, aabb.max)
 }
 
 aabb_minkowski_difference :: proc(a: AABB, b: AABB) -> AABB {
@@ -153,27 +157,5 @@ aabb_intersect_point :: proc(a: AABB, p: vec3) -> bool {
 }
 
 draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN) {
-  corners := aabb_corners(aabb)
-
-  // Back
-  immediate_line(corners[0], corners[1], color)
-  immediate_line(corners[1], corners[2], color)
-  immediate_line(corners[2], corners[3], color)
-  immediate_line(corners[3], corners[0], color)
-
-  // Front
-  immediate_line(corners[4], corners[5], color)
-  immediate_line(corners[5], corners[6], color)
-  immediate_line(corners[6], corners[7], color)
-  immediate_line(corners[7], corners[4], color)
-
-  // Left
-  immediate_line(corners[4], corners[3], color)
-  immediate_line(corners[5], corners[0], color)
-
-  // Right
-  immediate_line(corners[7], corners[2], color)
-  immediate_line(corners[6], corners[1], color)
-
-  // immediate_flush()
+  immediate_box(aabb.min, aabb.max, color)
 }

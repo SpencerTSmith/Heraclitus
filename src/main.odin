@@ -398,8 +398,8 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  append(&state.entities, helmet)
+  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  // append(&state.entities, helmet)
 
   helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
   append(&state.entities, helmet2)
@@ -410,6 +410,27 @@ main :: proc() {
   sponza := make_entity("sponza/Sponza.gltf", flags={.HAS_RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
   append(&state.entities, sponza)
 
+  // Sponza lights
+  {
+    spacing := 20
+    bounds  := 4
+    y_bounds := bounds/2
+    for x in 0..<bounds {
+      for y in 0..<y_bounds {
+        x0 := (x - bounds/2) * spacing
+        y0 := y * spacing / 2 + 1
+
+        append(&state.point_lights, Point_Light{
+          position  = {sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z},
+          color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
+          intensity = 0.7,
+          ambient   = 0.001,
+          radius    = 10,
+        })
+      }
+    }
+  }
+
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0 ,0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
@@ -419,24 +440,25 @@ main :: proc() {
   block := make_entity("", position={0, -2, -20}, scale={100.0, 10.0, 10.0})
   append(&state.entities, block)
 
-  { // Light placement
-    spacing := 20
-    bounds  := 3
-    for x in 0..<bounds {
-      for z in 0..<bounds {
-        x0 := (x - bounds/2) * spacing
-        z0 := (z) * spacing
-
-        append(&state.point_lights, Point_Light{
-          position  = {f32(x0), 5.0, f32(z0)},
-          color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
-          intensity = 1.0,
-          ambient   = 0.001,
-          radius    = 15,
-        })
-      }
-    }
-  }
+  // Light placement
+  // {
+  //   spacing := 20
+  //   bounds  := 3
+  //   for x in 0..<bounds {
+  //     for z in 0..<bounds {
+  //       x0 := (x - bounds/2) * spacing
+  //       z0 := (z) * spacing
+  //
+  //       append(&state.point_lights, Point_Light{
+  //         position  = {f32(x0), 0.0, f32(z0)},
+  //         color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
+  //         intensity = 1.0,
+  //         ambient   = 0.001,
+  //         radius    = 15,
+  //       })
+  //     }
+  //   }
+  // }
 
 
   light_material,_ := make_material("point_light.png", blend=.BLEND, in_texture_dir=true)
@@ -531,9 +553,9 @@ main :: proc() {
       // Move da point lights around
       if state.point_lights_on {
         for &pl in state.point_lights {
-          pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-          pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-          pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+          // pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+          // pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+          // pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
         }
       }
     } else {
@@ -666,6 +688,15 @@ main :: proc() {
             draw_model(light_model, l.color)
           }
         }
+
+        tip   := vec3{ 0.0,  1.0,  0.0}
+        base0 := vec3{ 1.0,  0.0,  1.0}
+        base1 := vec3{-1.0,  0.0,  1.0}
+        base2 := vec3{-1.0,  0.0, -1.0}
+        base3 := vec3{ 1.0,  0.0, -1.0}
+        immediate_pyramid(tip, base0, base1, base2, base3, RED)
+
+        draw_vector({0,-2.0,5.0}, {1, 1, 1}, GREEN)
 
         // Flush any accumulated draw calls
         immediate_flush()

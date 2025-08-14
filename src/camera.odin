@@ -5,7 +5,6 @@ import "core:log"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 
-CAMERA_UP :: vec3{0.0, 1.0, 0.0}
 
 Camera :: struct {
   position:   vec3,
@@ -113,7 +112,6 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   //
   MAX_SPEED :: 40.0
   if length(wish_dir) > 0 {
-
     // How fast are we going in the direction we want to go?
     curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
 
@@ -209,7 +207,10 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
         continue
       }
 
-      // Reproject velocity
+      // Take the velocity into the collision away, plus a little for some bounce
+      // This has the added side effect of increasing speed by running into a wall purposefully
+      // Our wish dir is into the wall, but that velocity gets taken away, therefore we can accelerate
+      // very fast because its much easier for wish dir to not match up with the current velocity
       OVERBOUNCE :: 1.4
       reproject := dot(camera.velocity, normal) * OVERBOUNCE
       camera.velocity -= reproject * normal // Only the velocity thats going into the wall gets subtracted away
@@ -225,13 +226,21 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     draw_text("Speed Excellence!", state.default_font, f32(state.window.w) * 0.5, f32(state.window.h) * 0.1, RED, .CENTER)
   }
 
+  // Draw out input and velocity vectors
+  if state.draw_debug {
+    draw_pos := camera.position
+    draw_pos.y -= 0.5
+    draw_vector(draw_pos, camera.velocity, RED)
+    draw_vector(draw_pos, wish_dir, BLUE)
+  }
+
   camera.position = wish_pos
 }
 
 get_camera_view :: proc(camera: Camera) -> (view: mat4) {
   forward := get_camera_forward(camera)
   // the target is the camera position + the forward direction
-  return get_view(camera.position, forward, CAMERA_UP)
+  return get_view(camera.position, forward, WORLD_UP)
 }
 
 get_look_at :: proc(position, eye, up: vec3) -> (view: mat4) {
@@ -279,7 +288,7 @@ get_orthographic :: proc(left, right, bottom, top, z_near, z_far: f32) -> (ortho
 
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3) {
   forward = get_camera_forward(camera)
-  up = CAMERA_UP
-  right = linalg.normalize(glsl.cross(forward, up))
+  up = WORLD_UP
+  right = linalg.normalize(linalg.cross(forward, up))
   return forward, up, right
 }

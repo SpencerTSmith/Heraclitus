@@ -27,6 +27,7 @@ void main() {
 
   // FIXME: slow, probably
   mat3 normal_mat = transpose(inverse(mat3(model)));
+
   vs_out.normal = normalize(normal_mat * vert_normal);
 
   vec3 T = normalize(normal_mat * vert_tangent.xyz);

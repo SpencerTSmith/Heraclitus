@@ -127,7 +127,7 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
   light_proj := get_orthographic(-scene_bounds, scene_bounds, -scene_bounds, scene_bounds, 5.0, sun_distance * 2.0)
 
   sun_position := center - (light.direction * sun_distance)
-  light_view := get_look_at(sun_position, center, CAMERA_UP)
+  light_view := get_look_at(sun_position, center, WORLD_UP)
 
   uniform = Direction_Light_Uniform {
     proj_view = light_proj * light_view,

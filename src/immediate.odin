@@ -128,9 +128,6 @@ immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   }
 
   vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
-  // for i in 0..<MAX_IMMEDIATE_VERTEX_COUNT {
-  //     vertex_ptr[i] = Immediate_Vertex{position = {9999,9999,9999}, uv = {}, color = {1,0,1,1}}
-  // }
 
   // Write into the current batch.
   offset := immediate.curr_batch.vertex_base + immediate.curr_batch.vertex_count
@@ -210,6 +207,67 @@ immediate_line_3D :: proc(xyz0, xyz1: vec3, rgba: vec4 = WHITE) {
 
   immediate_vertex(xyz0, rgba = rgba)
   immediate_vertex(xyz1, rgba = rgba)
+}
+
+immediate_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
+  corners := box_corners(xyz_min, xyz_max)
+
+  wish_mode    := Immediate_Mode.LINES
+  wish_space   := Immediate_Space.WORLD
+  wish_texture := immediate.white_texture
+  immediate_begin(wish_mode, wish_texture, wish_space)
+
+  immediate_line(corners[0], corners[1], rgba)
+  immediate_line(corners[1], corners[2], rgba)
+  immediate_line(corners[2], corners[3], rgba)
+  immediate_line(corners[3], corners[0], rgba)
+
+  // Front
+  immediate_line(corners[4], corners[5], rgba)
+  immediate_line(corners[5], corners[6], rgba)
+  immediate_line(corners[6], corners[7], rgba)
+  immediate_line(corners[7], corners[4], rgba)
+
+  // Left
+  immediate_line(corners[4], corners[3], rgba)
+  immediate_line(corners[5], corners[0], rgba)
+
+  // Right
+  immediate_line(corners[7], corners[2], rgba)
+  immediate_line(corners[6], corners[1], rgba)
+}
+
+immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, rgba: vec4 = WHITE) {
+  wish_mode    := Immediate_Mode.TRIANGLES
+  wish_space   := Immediate_Space.WORLD
+  wish_texture := immediate.white_texture
+  immediate_begin(wish_mode, wish_texture, wish_space)
+
+  // Triangle sides
+  immediate_vertex(tip, rgba)
+  immediate_vertex(base0, rgba)
+  immediate_vertex(base1, rgba)
+
+  immediate_vertex(tip, rgba)
+  immediate_vertex(base1, rgba)
+  immediate_vertex(base2, rgba)
+
+  immediate_vertex(tip, rgba)
+  immediate_vertex(base2, rgba)
+  immediate_vertex(base3, rgba)
+
+  immediate_vertex(tip, rgba)
+  immediate_vertex(base3, rgba)
+  immediate_vertex(base0, rgba)
+
+  // Base
+  immediate_vertex(base0, rgba)
+  immediate_vertex(base3, rgba)
+  immediate_vertex(base1, rgba)
+
+  immediate_vertex(base2, rgba)
+  immediate_vertex(base0, rgba)
+  immediate_vertex(base3, rgba)
 }
 
 immediate_flush :: proc() {

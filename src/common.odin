@@ -12,6 +12,8 @@ import "vendor:glfw"
 
 // NOTE: For everything that doesn't have a home yet
 
+WORLD_UP :: vec3{0.0, 1.0, 0.0}
+
 RED   :: vec4{1.0, 0.0, 0.0,  1.0}
 GREEN :: vec4{0.0, 1.0, 0.0,  1.0}
 BLUE  :: vec4{0.0, 0.0, 1.0,  1.0}
@@ -37,6 +39,39 @@ dvec4 :: glsl.dvec4
 
 mat3 :: glsl.mat3
 mat4 :: glsl.mat4
+
+draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
+  end := origin + direction
+  immediate_line(origin, end, color)
+
+  // Need the space relative to the direction of the vector
+  // To draw the pyramid tip
+  using linalg
+  forward := normalize(direction)
+  right   := normalize(cross(forward, WORLD_UP))
+  up      := normalize(cross(forward, right))
+
+  BOUNDS :: 0.025
+  tip   := end
+
+  base0 := end + right * BOUNDS
+  base0 += up * BOUNDS
+  base0 -= forward * BOUNDS * 4
+
+  base1 := end + right * BOUNDS
+  base1 -= up * BOUNDS
+  base1 -= forward * BOUNDS * 4
+
+  base2 := end - right * BOUNDS
+  base2 += up * BOUNDS
+  base2 -= forward * BOUNDS * 4
+
+  base3 := end - right * BOUNDS
+  base3 -= up * BOUNDS
+  base3 -= forward * BOUNDS * 4
+
+  immediate_pyramid(tip, base0, base1, base2, base3, color)
+}
 
 // Adds a 1 to the end
 vec4_from_3 :: proc(vec: vec3) -> vec4 {

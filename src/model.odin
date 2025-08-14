@@ -346,6 +346,7 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
         }
 
         // NOTE: Alright now we can compute our own tangents for this primitive if we need to.
+        // TODO: Save this so we don't have to do it everytime
         if tangent_access == nil {
           log.warnf("Model: %v Computing our own tangents", file_name)
 
