@@ -35,9 +35,10 @@ dvec2 :: glsl.dvec2
 dvec3 :: glsl.dvec3
 dvec4 :: glsl.dvec4
 
+mat3 :: glsl.mat3
 mat4 :: glsl.mat4
 
-// Adds a 0 to the end
+// Adds a 1 to the end
 vec4_from_3 :: proc(vec: vec3) -> vec4 {
   return {vec.x, vec.y, vec.z, 1.0}
 }
@@ -188,7 +189,6 @@ remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (n
   old_attachments := frame_buffer.attachments
   free_framebuffer(frame_buffer)
   new_buffer, ok = make_framebuffer(width, height, old_samples, attachments=old_attachments)
-  log.info(new_buffer.attachments)
 
   return new_buffer, ok
 }

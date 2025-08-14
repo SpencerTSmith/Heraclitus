@@ -47,7 +47,6 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) {
 
   // Already loaded
   if handle in assets.model_catalog {
-    // log.debugf("Model: %v already loaded, reusing", path)
     return handle, true
   }
 
@@ -73,7 +72,6 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
 
   // Already loaded
   if handle in assets.texture_catalog {
-    // log.debugf("Texture: %v already loaded, reusing", path)
     return handle, true
   }
 

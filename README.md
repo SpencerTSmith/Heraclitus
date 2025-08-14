@@ -3,6 +3,7 @@
 - Split shadow-casting point lights and non-shadow-casting lights... this can just be a bool... but should be separate arrays in the global frame uniform
 - AABB collision response
 - Batching layer on top of immediate rendering system
+- Sort of just normalizing vectors everywhere, probably redundantly... profile and find out if this is significant enough to fix
 
 
 # Complete:

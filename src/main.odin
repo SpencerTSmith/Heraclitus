@@ -183,7 +183,7 @@ init_state :: proc() -> (ok: bool) {
     position     = {0.0, 0.0, 5.0},
     curr_fov_y   = 90.0,
     target_fov_y = 90.0,
-    aabb         = {{-1.0, -4.0, -1.0}, {1.0, 2.0, 1.0}}
+    aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0}}
   }
 
   entities     = make([dynamic]Entity, perm_alloc)
@@ -213,6 +213,8 @@ init_state :: proc() -> (ok: bool) {
   }
   sun.direction = linalg.normalize(state.sun.direction)
   sun_on = true
+
+  bloom_on = true
 
   flashlight = {
 
@@ -345,7 +347,7 @@ flush_drawing :: proc() {
   using state
 
   // Remember to flush the remaining portion
-  immediate_frame_reset()
+  immediate_frame_flush()
 
   // And set up for next frame
   frame := &frames[curr_frame_index]
@@ -405,19 +407,20 @@ main :: proc() {
   guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 0.0}, scale={0.01, 0.01, 0.01})
   append(&state.entities, guitar)
 
-  sponza := make_entity("sponza/Sponza.gltf", flags={}, position={60,0,-60}, scale={2.0, 2.0, 2.0})
+  sponza := make_entity("sponza/Sponza.gltf", flags={.HAS_RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
   append(&state.entities, sponza)
+
+  lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0 ,0}, scale={0.5, 0.5, 0.5})
+  append(&state.entities, lantern)
 
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
 
-  block := make_entity("", position={0, -2, -10}, scale={100.0, 10.0, 10.0})
+  block := make_entity("", position={0, -2, -20}, scale={100.0, 10.0, 10.0})
   append(&state.entities, block)
 
-  log.info(state.entities)
-
   { // Light placement
-    spacing := 15
+    spacing := 20
     bounds  := 3
     for x in 0..<bounds {
       for z in 0..<bounds {
@@ -425,11 +428,11 @@ main :: proc() {
         z0 := (z) * spacing
 
         append(&state.point_lights, Point_Light{
-          position  = {f32(x0), 10.0, f32(z0)},
+          position  = {f32(x0), 5.0, f32(z0)},
           color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
           intensity = 1.0,
           ambient   = 0.001,
-          radius    = 10,
+          radius    = 15,
         })
       }
     }
@@ -496,7 +499,7 @@ main :: proc() {
 
     // 'Simulate' (not really doing much right now) if in game mode
     if state.mode == .GAME {
-      update_camera_game(&state.camera, dt_s)
+      move_camera_game(&state.camera, dt_s)
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
 
@@ -534,7 +537,7 @@ main :: proc() {
         }
       }
     } else {
-      update_camera_edit(&state.camera, dt_s)
+      move_camera_edit(&state.camera, dt_s)
     }
 
     // Frame sync

@@ -5,6 +5,7 @@ import "core:math/linalg/glsl"
 
 Entity_Flags :: enum {
   HAS_COLLISION,
+  HAS_RENDERABLE,
 }
 
 Entity :: struct {
@@ -20,7 +21,7 @@ Entity :: struct {
 }
 
 make_entity :: proc(model:    string,
-                    flags:    bit_set[Entity_Flags] = {.HAS_COLLISION},
+                    flags:    bit_set[Entity_Flags] = {.HAS_COLLISION, .HAS_RENDERABLE},
                     position: vec3   = {0, 0, 0},
                     rotation: vec3   = {0, 0, 0},
                     scale:    vec3   = {1, 1, 1}) -> Entity {
@@ -43,6 +44,8 @@ entity_has_transparency :: proc(e: Entity) -> bool {
 }
 
 draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0) {
+  if .HAS_RENDERABLE not_in e.flags { return }
+
   model := get_model(e.model)
 
   if state.draw_debug {

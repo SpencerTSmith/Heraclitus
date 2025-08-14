@@ -5,6 +5,7 @@ in VS_OUT {
   vec3 normal;
   vec3 world_position;
   vec4 sun_space_position;
+  mat3 TBN;
 } fs_in;
 
 layout(location=0) out vec4 frag_color;
@@ -78,7 +79,7 @@ vec3 spot_phong(Spot_Light light, vec3 diffuse_sample, vec3 specular_sample, flo
 
 	vec3 specular = phong_specular(normal, light_direction, view_direction, specular_sample, shininess);
 
-  diffuse  = phong_skybox_mix(normal, view_direction, diffuse,  skybox, 0.1);
+  diffuse  = phong_skybox_mix(normal, view_direction, diffuse,  skybox, 0.01);
   specular = phong_skybox_mix(normal, view_direction, specular, skybox, 0.5);
 
 	// ATTENUATION
@@ -97,14 +98,13 @@ vec3 spot_phong(Spot_Light light, vec3 diffuse_sample, vec3 specular_sample, flo
 
 vec3 direction_phong(Direction_Light light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
                           vec3 normal, vec3 view_direction) {
-
 	vec3 light_direction = normalize(-light.direction.xyz);
 
 	vec3 diffuse = phong_diffuse(normal, light_direction, diffuse_sample);
 
 	vec3 specular = phong_specular(normal, light_direction, view_direction, specular_sample, shininess);
 
-  diffuse  = phong_skybox_mix(normal, view_direction, diffuse,  skybox, 0.1);
+  diffuse  = phong_skybox_mix(normal, view_direction, diffuse,  skybox, 0.01);
   specular = phong_skybox_mix(normal, view_direction, specular, skybox, 0.5);
 
 	vec3 phong = light.intensity * light.color.rgb * (diffuse + specular);
@@ -120,7 +120,7 @@ vec3 point_phong(Point_Light light, vec3 diffuse_sample, vec3 specular_sample, f
 
 	vec3 specular = phong_specular(normal, light_direction, view_direction, specular_sample, shininess);
 
-  diffuse  = phong_skybox_mix(normal, view_direction, diffuse,  skybox, 0.1);
+  diffuse  = phong_skybox_mix(normal, view_direction, diffuse,  skybox, 0.01);
   specular = phong_skybox_mix(normal, view_direction, specular, skybox, 0.5);
 
 	// ATTENUATION
@@ -268,13 +268,13 @@ void main() {
     vec3 specular_sample = vec3(texture(mat_specular, fs_in.uv));
     vec3 emissive        = vec3(texture(mat_emissive, fs_in.uv));
 
-    // // Textures are in range 0 -> 1
-    // vec3 normal = texture(mat_normal, fs_in.uv).rgb;
-    // // To [-1, 1]
-    // normal = normalize(normal * 2.0 - 1.0);
+    // Textures are in range 0 -> 1
+    vec3 normal_map = texture(mat_normal, fs_in.uv).rgb;
+    // To [-1, 1]
+    normal_map = normalize(normal_map * 2.0 - 1.0);
 
-
-    vec3 normal = normalize(fs_in.normal);
+    // vec3 normal = normalize(fs_in.normal);
+    vec3 normal = normalize(fs_in.TBN * normal_map);
 
 	  vec3 view_direction = normalize(frame.camera_position.xyz - fs_in.world_position);
 

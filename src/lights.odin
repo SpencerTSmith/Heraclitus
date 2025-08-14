@@ -129,55 +129,6 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
   sun_position := center - (light.direction * sun_distance)
   light_view := get_look_at(sun_position, center, CAMERA_UP)
 
-  //
-  // frustum_corners := [8]vec4{
-  //   // Far
-  //   {-1.0,  1.0,  1.0, 1}, // top left
-  //   { 1.0,  1.0,  1.0, 1}, // top right
-  //   { 1.0, -1.0,  1.0, 1}, // bottom right
-  //   {-1.0, -1.0,  1.0, 1}, // bottom left
-  //   // Near
-  //   {-1.0,  1.0, -1.0, 1}, // top left
-  //   { 1.0,  1.0, -1.0, 1}, // top right
-  //   { 1.0, -1.0, -1.0, 1}, // bottom right
-  //   {-1.0, -1.0, -1.0, 1}, // bottom left
-  // }
-  //
-  // cam_view := get_camera_view(state.camera)
-  // cam_proj := get_camera_perspective(state.camera, 100)
-  // cam_view_proj := cam_proj * cam_view
-  // inv_cam       := linalg.inverse(cam_view_proj)
-  //
-  // world_corners: [8]vec4
-  //
-  // for corner, idx in frustum_corners {
-  //   world_pos := inv_cam * corner
-  //   world_pos /= world_pos.w
-  //
-  //   world_corners[idx] = world_pos
-  //   // log.info(world_pos)
-  // }
-  //
-  // light_view := get_look_at({0,0,0}, light.direction, CAMERA_UP)
-  //
-  // min_x, max_x := max(f32), min(f32)
-  // min_y, max_y := max(f32), min(f32)
-  // min_z, max_z := max(f32), min(f32)
-  //
-  // for corner in world_corners {
-  //   light_space_pos := light_view * corner
-  //   log.info(light_space_pos)
-  //
-  //   min_x = math.min(min_x, light_space_pos.x)
-  //   max_x = math.max(max_x, light_space_pos.x)
-  //   min_y = math.min(min_y, light_space_pos.y)
-  //   max_y = math.max(max_y, light_space_pos.y)
-  //   min_z = math.min(min_z, light_space_pos.z)
-  //   max_z = math.max(max_z, light_space_pos.z)
-  // }
-  //
-  // light_proj := get_orthographic(min_x, max_x, min_y, max_y, 0.1, max_z - min_z)
-
   uniform = Direction_Light_Uniform {
     proj_view = light_proj * light_view,
 

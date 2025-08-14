@@ -20,11 +20,12 @@ Mesh_Vertex :: struct {
   position: vec3,
   uv:       vec2,
   normal:   vec3,
+  tangent:  vec4,
 }
 
 Mesh_Index :: distinct u32
 
-// TODO(ss): Seems not too bad to set this up as just 1 multi-draw indirect per model,
+// TODO: Seems not too bad to set this up as just 1 multi-draw indirect per model,
 // instead of one regular draw per mesh, As well this may be more akin to a GLTF "primitive"
 Mesh :: struct {
   vertex_count:   i32,
@@ -40,11 +41,11 @@ Model :: struct {
   vertex_count: i32,
   index_count:  i32,
 
-  // Sub triangle meshes, also index into a range of the overall buffer
+  // Triangle meshes, provide an index into a range of the overall buffer
   meshes:    []Mesh,
   materials: []Material,
 
-  aabb: AABB
+  aabb: AABB // For the model
 }
 
 make_model :: proc{
@@ -55,7 +56,7 @@ make_model :: proc{
 }
 
 // Takes in all vertices and all indices.. then a slice of the materials and a slice of the meshes
-make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, materials: []Material, meshes: []Mesh, allocator := context.allocator) -> (model: Model, ok: bool) {
+make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, materials: []Material, meshes: []Mesh) -> (model: Model, ok: bool) {
   buffer := make_vertex_buffer(Mesh_Vertex, len(vertices), len(indices), raw_data(vertices), raw_data(indices))
 
   //
@@ -93,7 +94,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, mat
 }
 
 // TODO: Have a 'make_scene' proc to split nodes 'correctly' if I ever want that
-// FIXME: Big assumptions:
+// NOTE: Big assumptions:
 // 1. This is one model (might not be an issue if just make that make_scene() proc)
 // 2. That the image is always a separate image file (png, jpg, etc.)
 make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
@@ -103,11 +104,13 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
 
   options: cgltf.options
   data, result := cgltf.parse_file(options, c_path)
+
   if result == .success && cgltf.load_buffers(options, data, c_path) == .success {
     defer cgltf.free(data)
 
     model_materials := make([dynamic]Material, allocator = context.temp_allocator)
     reserve(&model_materials, len(data.materials))
+
 
     // Collect materials
     for material in data.materials {
@@ -134,6 +137,13 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
         emissive_path = filepath.join({dir, relative}, allocator = context.temp_allocator)
       }
 
+      normal_path: string
+      if material.normal_texture.texture != nil {
+        relative := string(material.normal_texture.texture.image_.uri)
+
+        normal_path = filepath.join({dir, relative}, allocator = context.temp_allocator)
+      }
+
       blend: Material_Blend_Mode
       switch material.alpha_mode {
       case .opaque:
@@ -144,7 +154,7 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
         blend = .MASK
       }
 
-      mesh_material := make_material(diffuse_path, specular_path, emissive_path, blend = blend, in_texture_dir=false) or_return
+      mesh_material := make_material(diffuse_path, specular_path, emissive_path, normal_path, blend = blend, in_texture_dir=false) or_return
       append(&model_materials, mesh_material)
     }
 
@@ -200,17 +210,16 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
       node_world_transform: mat4
       cgltf.node_transform_world(&node, raw_data(&node_world_transform))
 
-      node_world_normal_transform := glsl.inverse_transpose(node_world_transform)
+      // 3x3... normals aren't affected by translation
+      node_world_normal_transform := glsl.inverse_transpose(mat3(node_world_transform))
 
       // Each primitive will became one of our 'Meshes'
       for primitive in gltf_mesh.primitives {
         if primitive.type != .triangles { continue } // Only triangle meshes
 
-        // Need to offset indices since we store all in the same vertex buffer!
-        primitive_per_index_offset := len(model_verts)
-
         position_access: ^cgltf.accessor
         normal_access:   ^cgltf.accessor
+        tangent_access:  ^cgltf.accessor
         uv_access:       ^cgltf.accessor
 
         // Collect accessors for primitive
@@ -229,6 +238,12 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
             } else {
               log.errorf("Model: %v has unsupported normal attribute of type: %v", file_name, attribute.data.type)
             }
+          case .tangent:
+            if attribute.data.type == .vec4 && attribute.data.component_type == .r_32f {
+              tangent_access = attribute.data
+            } else {
+              log.errorf("Model: %v has unsupported tangent attribute of type: %v", file_name, attribute.data.type)
+            }
           case .texcoord:
             if attribute.data.type == .vec2 && attribute.data.component_type == .r_32f {
               uv_access = attribute.data
@@ -236,8 +251,6 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
               log.errorf("Model: %v has unsupported uv attribute of type: %v", file_name, attribute.data.type)
             }
           case .invalid:
-            fallthrough
-          case .tangent:
             fallthrough
           case .color:
             fallthrough
@@ -250,12 +263,23 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
           }
         }
 
+        if position_access == nil ||
+           normal_access   == nil ||
+           uv_access       == nil {
+          log.errorf("Model: %v unable to collect all NECESSARY attributes!", file_name)
+          return
+        }
+
         if position_access.count != normal_access.count ||
-           position_access.count != uv_access.count {
+           position_access.count != uv_access.count     ||
+           (tangent_access != nil && position_access.count != tangent_access.count) {
             log.warnf("Model: %v has mismatched vertex attribute counts", file_name)
         }
 
         primitive_vertex_count := position_access.count
+
+        // Need to offset indices since we store all in the same vertex buffer!
+        primitive_per_index_offset := len(model_verts)
 
         // Now actually make the new vertices
         if position_access != nil &&
@@ -277,9 +301,22 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
               log.warnf("Model: %v Trouble reading vertex uv", file_name)
             }
 
+            // NOTE: Not all meshes will have tangents! That's ok, we can compute our own so everything can go through the same shader!
+            if tangent_access != nil {
+              ok = cgltf.accessor_read_float(tangent_access, i, raw_data(&new_vertex.tangent), len(new_vertex.tangent))
+              if !ok {
+                log.warnf("Model: %v Trouble reading vertex tangent", file_name)
+              }
+            }
+
             // Transform the vertex by the node's world matrix! And same for the normals
             new_vertex.position = (node_world_transform * vec4_from_3(new_vertex.position)).xyz
-            new_vertex.normal   = (node_world_normal_transform * vec4_from_3(new_vertex.normal)).xyz
+            new_vertex.normal   = glsl.normalize(node_world_normal_transform * new_vertex.normal)
+
+            // NOTE: Check this and make sure this works
+            if tangent_access != nil {
+              new_vertex.tangent.xyz = glsl.normalize(node_world_normal_transform * new_vertex.tangent.xyz)
+            }
 
             append(&model_verts, new_vertex)
           }
@@ -294,7 +331,7 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
         // Collect indices!
         if primitive.indices != nil && primitive.indices.buffer_view != nil {
           // Make sure that our index type matches up
-          if primitive.indices.type           == .scalar &&
+          if primitive.indices.type            == .scalar &&
              (primitive.indices.component_type == .r_32u ||
               primitive.indices.component_type == .r_16u) {
             for i in 0..<primitive.indices.count {
@@ -308,11 +345,58 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
           }
         }
 
+        // NOTE: Alright now we can compute our own tangents for this primitive if we need to.
+        if tangent_access == nil {
+          log.warnf("Model: %v Computing our own tangents", file_name)
+
+          // Goin' through the primitive triangles and computing our tangents
+          slice_start := uint(primitive_index_offset)
+          slice_end   := slice_start + primitive_index_count
+
+          assert(slice_end % 3 == 0, "Gotta be triangles, man.")
+
+          for i := slice_start; i < slice_end; i += 3 {
+            // Triangle
+            idx0 := model_index[i + 0]
+            idx1 := model_index[i + 1]
+            idx2 := model_index[i + 2]
+
+            // By pointer so we can accumulate the tangents back into them
+            vert0 := &model_verts[idx0]
+            vert1 := &model_verts[idx1]
+            vert2 := &model_verts[idx2]
+
+            // From LearnOpenGL, Linear equation to solve for tangent, can calc bitangent in vert shader as cross of normal and tangent
+            edge0 := vert1.position - vert0.position
+            edge1 := vert2.position - vert0.position
+
+            delta_uv0 := vert1.uv - vert0.uv
+            delta_uv1 := vert2.uv - vert0.uv
+
+            denom := (delta_uv0.x * delta_uv1.y - delta_uv1.x * delta_uv0.y)
+            f := 1.0 / denom
+
+            tangent: vec4
+            tangent.x = f * (delta_uv1.y * edge0.x - delta_uv0.y * edge1.x)
+            tangent.y = f * (delta_uv1.y * edge0.y - delta_uv0.y * edge1.y)
+            tangent.z = f * (delta_uv1.y * edge0.z - delta_uv0.y * edge1.z)
+
+            vert0.tangent += tangent
+            vert1.tangent += tangent
+            vert2.tangent += tangent
+
+            // Doin' redundant work, but that's ok probably, hopefully not may models won't come without tangents
+            vert0.tangent.w = 1.0
+            vert1.tangent.w = 1.0
+            vert2.tangent.w = 1.0
+          }
+        }
+
         // NOTE: Hmm think i like the look of cast(T) better than the other way
         new_mesh := Mesh {
-          vertex_count = cast(i32)primitive_vertex_count,
-          index_count  = cast(i32)primitive_index_count,
-          index_offset = cast(i32)primitive_index_offset,
+          vertex_count   = cast(i32)primitive_vertex_count,
+          index_count    = cast(i32)primitive_index_count,
+          index_offset   = cast(i32)primitive_index_offset,
           material_index = cast(i32)primitive_material_index,
         }
 
@@ -427,7 +511,7 @@ draw_skybox :: proc(skybox: Skybox) {
   bind_shader_program(state.shaders["skybox"])
 
   // Get the depth func before and reset after this call
-  // TODO: Do this everywhere
+  // TODO: Do this everywhere, ie push and pop GL state
   depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
   gl.DepthFunc(gl.LEQUAL)
   defer gl.DepthFunc(u32(depth_func_before))
@@ -503,42 +587,47 @@ DEFAULT_SQUARE_INDX :: []Mesh_Index {
 }
 
 DEFAULT_CUBE_VERT :: []Mesh_Vertex {
-  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0, -1.0} },
-  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0, -1.0} },
-  { position = { 0.5, -0.5, -0.5}, uv = {1.0, 0.0}, normal = { 0.0,  0.0, -1.0} },
-  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0, -1.0} },
-  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0, -1.0} },
-  { position = {-0.5,  0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0,  0.0, -1.0} },
-  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0,  1.0} },
-  { position = { 0.5, -0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0,  0.0,  1.0} },
-  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0,  1.0} },
-  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0,  1.0} },
-  { position = {-0.5,  0.5,  0.5}, uv = {0.0, 1.0}, normal = { 0.0,  0.0,  1.0} },
-  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0,  1.0} },
-  { position = {-0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = {-1.0,  0.0,  0.0} },
-  { position = {-0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = {-1.0,  0.0,  0.0} },
-  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = {-1.0,  0.0,  0.0} },
-  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = {-1.0,  0.0,  0.0} },
-  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = {-1.0,  0.0,  0.0} },
-  { position = {-0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = {-1.0,  0.0,  0.0} },
-  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 1.0,  0.0,  0.0} },
-  { position = { 0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 1.0,  0.0,  0.0} },
-  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 1.0,  0.0,  0.0} },
-  { position = { 0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 1.0,  0.0,  0.0} },
-  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 1.0,  0.0,  0.0} },
-  { position = { 0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 1.0,  0.0,  0.0} },
-  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0, -1.0,  0.0} },
-  { position = { 0.5, -0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0, -1.0,  0.0} },
-  { position = { 0.5, -0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0, -1.0,  0.0} },
-  { position = { 0.5, -0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0, -1.0,  0.0} },
-  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0, -1.0,  0.0} },
-  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0, -1.0,  0.0} },
-  { position = {-0.5,  0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0,  1.0,  0.0} },
-  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0,  1.0,  0.0} },
-  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0,  1.0,  0.0} },
-  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0,  1.0,  0.0} },
-  { position = {-0.5,  0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0,  1.0,  0.0} },
-  { position = {-0.5,  0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0,  1.0,  0.0} },
+  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0, -1.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0, -1.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5, -0.5, -0.5}, uv = {1.0, 0.0}, normal = { 0.0,  0.0, -1.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0, -1.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0, -1.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5,  0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0,  0.0, -1.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+
+  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0,  1.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5, -0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0,  0.0,  1.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0,  1.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 1.0}, normal = { 0.0,  0.0,  1.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5,  0.5,  0.5}, uv = {0.0, 1.0}, normal = { 0.0,  0.0,  1.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0,  0.0,  1.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+
+  { position = {-0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = {-1.0,  0.0,  0.0}, tangent = { 0.0,  0.0, -1.0, 1.0} },
+  { position = {-0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = {-1.0,  0.0,  0.0}, tangent = { 0.0,  0.0, -1.0, 1.0} },
+  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = {-1.0,  0.0,  0.0}, tangent = { 0.0,  0.0, -1.0, 1.0} },
+  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = {-1.0,  0.0,  0.0}, tangent = { 0.0,  0.0, -1.0, 1.0} },
+  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = {-1.0,  0.0,  0.0}, tangent = { 0.0,  0.0, -1.0, 1.0} },
+  { position = {-0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = {-1.0,  0.0,  0.0}, tangent = { 0.0,  0.0, -1.0, 1.0} },
+
+  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 1.0,  0.0,  0.0}, tangent = { 0.0,  0.0,  1.0, 1.0} },
+  { position = { 0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 1.0,  0.0,  0.0}, tangent = { 0.0,  0.0,  1.0, 1.0} },
+  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 1.0,  0.0,  0.0}, tangent = { 0.0,  0.0,  1.0, 1.0} },
+  { position = { 0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 1.0,  0.0,  0.0}, tangent = { 0.0,  0.0,  1.0, 1.0} },
+  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 1.0,  0.0,  0.0}, tangent = { 0.0,  0.0,  1.0, 1.0} },
+  { position = { 0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 1.0,  0.0,  0.0}, tangent = { 0.0,  0.0,  1.0, 1.0} },
+
+  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0, -1.0,  0.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5, -0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0, -1.0,  0.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5, -0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0, -1.0,  0.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5, -0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0, -1.0,  0.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5, -0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0, -1.0,  0.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5, -0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0, -1.0,  0.0}, tangent = { 1.0,  0.0,  0.0, 1.0} },
+
+  { position = {-0.5,  0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0,  1.0,  0.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0,  1.0,  0.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5, -0.5}, uv = {1.0, 1.0}, normal = { 0.0,  1.0,  0.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = { 0.5,  0.5,  0.5}, uv = {1.0, 0.0}, normal = { 0.0,  1.0,  0.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5,  0.5, -0.5}, uv = {0.0, 1.0}, normal = { 0.0,  1.0,  0.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
+  { position = {-0.5,  0.5,  0.5}, uv = {0.0, 0.0}, normal = { 0.0,  1.0,  0.0}, tangent = {-1.0,  0.0,  0.0, 1.0} },
 }
 
 DEFAULT_CUBE_INDX :: []Mesh_Index {

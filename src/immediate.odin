@@ -34,11 +34,13 @@ Immediate_State :: struct {
   shader:        Shader_Program,
   white_texture: Texture,
 
-  curr_batch:    ^Immediate_Batch, // Eh, pointer could maybe do index instead?
-  batches:       [dynamic]Immediate_Batch,
+  curr_batch: ^Immediate_Batch, // Eh, pointer could maybe do index instead?
+  batches:    [dynamic]Immediate_Batch,
 }
 
 // Just a view into the main vertex buffer
+// TODO: Maybe each batch should store vertices itself so that we can check if there is a batch
+// that matches state but is not the current batch?
 Immediate_Batch :: struct {
   vertex_base:  int, // First vertex in batch
   vertex_count: int, // How many vertices in batch
@@ -75,13 +77,14 @@ init_immediate_renderer :: proc() -> (ok: bool) {
   return ok
 }
 
-immediate_frame_reset :: proc() {
+immediate_frame_flush :: proc() {
   immediate_flush()
   immediate.vertex_count = 0
 }
 
 // Returns the pointer to the new batch in the batches dynamic array.
-immediate_start_new_batch :: proc(mode: Immediate_Mode, texture: Texture, space: Immediate_Space) -> (batch_pointer: ^Immediate_Batch) {
+@(private="file")
+start_new_batch :: proc(mode: Immediate_Mode, texture: Texture, space: Immediate_Space) -> (batch_pointer: ^Immediate_Batch) {
   append(&immediate.batches, Immediate_Batch{
     vertex_base = immediate.vertex_count, // Always on the end.
 
@@ -94,12 +97,12 @@ immediate_start_new_batch :: proc(mode: Immediate_Mode, texture: Texture, space:
 }
 
 // Starts a new batch if necessary
-immediate_check_current_batch :: proc(wish_mode: Immediate_Mode, wish_texture: Texture, wish_space: Immediate_Space) {
+immediate_begin :: proc(wish_mode: Immediate_Mode, wish_texture: Texture, wish_space: Immediate_Space) {
   if immediate.curr_batch == nil || // Should short circuit and not do any nil dereferences
      immediate.curr_batch.mode    != wish_mode  ||
      immediate.curr_batch.space   != wish_space ||
      immediate.curr_batch.texture != wish_texture {
-    immediate.curr_batch = immediate_start_new_batch(wish_mode, wish_texture, wish_space)
+    immediate.curr_batch = start_new_batch(wish_mode, wish_texture, wish_space)
   }
 }
 
@@ -148,7 +151,7 @@ immediate_quad :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
   wish_mode  := Immediate_Mode.TRIANGLES
   wish_space := Immediate_Space.SCREEN
 
-  immediate_check_current_batch(wish_mode, texture, wish_space)
+  immediate_begin(wish_mode, texture, wish_space)
 
   top_left := Immediate_Vertex{
     position = {xy.x, xy.y, -state.z_near},
@@ -191,7 +194,7 @@ immediate_line_2D :: proc(xy0, xy1: vec2, rgba: vec4 = WHITE) {
   wish_space   := Immediate_Space.SCREEN
   wish_texture := immediate.white_texture
 
-  immediate_check_current_batch(wish_mode, wish_texture, wish_space)
+  immediate_begin(wish_mode, wish_texture, wish_space)
 
   immediate_vertex({xy0.x, xy0.y, -state.z_near}, rgba = rgba)
   immediate_vertex({xy1.x, xy1.y, -state.z_near}, rgba = rgba)
@@ -203,7 +206,7 @@ immediate_line_3D :: proc(xyz0, xyz1: vec3, rgba: vec4 = WHITE) {
   wish_space   := Immediate_Space.WORLD
   wish_texture := immediate.white_texture
 
-  immediate_check_current_batch(wish_mode, wish_texture, wish_space)
+  immediate_begin(wish_mode, wish_texture, wish_space)
 
   immediate_vertex(xyz0, rgba = rgba)
   immediate_vertex(xyz1, rgba = rgba)

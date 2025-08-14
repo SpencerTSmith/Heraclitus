@@ -44,7 +44,7 @@ update_camera_look :: proc(dt_s: f64) {
   state.camera.curr_fov_y = linalg.lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
 }
 
-update_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
+move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   input_direction: vec3
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
@@ -79,7 +79,7 @@ update_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   camera.on_ground = false
 }
 
-update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
+move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   using linalg
 
   dt_s := f32(dt_s)
@@ -123,7 +123,7 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     // If we have room to grow in speed?
     if add_speed > 0 {
       GROUND_ACCELERATION :: 10.0
-      AIR_ACCELERATION    :: 1.0
+      AIR_ACCELERATION    :: 4.0
 
       factor: f32 = GROUND_ACCELERATION if camera.on_ground else AIR_ACCELERATION
 
@@ -148,35 +148,33 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   friction: f32 = GROUND_FRICTION if camera.on_ground else AIR_FRICTION
   speed := length(camera.velocity)
 
-  if camera.on_ground {
-    if speed > 1 {
-      // How much speed to lose per frame
-      drop := speed * friction * dt_s
+  if speed > 1 {
+    // How much speed to lose per frame
+    drop := speed * friction * dt_s
 
-      new_speed := speed - drop
+    new_speed := speed - drop
 
-      // Just stop
-      if new_speed < 0 { new_speed = 0 }
+    // Just stop
+    if new_speed < 0 { new_speed = 0 }
 
-      new_speed /= speed
+    new_speed /= speed
 
-      applied := camera.velocity * new_speed
+    applied := camera.velocity * new_speed
 
-      camera.velocity = applied
-    }
+    camera.velocity = applied
   }
 
   //
   // Gravity! and Jumpin'
   //
 
+  GRAVITY :: -40
+  camera.velocity.y += GRAVITY * dt_s
+
   if key_pressed(.SPACE) && camera.on_ground {
-    camera.velocity.y = 10.0
+    camera.velocity.y = 15.0
     camera.on_ground  = false
   }
-
-  GRAVITY :: -30
-  camera.velocity.y += GRAVITY * dt_s
 
   //
   // Shitty Collision!
@@ -202,7 +200,7 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
       wish_pos += offset // push the camera out of collision
 
-      // Surface normal, should be close to this right?
+      // Surface normal, should basically be this, works fine
       normal := normalize0(offset)
 
       if normal.y > 0.1 {
@@ -220,7 +218,7 @@ update_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
   // Come to complete stop if going slow enough horizontally
   if length(camera.velocity.xz) < 1 {
-    camera.velocity = {0,camera.velocity.y,0}
+    camera.velocity = {0, camera.velocity.y, 0}
   }
 
   if length(camera.velocity) > MAX_SPEED * 1.2 {

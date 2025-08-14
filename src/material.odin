@@ -63,6 +63,7 @@ Material :: struct {
   specular:  Texture_Handle,
   emissive:  Texture_Handle,
   normal:    Texture_Handle,
+
   shininess: f32,
 
   blend: Material_Blend_Mode,
@@ -133,15 +134,16 @@ make_material_from_files :: proc(diffuse_path:   string = DIFFUSE_DEFAULT,
   return material, ok
 }
 
-
 free_material :: proc(material: ^Material) {
   diffuse  := get_texture(material.diffuse)
   specular := get_texture(material.specular)
   emissive := get_texture(material.emissive)
+  normal   := get_texture(material.normal)
 
   free_texture(diffuse)
   free_texture(specular)
   free_texture(emissive)
+  free_texture(normal)
 }
 
 bind_material :: proc(material: Material) {
@@ -170,7 +172,7 @@ make_texture :: proc {
   make_texture_from_missing,
 }
 
-// So we know it's missing
+// Ugly, so we know it's missing
 make_texture_from_missing :: proc() -> (texture: Texture) {
   texture, _ = make_texture_from_file("missing.png")
   return
