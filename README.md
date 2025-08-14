@@ -1,16 +1,25 @@
-# Fix Soon:
+# TODO:
 - Better render pass state tracking... maybe push and pop GL state procs? Since we are caching them we'll be able to check those calls and not do em if not necessary
 - Split shadow-casting point lights and non-shadow-casting lights... this can just be a bool... but should be separate arrays in the global frame uniform
 - AABB collision response
-- Batching layer on top of immediate rendering system
+- Improve immediate rendering batching
+    - Look for already started batches that match state and append... or...
+    - Sort batches by state change when flushing
 - Sort of just normalizing vectors everywhere, probably redundantly... profile and find out if this is significant enough to fix
-
+- More AZDO:
+    - Texture handles
+    - Multi-draw indirect
+        - Try with just doing so for models with multiple mesh primitives... looks simple before doing next step
+    - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for multi-draw-indirect
 
 # Complete:
-- AABB wireframe rendering and collision detection
-- Frames in flight sync, triple-up persistently mapped buffers
-- Immediate vertex rendering system, flushes vertices when needed (switching textures, modes, coordinate space)
-- Text rendering (backed by the immediate system)
+- AABB basic collision detection and response
+- Quake-like player-movement (Bunny-hopping, wall-running, strafe-jumping)
+- AZDO OpenGL techniques:
+    - Frames in flight sync, triple-up persistently mapped buffers
+- Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
+    - AABB and vector debug visuals
+    - Text rendering
 - Point light shadow mapping
 - Sun shadow mapping
 - Full blinn-phong shading model

@@ -69,6 +69,7 @@ init_immediate_renderer :: proc() -> (ok: bool) {
     batches = make([dynamic]Immediate_Batch, state.perm_alloc)
   }
 
+  // FIXME: AHHHHHHHHH
   white_tex_handle: Texture_Handle
   white_tex_handle, ok = load_texture("white.png")
 

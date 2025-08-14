@@ -493,6 +493,7 @@ free_model :: proc(using model: ^Model) {
   free_gpu_buffer(&buffer)
 }
 
+// TODO: Make this work with the asset system
 make_skybox :: proc(file_paths: [6]string) -> (skybox: Skybox, ok: bool) {
   skybox_verts := SKYBOX_VERTICES
 

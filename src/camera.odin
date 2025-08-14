@@ -139,10 +139,10 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   //
-  // Friction
+  // Friction, none in air to allow strafe jumping!
   //
   GROUND_FRICTION :: 6.0
-  AIR_FRICTION    :: 0.2
+  AIR_FRICTION    :: 0.0
   friction: f32 = GROUND_FRICTION if camera.on_ground else AIR_FRICTION
   speed := length(camera.velocity)
 
@@ -230,7 +230,9 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   if state.draw_debug {
     draw_pos := camera.position
     draw_pos.y -= 0.5
-    draw_vector(draw_pos, camera.velocity, RED)
+
+    // Scale the vectors down a bit so it looks a little nicer visually
+    draw_vector(draw_pos, camera.velocity / 20, RED)
     draw_vector(draw_pos, wish_dir, BLUE)
   }
 

@@ -689,16 +689,7 @@ main :: proc() {
           }
         }
 
-        tip   := vec3{ 0.0,  1.0,  0.0}
-        base0 := vec3{ 1.0,  0.0,  1.0}
-        base1 := vec3{-1.0,  0.0,  1.0}
-        base2 := vec3{-1.0,  0.0, -1.0}
-        base3 := vec3{ 1.0,  0.0, -1.0}
-        immediate_pyramid(tip, base0, base1, base2, base3, RED)
-
-        draw_vector({0,-2.0,5.0}, {1, 1, 1}, GREEN)
-
-        // Flush any accumulated draw calls
+        // Flush any accumulated draw calls (Right now those are just for debug visuals)
         immediate_flush()
       }
 
