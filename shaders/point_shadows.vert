@@ -14,11 +14,11 @@ out VS_OUT {
   flat int  light_index;
 } vs_out;
 
+uniform int light_index;
 uniform mat4 model;
 
 void main() {
-  int light_index = gl_InstanceID / 6;
-  int face_index  = gl_InstanceID % 6;
+  int face_index = gl_InstanceID;
 
   Point_Light light = frame.lights.points[light_index];
 
@@ -27,7 +27,9 @@ void main() {
   vec4 world_pos = model * vec4(vert_position, 1.0);
 
   gl_Position = proj_view * world_pos;
-  gl_Layer    = gl_InstanceID;
+
+  // We can use instanced rendering to do just one draw call for the entire cubemap, in the array
+  gl_Layer = light_index * 6 + face_index;
 
   vs_out.world_position = world_pos;
   vs_out.uv             = vert_uv;
