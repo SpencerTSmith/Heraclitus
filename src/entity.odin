@@ -1,6 +1,5 @@
 package main
 
-import "core:math/linalg/glsl"
 import "core:log"
 
 Entity_Flags :: enum {
@@ -49,17 +48,17 @@ entity_has_transparency :: proc(e: Entity) -> bool {
 }
 
 draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0, draw_aabbs := false) {
-  if .HAS_RENDERABLE not_in e.flags { return }
-
-  model := get_model(e.model)
-
   if draw_aabbs {
     draw_aabb(entity_world_aabb(e))
 
-    for mesh in model.meshes {
-      draw_aabb(transform_aabb(mesh.aabb, e.position, e.rotation, e.scale), BLUE)
-    }
+    // for mesh in model.meshes {
+    //   draw_aabb(transform_aabb(mesh.aabb, e.position, e.rotation, e.scale), BLUE)
+    // }
   }
+
+  if .HAS_RENDERABLE not_in e.flags { return }
+
+  model := get_model(e.model)
 
   set_shader_uniform("model", entity_model_mat4(e))
   draw_model(model^, mul_color=color, instances=instances)
@@ -75,13 +74,13 @@ entity_world_aabb :: proc(e: Entity) -> AABB {
 }
 
 // yxz euler angle
-entity_model_mat4 :: proc(entity: Entity) -> (model: mat4) {
-  translation := glsl.mat4Translate(entity.position)
-  rotation_y  := glsl.mat4Rotate({0.0, 1.0, 0.0}, glsl.radians_f32(entity.rotation.y))
-  rotation_x  := glsl.mat4Rotate({1.0, 0.0, 0.0}, glsl.radians_f32(entity.rotation.x))
-  rotation_z  := glsl.mat4Rotate({0.0, 0.0, 1.0}, glsl.radians_f32(entity.rotation.z))
-  scale       := glsl.mat4Scale(entity.scale)
+entity_model_mat4 :: proc(e: Entity) -> (model: mat4) {
+  t   := mat4_translate(e.position)
+  r_y := mat4_rotate(MODEL_UP,      radians(e.rotation.y))
+  r_x := mat4_rotate(MODEL_RIGHT,   radians(e.rotation.x))
+  r_z := mat4_rotate(MODEL_FORWARD, radians(e.rotation.z))
+  s   := mat4_scale(e.scale)
 
-  model = translation * rotation_y * rotation_x * rotation_z * scale
+  model = t * r_y * r_x * r_z * s
   return model
 }

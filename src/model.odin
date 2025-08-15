@@ -4,8 +4,6 @@ import "core:log"
 import "core:slice"
 import "core:strings"
 import "core:path/filepath"
-import "core:mem"
-import "core:math/linalg/glsl"
 
 import "vendor:cgltf"
 import gl "vendor:OpenGL"
@@ -66,12 +64,12 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, mat
   //
 
   // HACK: GLTF Already gives you these I believe, perhaps doing unessecary work
-  min_v := vec3{max(f32), max(f32), max(f32)}
-  max_v := vec3{min(f32), min(f32), min(f32)}
+  min_v := vec3{F32_MAX, F32_MAX, F32_MAX}
+  max_v := vec3{F32_MIN, F32_MIN, F32_MIN}
 
   for v in vertices {
-    min_v = glsl.min(min_v, v.position)
-    max_v = glsl.max(max_v, v.position)
+    min_v = vmin(min_v, v.position)
+    max_v = vmax(max_v, v.position)
   }
 
   aabb: AABB = {
@@ -213,7 +211,7 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
       cgltf.node_transform_world(&node, raw_data(&node_world_transform))
 
       // 3x3... normals aren't affected by translation
-      node_world_normal_transform := glsl.inverse_transpose(mat3(node_world_transform))
+      node_world_normal_transform := inverse_transpose(mat3(node_world_transform))
 
       // Each primitive will became one of our 'Meshes'
       for primitive in gltf_mesh.primitives {
@@ -321,16 +319,16 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
 
             // Transform the vertex by the node's world matrix! And same for the normals
             new_vertex.position = (node_world_transform * vec4_from_3(new_vertex.position)).xyz
-            new_vertex.normal   = glsl.normalize(node_world_normal_transform * new_vertex.normal)
+            new_vertex.normal   = normalize(node_world_normal_transform * new_vertex.normal)
 
             // NOTE: Check this and make sure this works
             if tangent_access != nil {
-              new_vertex.tangent.xyz = glsl.normalize(node_world_normal_transform * new_vertex.tangent.xyz)
+              new_vertex.tangent.xyz = normalize(node_world_normal_transform * new_vertex.tangent.xyz)
             }
 
             // Collect AABB vertices
-            mesh_aabb.min = glsl.min(mesh_aabb.min, new_vertex.position)
-            mesh_aabb.max = glsl.max(mesh_aabb.max, new_vertex.position)
+            mesh_aabb.min = vmin(mesh_aabb.min, new_vertex.position)
+            mesh_aabb.max = vmax(mesh_aabb.max, new_vertex.position)
 
             append(&model_verts, new_vertex)
           }
@@ -502,11 +500,11 @@ model_has_transparency :: proc(model: Model) -> bool {
   return false
 }
 
-free_model :: proc(using model: ^Model) {
-  for &material in materials {
+free_model :: proc(model: ^Model) {
+  for &material in model.materials {
     free_material(&material)
   }
-  free_gpu_buffer(&buffer)
+  free_gpu_buffer(&model.buffer)
 }
 
 // TODO: Make this work with the asset system

@@ -1,9 +1,5 @@
 package main
 
-import "core:math/linalg/glsl"
-import "core:log"
-import gl "vendor:OpenGL"
-
 // Hmm might go union route for this?
 // Physics_Hull :: union {
 //   AABB,
@@ -18,6 +14,36 @@ AABB :: struct {
 Sphere :: struct {
   center: vec3,
   radius: f32,
+}
+
+draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE) {
+  range_cast := f32(range)
+
+  for z := -range; z <= range; z += spacing {
+    z_cast := f32(z)
+    for x := -range; x <= range; x += spacing {
+      x_cast := f32(x)
+      immediate_line(vec3{x_cast, -range_cast, z_cast}, vec3{x_cast, range_cast, z_cast}, color)
+    }
+
+    for y := -range; y <= range; y += spacing {
+      y_cast := f32(y)
+      immediate_line(vec3{-range_cast, y_cast, z_cast}, vec3{range_cast, y_cast, z_cast}, color)
+    }
+  }
+
+  for y := -range; y <= range; y += spacing {
+    y_cast := f32(y)
+    for x := -range; x <= range; x += spacing {
+      x_cast := f32(x)
+      immediate_line(vec3{x_cast, y_cast, -range_cast}, vec3{x_cast, y_cast, range_cast}, color)
+    }
+
+    for z := -range; z <= range; z += spacing {
+      z_cast := f32(z)
+      immediate_line(vec3{-range_cast, y_cast, z_cast}, vec3{range_cast, y_cast, z_cast}, color)
+    }
+  }
 }
 
 // From real-time collision detection
@@ -36,16 +62,14 @@ closest_point_on_aabb :: proc(point: vec3, aabb: AABB) -> vec3 {
 sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) -> bool {
   // Find the closest point on the aabb to sphere, then if the squared distance of that to the sphere's center is
   // less than the squared sphere's radius we know we are intersecting!
-
   closest_point := closest_point_on_aabb(sphere.center, aabb)
 
   immediate_line(sphere.center, closest_point, RED)
   immediate_sphere(closest_point, 0.01, RED)
-  immediate_begin_force()
 
   dist := closest_point - sphere.center
 
-  return glsl.dot(dist, dist) <= sphere.radius * sphere.radius
+  return dot(dist, dist) <= sphere.radius * sphere.radius
 }
 
 // Factored out into a generic function since we use it elsewhere
@@ -126,12 +150,12 @@ transform_aabb_matrix :: proc(aabb: AABB, transform: mat4) -> AABB {
     c = (transform * vec4_from_3(c)).xyz
   }
 
-  min_v := vec3{max(f32), max(f32), max(f32)}
-  max_v := vec3{min(f32), min(f32), min(f32)}
+  min_v := vec3{F32_MAX, F32_MAX, F32_MAX}
+  max_v := vec3{F32_MIN, F32_MIN, F32_MIN}
 
   for c in corners {
-    min_v = glsl.min(min_v, c)
-    max_v = glsl.max(max_v, c)
+    min_v = vmin(min_v, c)
+    max_v = vmax(max_v, c)
   }
 
   recalc: AABB = {
@@ -145,11 +169,11 @@ transform_aabb_matrix :: proc(aabb: AABB, transform: mat4) -> AABB {
 // Basically the new aabb can be found by just finding the min and max extents only in the specific
 // axis rotation that contributes... we can take advantage of this
 transform_aabb_fast :: proc(aabb: AABB, translation, rotation, scale: vec3) -> AABB {
-  rotation_y := glsl.mat4Rotate({0.0, 1.0, 0.0}, glsl.radians_f32(rotation.y))
-  rotation_x := glsl.mat4Rotate({1.0, 0.0, 0.0}, glsl.radians_f32(rotation.x))
-  rotation_z := glsl.mat4Rotate({0.0, 0.0, 1.0}, glsl.radians_f32(rotation.z))
+  rotation_y := mat4_rotate(WORLD_UP,      radians(rotation.y))
+  rotation_x := mat4_rotate(WORLD_RIGHT,   radians(rotation.x))
+  rotation_z := mat4_rotate(WORLD_FORWARD, radians(rotation.z))
 
-  rot := rotation_y * rotation_x * rotation_z * glsl.mat4Scale(scale)
+  rot := rotation_y * rotation_x * rotation_z * mat4_scale(scale)
 
   // From 'Real-Time Collision Detection'
   result: AABB
@@ -193,6 +217,38 @@ aabb_intersect_point :: proc(a: AABB, p: vec3) -> bool {
                 (a.min.z <= p.z && a.max.z >= p.z)
 
   return intersects
+}
+
+draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
+  end := origin + direction
+  immediate_line(origin, end, color)
+
+  // Need the space relative to the direction of the vector
+  // To draw the pyramid tip
+  forward := normalize(direction)
+  right   := normalize(cross(forward, WORLD_UP))
+  up      := normalize(cross(forward, right))
+
+  BOUNDS :: 0.025
+  tip   := end
+
+  base0 := end + right * BOUNDS
+  base0 += up * BOUNDS
+  base0 -= forward * BOUNDS * 4
+
+  base1 := end + right * BOUNDS
+  base1 -= up * BOUNDS
+  base1 -= forward * BOUNDS * 4
+
+  base2 := end - right * BOUNDS
+  base2 += up * BOUNDS
+  base2 -= forward * BOUNDS * 4
+
+  base3 := end - right * BOUNDS
+  base3 -= up * BOUNDS
+  base3 -= forward * BOUNDS * 4
+
+  immediate_pyramid(tip, base0, base1, base2, base3, color)
 }
 
 draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN) {

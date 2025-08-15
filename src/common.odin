@@ -3,8 +3,8 @@ package main
 import "core:fmt"
 import "core:log"
 import "core:slice"
-import "core:math/linalg/glsl"
 import "core:math/linalg"
+import "core:math/linalg/glsl"
 import "core:path/filepath"
 
 import gl "vendor:OpenGL"
@@ -12,7 +12,13 @@ import "vendor:glfw"
 
 // NOTE: For everything that doesn't have a home yet
 
-WORLD_UP :: vec3{0.0, 1.0, 0.0}
+MODEL_UP      :: vec3{0.0, 1.0, 0.0}
+MODEL_RIGHT   :: vec3{1.0, 0.0, 0.0}
+MODEL_FORWARD :: vec3{0.0, 0.0, 1.0}
+
+WORLD_UP      :: vec3{0.0, 1.0,  0.0}
+WORLD_RIGHT   :: vec3{1.0, 0.0,  0.0}
+WORLD_FORWARD :: vec3{0.0, 0.0, -1.0}
 
 RED   :: vec4{1.0, 0.0, 0.0,  1.0}
 GREEN :: vec4{0.0, 1.0, 0.0,  1.0}
@@ -24,10 +30,14 @@ WHITE :: vec4{1.0, 1.0, 1.0,  1.0}
 LEARN_OPENGL_BLUE   :: vec4{0.2, 0.3, 0.3, 1.0}
 LEARN_OPENGL_ORANGE :: vec4{1.0, 0.5, 0.2, 1.0}
 
-BILLION :: 1_000_000_000
-
-// Includes the separator
 PATH_SLASH :: filepath.SEPARATOR_STRING
+
+BILLION :: 1_000_000_000
+PI      :: glsl.PI
+
+F32_MIN :: min(f32)
+F32_MAX :: max(f32)
+U64_MAX :: max(u64)
 
 vec2 :: glsl.vec2
 vec3 :: glsl.vec3
@@ -40,38 +50,31 @@ dvec4 :: glsl.dvec4
 mat3 :: glsl.mat3
 mat4 :: glsl.mat4
 
-draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
-  end := origin + direction
-  immediate_line(origin, end, color)
+// Hmm, good idea? Just hate having to import and prepend for such common operations
+dot        :: glsl.dot
+cross      :: glsl.cross
+normalize  :: glsl.normalize
+normalize0 :: linalg.normalize0
+length     :: glsl.length
 
-  // Need the space relative to the direction of the vector
-  // To draw the pyramid tip
-  using linalg
-  forward := normalize(direction)
-  right   := normalize(cross(forward, WORLD_UP))
-  up      := normalize(cross(forward, right))
+cos :: glsl.cos
+sin :: glsl.sin
+radians :: glsl.radians
 
-  BOUNDS :: 0.025
-  tip   := end
+vmin :: glsl.min
+vmax :: glsl.max
 
-  base0 := end + right * BOUNDS
-  base0 += up * BOUNDS
-  base0 -= forward * BOUNDS * 4
+inverse_transpose :: glsl.inverse_transpose
 
-  base1 := end + right * BOUNDS
-  base1 -= up * BOUNDS
-  base1 -= forward * BOUNDS * 4
+mat4_translate :: glsl.mat4Translate
+mat4_rotate    :: glsl.mat4Rotate
+mat4_scale     :: glsl.mat4Scale
 
-  base2 := end - right * BOUNDS
-  base2 += up * BOUNDS
-  base2 -= forward * BOUNDS * 4
+mat4_perspective  :: glsl.mat4Perspective
+mat4_orthographic :: glsl.mat4Ortho3d
+mat4_look_at      :: glsl.mat4LookAt
 
-  base3 := end - right * BOUNDS
-  base3 -= up * BOUNDS
-  base3 -= forward * BOUNDS * 4
-
-  immediate_pyramid(tip, base0, base1, base2, base3, color)
-}
+lerp :: glsl.lerp
 
 // Adds a 1 to the end
 vec4_from_3 :: proc(vec: vec3) -> vec4 {
@@ -79,11 +82,9 @@ vec4_from_3 :: proc(vec: vec3) -> vec4 {
 }
 
 squared_distance :: proc(a_pos: vec3, b_pos: vec3) -> f32 {
-  dx := a_pos.x - b_pos.x
-  dy := a_pos.y - b_pos.y
-  dz := a_pos.z - b_pos.z
+  delta := a_pos - b_pos
 
-  return dx * dx + dy * dy + dz * dz
+  return glsl.dot(delta, delta)
 }
 
 point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
@@ -237,10 +238,10 @@ Window :: struct {
 
 resize_window_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
   gl.Viewport(0, 0, width, height)
-  state_struct := cast(^State)glfw.GetWindowUserPointer(window)
-  state_struct.window.w = int(width)
-  state_struct.window.h = int(height)
-  state_struct.window.resized = true
+
+  state.window.w = int(width)
+  state.window.h = int(height)
+  state.window.resized = true
 }
 
 get_aspect_ratio :: proc(window: Window) -> (aspect: f32) {
@@ -274,7 +275,7 @@ Point Lights: %v
                       state.fps,
                       state.mode,
                       state.camera.velocity,
-                      linalg.length(state.camera.velocity),
+                      length(state.camera.velocity),
                       state.camera.position,
                       state.camera.on_ground,
                       state.camera.yaw,

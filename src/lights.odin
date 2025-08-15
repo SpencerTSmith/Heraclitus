@@ -1,9 +1,5 @@
 package main
 
-import "core:log"
-import "core:math"
-import "core:math/linalg"
-
 Point_Light :: struct {
   position:    vec3,
 
@@ -118,16 +114,16 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
 
   // FIXME: Just a hack to prevent shadow swimming until i can unstick my head out of my ass and figure
   // out the texel snapping shit
-  if linalg.length(center - prev_center) < 10.0 {
+  if length(center - prev_center) < 10.0 {
     center = prev_center
   }
 
   prev_center = center
 
-  light_proj := get_orthographic(-scene_bounds, scene_bounds, -scene_bounds, scene_bounds, 5.0, sun_distance * 2.0)
+  light_proj := mat4_orthographic(-scene_bounds, scene_bounds, -scene_bounds, scene_bounds, 5.0, sun_distance * 2.0)
 
   sun_position := center - (light.direction * sun_distance)
-  light_view := get_look_at(sun_position, center, WORLD_UP)
+  light_view := mat4_look_at(sun_position, center, WORLD_UP)
 
   uniform = Direction_Light_Uniform {
     proj_view = light_proj * light_view,
@@ -143,11 +139,14 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
   return uniform
 }
 
-LIGHT_Z_NEAR :: f32(1.0)
 
 // NOTE: Assumes the shadow CUBE map is a CUBE so 1:1 aspect ratio for each side
 point_light_projviews :: proc(light: Point_Light) -> [6]mat4 {
-  proj := get_perspective(90.0, 1.0, LIGHT_Z_NEAR, light.radius)
+  Z_NEAR :: f32(1.0)
+  ASPECT :: f32(1.0)
+  FOV    :: f32(90.0)
+
+  proj := mat4_perspective(radians(FOV), ASPECT, Z_NEAR, light.radius)
   projviews := [6]mat4{
     proj * get_view(light.position.xyz, { 1.0,  0.0,  0.0}, {0.0, -1.0,  0.0}),
     proj * get_view(light.position.xyz, {-1.0,  0.0,  0.0}, {0.0, -1.0,  0.0}),

@@ -1,8 +1,6 @@
 package main
 
 import "core:log"
-import "core:mem"
-import "core:math"
 
 import gl "vendor:OpenGL"
 
@@ -52,7 +50,7 @@ Immediate_Batch :: struct {
   space:   Immediate_Space,
 }
 
-// "Singleton" in c++ terms, but less stupid
+// Internal state
 @(private="file")
 immediate: Immediate_State
 
@@ -285,8 +283,6 @@ immediate_sphere :: proc(center: vec3, radius: f32, rgba: vec4 = WHITE) {
   wish_texture := immediate.white_texture
   immediate_begin(wish_mode, wish_texture, wish_space)
 
-  using math
-
   // Draw the horizontal rings
   LAT_RINGS  :: 8 * 2
   LONG_RINGS :: 8 * 2
@@ -320,6 +316,10 @@ immediate_sphere :: proc(center: vec3, radius: f32, rgba: vec4 = WHITE) {
                         (sin(phi) * sin(theta) * radius) + center.z}, rgba)
     }
   }
+
+  // So that if another line strip batch follows immediately after
+  // it doesn't get connected to this
+  immediate_begin_force()
 }
 
 immediate_flush :: proc() {
@@ -343,7 +343,7 @@ immediate_flush :: proc() {
         switch batch.space {
         case .SCREEN:
           gl.DepthFunc(gl.ALWAYS)
-          set_shader_uniform("transform", get_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far))
+          set_shader_uniform("transform", mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far))
         case .WORLD:
           set_shader_uniform("transform", get_camera_perspective(state.camera) * get_camera_view(state.camera))
         }

@@ -1,10 +1,5 @@
 package main
 
-import "core:math"
-import "core:log"
-import "core:math/linalg"
-import "core:math/linalg/glsl"
-
 Camera :: struct {
   position:   vec3,
   velocity:   vec3,
@@ -39,7 +34,7 @@ update_camera_look :: proc(dt_s: f64) {
   state.camera.target_fov_y = clamp(state.camera.target_fov_y, 10.0, 120)
 
   CAMERA_ZOOM_SPEED :: 10.0
-  state.camera.curr_fov_y = linalg.lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
+  state.camera.curr_fov_y = lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
 }
 
 move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
@@ -80,13 +75,12 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
 
 move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   update_camera_look(dt_s)
-  using linalg
 
   dt_s := f32(dt_s)
 
   wish_dir: vec3
 
-  camera_forward, camera_up, camera_right := get_camera_axes(camera^)
+  camera_forward, _, camera_right := get_camera_axes(camera^)
 
   ground_forward := normalize0(vec3{camera_forward.x, 0, camera_forward.z})
 
@@ -185,16 +179,6 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   wish_cam_aabb.min += (wish_pos - camera.position)
   wish_cam_aabb.max += (wish_pos - camera.position)
 
-  sphere: Sphere = {
-    center = {0, -2.0, 20},
-    radius = 5,
-  }
-  if sphere_intersects_aabb(sphere, cam_aabb) {
-    immediate_sphere(sphere.center, sphere.radius, RED)
-  } else {
-    immediate_sphere(sphere.center, sphere.radius)
-  }
-
   if state.draw_debug {
     draw_aabb(cam_aabb)
     draw_aabb(wish_cam_aabb, CORAL)
@@ -236,17 +220,17 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
   // Neat message
   if length(camera.velocity) > MAX_SPEED * 1.2 {
+    // TODO: Factor this code into a draw_text_with_background()
     BOX_COLOR :: vec4{0.0, 0.0, 0.0, 0.7}
     BOX_PAD   :: 10.0
 
     text := "Speed Excellence!"
     x := f32(state.window.w) * 0.5
-    y := f32(state.window.w) * 0.05
+    y := f32(state.window.w) * 0.02
 
     box_width, box_height := text_draw_size(text, state.default_font)
-    box_height -= state.default_font.line_height * 0.5
-    immediate_quad({x - BOX_PAD - box_width/2, y - BOX_PAD - box_height/2}, box_width + BOX_PAD * 2, box_height + BOX_PAD, BOX_COLOR)
-    draw_text(text, state.default_font, x, y, RED, .CENTER)
+    immediate_quad({x - BOX_PAD - box_width * 0.5, y - BOX_PAD - box_height * 0.6}, box_width + BOX_PAD * 2, box_height + BOX_PAD, BOX_COLOR)
+    draw_text(text, state.default_font, x, y, RED * 2.0, .CENTER)
   }
 
   // Draw out input and velocity vectors
@@ -268,12 +252,8 @@ get_camera_view :: proc(camera: Camera) -> (view: mat4) {
   return get_view(camera.position, forward, WORLD_UP)
 }
 
-get_look_at :: proc(position, eye, up: vec3) -> (view: mat4) {
-  return glsl.mat4LookAt(position, eye, up)
-}
-
 get_view :: proc(position, forward, up: vec3) -> (view: mat4) {
-  return glsl.mat4LookAt(position, forward + position, up)
+  return mat4_look_at(position, forward + position, up)
 }
 
 camera_world_aabb :: proc(c: Camera) -> AABB {
@@ -284,36 +264,25 @@ camera_world_aabb :: proc(c: Camera) -> AABB {
 
 // Returns normalized
 get_camera_forward :: proc(camera: Camera) -> (forward: vec3) {
-  using camera
-  rad_yaw   := glsl.radians_f32(yaw)
-  rad_pitch := glsl.radians_f32(pitch)
+  rad_yaw   := radians(camera.yaw)
+  rad_pitch := radians(camera.pitch)
   forward = {
-    -math.cos(rad_pitch) * math.cos(rad_yaw),
-    math.sin(rad_pitch),
-    math.cos(rad_pitch) * math.sin(rad_yaw),
+    -cos(rad_pitch) * cos(rad_yaw),
+     sin(rad_pitch),
+     cos(rad_pitch) * sin(rad_yaw),
   }
-  forward = linalg.normalize0(forward)
+  forward = normalize0(forward)
 
   return forward
 }
 
 get_camera_perspective :: proc(camera: Camera, z_far: f32 = state.z_far) -> (perspective: mat4){
-  return get_perspective(camera.curr_fov_y, get_aspect_ratio(state.window), state.z_near, z_far)
-}
-
-// Fov in degrees
-get_perspective :: proc(fov_y, aspect_ratio, z_near, z_far: f32) -> (perspective: mat4) {
-  return glsl.mat4Perspective(glsl.radians(fov_y), aspect_ratio, z_near, z_far)
-}
-
-// Ehh this can go here
-get_orthographic :: proc(left, right, bottom, top, z_near, z_far: f32) -> (orthographic: mat4) {
- return glsl.mat4Ortho3d(left, right, bottom, top, z_near, z_far)
+  return mat4_perspective(radians(camera.curr_fov_y), get_aspect_ratio(state.window), state.z_near, z_far)
 }
 
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3) {
   forward = get_camera_forward(camera)
   up = WORLD_UP
-  right = linalg.normalize(linalg.cross(forward, up))
+  right = normalize(cross(forward, up))
   return forward, up, right
 }

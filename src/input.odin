@@ -150,15 +150,12 @@ Input_State :: struct {
 }
 
 mouse_scroll_callback :: proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64) {
-  state_struct := cast(^State)glfw.GetWindowUserPointer(window)
-  using state_struct.input.mouse
-
   // Just get the direction
   dir_x := math.sign(x_scroll)
   dir_y := math.sign(y_scroll)
 
-  delta_scroll.x += dir_x
-  delta_scroll.y += dir_y
+  state.input.mouse.delta_scroll.x += dir_x
+  state.input.mouse.delta_scroll.y += dir_y
 }
 
 poll_input_state :: proc(dt_s: f64) {

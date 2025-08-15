@@ -1,7 +1,6 @@
 package main
 
 import "core:math"
-import "core:math/linalg"
 import "core:math/rand"
 import "core:mem"
 import "core:mem/virtual"
@@ -105,15 +104,14 @@ State :: struct {
 }
 
 init_state :: proc() -> (ok: bool) {
-  using state
-  start_time = time.now()
+  state.start_time = time.now()
 
   if glfw.Init() != glfw.TRUE {
     log.fatal("Failed to initialize GLFW")
     return
   }
 
-  mode = .GAME
+  state.mode = .GAME
 
   glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
   glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
@@ -122,34 +120,31 @@ init_state :: proc() -> (ok: bool) {
   glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
   // glfw.WindowHint(glfw.SAMPLES, 4) We render into our own buffer
 
-  window.handle = glfw.CreateWindow(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H, WINDOW_DEFAULT_TITLE, nil, nil)
-  if window.handle == nil {
+  state.window.handle = glfw.CreateWindow(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H, WINDOW_DEFAULT_TITLE, nil, nil)
+  if state.window.handle == nil {
     log.fatal("Failed to create GLFW window")
     return
   }
 
-  window.w     = WINDOW_DEFAULT_W
-  window.h     = WINDOW_DEFAULT_H
-  window.title = WINDOW_DEFAULT_TITLE
+  state.window.w     = WINDOW_DEFAULT_W
+  state.window.h     = WINDOW_DEFAULT_H
+  state.window.title = WINDOW_DEFAULT_TITLE
 
-  // HACK: Just giving it access to the global struct... probably bad practice
-  glfw.SetWindowUserPointer(window.handle, &state)
-
-  c_title := strings.clone_to_cstring(window.title, allocator = context.temp_allocator)
+  c_title := strings.clone_to_cstring(state.window.title, allocator = context.temp_allocator)
   defer free_all(context.temp_allocator)
 
-  glfw.SetWindowTitle(window.handle, c_title)
+  glfw.SetWindowTitle(state.window.handle, c_title)
 
   if glfw.RawMouseMotionSupported() {
-    glfw.SetInputMode(window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    glfw.SetInputMode(window.handle, glfw.RAW_MOUSE_MOTION, 1)
+    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
+    glfw.SetInputMode(state.window.handle, glfw.RAW_MOUSE_MOTION, 1)
   }
 
-  glfw.MakeContextCurrent(window.handle)
+  glfw.MakeContextCurrent(state.window.handle)
   glfw.SwapInterval(1)
 
-  glfw.SetFramebufferSizeCallback(window.handle, resize_window_callback)
-  glfw.SetScrollCallback(window.handle, mouse_scroll_callback)
+  glfw.SetFramebufferSizeCallback(state.window.handle, resize_window_callback)
+  glfw.SetScrollCallback(state.window.handle, mouse_scroll_callback)
 
   gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
 
@@ -166,18 +161,18 @@ init_state :: proc() -> (ok: bool) {
   gl.Enable(gl.STENCIL_TEST)
   gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE)
 
-  gl_is_initialized = true
+  state.gl_is_initialized = true
 
-  err := virtual.arena_init_growing(&perm)
+  err := virtual.arena_init_growing(&state.perm)
   if err != .None {
     log.fatal("Failed to create permanent arena")
     return
   }
-  perm_alloc = virtual.arena_allocator(&perm)
+  state.perm_alloc = virtual.arena_allocator(&state.perm)
 
   init_assets()
 
-  camera = {
+  state.camera = {
     sensitivity  = 0.2,
     yaw          = 270.0,
     position     = {0.0, 0.0, 5.0},
@@ -186,37 +181,37 @@ init_state :: proc() -> (ok: bool) {
     aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},},
   }
 
-  entities     = make([dynamic]Entity, perm_alloc)
-  point_lights = make([dynamic]Point_Light, perm_alloc)
+  state.entities     = make([dynamic]Entity, state.perm_alloc)
+  state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
 
-  running = true
+  state.running = true
 
-  z_near = 0.1
-  z_far  = 1000.0
+  state.z_near = 0.1
+  state.z_far  = 1000.0
 
-  shaders = make(map[string]Shader_Program, allocator=perm_alloc)
+  state.shaders = make(map[string]Shader_Program, allocator=state.perm_alloc)
 
-  shaders["phong"]         = make_shader_program("simple.vert", "phong.frag",  allocator=perm_alloc) or_return
-  shaders["skybox"]        = make_shader_program("skybox.vert", "skybox.frag", allocator=perm_alloc) or_return
-  shaders["resolve_hdr"]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=perm_alloc) or_return
-  shaders["billboard"]     = make_shader_program("billboard.vert", "billboard.frag", allocator=perm_alloc) or_return
-  shaders["sun_depth"]     = make_shader_program("direction_shadow.vert", "direction_shadow.frag", allocator=perm_alloc) or_return
-  shaders["point_shadows"] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=perm_alloc) or_return
-  shaders["gaussian"]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=perm_alloc) or_return
-  shaders["get_bright"]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=perm_alloc) or_return
+  state.shaders["phong"]         = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
+  state.shaders["skybox"]        = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
+  state.shaders["resolve_hdr"]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
+  state.shaders["billboard"]     = make_shader_program("billboard.vert", "billboard.frag", allocator=state.perm_alloc) or_return
+  state.shaders["sun_depth"]     = make_shader_program("direction_shadow.vert", "direction_shadow.frag", allocator=state.perm_alloc) or_return
+  state.shaders["point_shadows"] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
+  state.shaders["gaussian"]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
+  state.shaders["get_bright"]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
 
-  sun = {
+  state.sun = {
     direction = {-0.5, -1.0,  0.7},
     color     = { 0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
     ambient   = 0.05,
   }
-  sun.direction = linalg.normalize(state.sun.direction)
-  sun_on = true
+  state.sun.direction = normalize(state.sun.direction)
+  state.sun_on = true
 
-  bloom_on = true
+  state.bloom_on = true
 
-  flashlight = {
+  state.flashlight = {
 
     direction = {0.0, 0.0, -1.0},
     position  = state.camera.position,
@@ -230,19 +225,19 @@ init_state :: proc() -> (ok: bool) {
     inner_cutoff = math.cos(math.to_radians_f32(12.5)),
     outer_cutoff = math.cos(math.to_radians_f32(17.5)),
   }
-  flashlight_on = false
+  state.flashlight_on = false
 
   SAMPLES :: 4
-  hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+  state.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
 
-  post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR, .DEPTH_STENCIL}) or_return
+  state.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR, .DEPTH_STENCIL}) or_return
 
-  ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-  ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+  state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+  state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
 
-  point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
+  state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
 
-  frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_UBO), persistent = true)
+  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_UBO), persistent = true)
 
   cube_map_sides := [6]string{
     "skybox/right.jpg",
@@ -252,27 +247,26 @@ init_state :: proc() -> (ok: bool) {
     "skybox/front.jpg",
     "skybox/back.jpg",
   }
-  skybox = make_skybox(cube_map_sides) or_return
+  state.skybox = make_skybox(cube_map_sides) or_return
 
-  gl.CreateVertexArrays(1, &empty_vao)
+  gl.CreateVertexArrays(1, &state.empty_vao)
 
   init_immediate_renderer() or_return
 
   init_menu() or_return
 
-  draw_debug = true
-  default_font = make_font("Diablo_Light.ttf", 30.0) or_return
+  state.draw_debug = true
+
+  state.default_font = make_font("Diablo_Light.ttf", 30.0) or_return
 
   return true
 }
 
 begin_drawing :: proc() {
-  using state
-
   // This simple?
-  frame := &frames[curr_frame_index]
+  frame := &state.frames[state.curr_frame_index]
   if frame.fence != nil {
-    result := gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, max(u64))
+    gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, U64_MAX)
     gl.DeleteSync(frame.fence)
 
     frame.fence = nil
@@ -283,7 +277,7 @@ begin_drawing :: proc() {
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
 
-  began_drawing = true
+  state.began_drawing = true
 }
 
 begin_main_pass :: proc() {
@@ -344,17 +338,16 @@ begin_shadow_pass :: proc(framebuffer: Framebuffer) {
 }
 
 flush_drawing :: proc() {
-  using state
 
   // Remember to flush the remaining portion
   immediate_frame_flush()
 
   // And set up for next frame
-  frame := &frames[curr_frame_index]
+  frame := &state.frames[state.curr_frame_index]
   frame.fence = gl.FenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-  curr_frame_index = (curr_frame_index + 1) % FRAMES_IN_FLIGHT
+  state.curr_frame_index = (state.curr_frame_index + 1) % FRAMES_IN_FLIGHT
 
-  began_drawing = false
+  state.began_drawing = false
 
   glfw.SwapBuffers(state.window.handle)
 }
@@ -443,27 +436,6 @@ main :: proc() {
   block := make_entity("", position={0, -2, -20}, scale={100.0, 10.0, 10.0})
   append(&state.entities, block)
 
-  // Light placement
-  // {
-  //   spacing := 20
-  //   bounds  := 3
-  //   for x in 0..<bounds {
-  //     for z in 0..<bounds {
-  //       x0 := (x - bounds/2) * spacing
-  //       z0 := (z) * spacing
-  //
-  //       append(&state.point_lights, Point_Light{
-  //         position  = {f32(x0), 0.0, f32(z0)},
-  //         color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
-  //         intensity = 1.0,
-  //         ambient   = 0.001,
-  //         radius    = 15,
-  //       })
-  //     }
-  //   }
-  // }
-
-
   light_material,_ := make_material("point_light.png", blend=.BLEND, in_texture_dir=true)
   light_model,_ := make_model(DEFAULT_SQUARE_VERT, DEFAULT_SQUARE_INDX, light_material)
   defer free_model(&light_model)
@@ -526,6 +498,8 @@ main :: proc() {
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
 
+      state.entities[0].rotation.z += f32(10.0 * dt_s)
+
       //
       // Collision
       //
@@ -549,16 +523,15 @@ main :: proc() {
         }
       }
 
-      seconds := seconds_since_start()
-
       // Move da point lights around
-      if state.point_lights_on {
-        for &pl in state.point_lights {
-          // pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-          // pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-          // pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-        }
-      }
+      // seconds := seconds_since_start()
+      // if state.point_lights_on {
+      //   for &pl in state.point_lights {
+      //     pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+      //     pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+      //     pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+      //   }
+      // }
     }
     if state.mode == .EDIT {
       move_camera_edit(&state.camera, dt_s)
@@ -577,7 +550,7 @@ main :: proc() {
       projection      = projection,
       view            = view,
       proj_view       = projection * view,
-      orthographic    = get_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far),
+      orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far),
       camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
       z_near          = state.z_near,
       z_far           = state.z_far,
@@ -637,11 +610,6 @@ main :: proc() {
               }
             }
           }
-
-          // instances := int(6 * frame_ubo.lights.points_count)
-          // for e in state.entities {
-          //   draw_entity(e, instances=instances)
-          // }
         }
       }
 
@@ -670,6 +638,7 @@ main :: proc() {
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
 
+
         // Skybox here so it is seen behind transparent objects, binds its own shader
         if state.sun_on {
           draw_skybox(state.skybox)
@@ -692,8 +661,8 @@ main :: proc() {
           }
         }
 
+        // Draw point light billboards
         if state.point_lights_on {
-          // Draw point light billboards
           bind_shader_program(state.shaders["billboard"])
           for l in state.point_lights {
             temp := Entity{
@@ -710,7 +679,11 @@ main :: proc() {
           }
         }
 
-        // Flush any accumulated draw calls (Right now those are just for debug visuals)
+        if state.draw_debug {
+          draw_grid(color = {1.0, 1.0, 1.0, 0.4})
+        }
+
+        // Flush any accumulated draw calls (Right now those are just for debug visuals, and conditional text)
         immediate_flush()
       }
 
@@ -740,10 +713,9 @@ main :: proc() {
           bind_framebuffer(state.ping_pong_buffers[0])
 
           BLOOM_GAUSSIAN_COUNT :: 10
-
           horizontal := false
 
-          for i in 0..<BLOOM_GAUSSIAN_COUNT {
+          for _ in 0..<BLOOM_GAUSSIAN_COUNT {
             set_shader_uniform("horizontal", horizontal)
             gl.BindVertexArray(state.empty_vao)
             gl.DrawArrays(gl.TRIANGLES, 0, 6)
@@ -788,23 +760,21 @@ main :: proc() {
 }
 
 free_state :: proc() {
-  using state
-
   free_immediate_renderer()
 
   free_assets()
 
-  free_skybox(&skybox)
+  free_skybox(&state.skybox)
 
-  free_gpu_buffer(&frame_uniforms)
+  free_gpu_buffer(&state.frame_uniforms)
 
-  for _, &shader in shaders {
+  for _, &shader in state.shaders {
     free_shader_program(&shader)
   }
 
-  glfw.DestroyWindow(window.handle)
+  glfw.DestroyWindow(state.window.handle)
   // glfw.Terminate() // Causing crashes?
-  virtual.arena_destroy(&perm)
+  virtual.arena_destroy(&state.perm)
 }
 
 seconds_since_start :: proc() -> (seconds: f64) {
