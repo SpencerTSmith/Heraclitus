@@ -74,16 +74,16 @@ make_material :: proc {
 }
 
 DIFFUSE_DEFAULT  :: "white.png"
-SPECULAR_DEFAULT :: "black.png"
+SPECULAR_DEFAULT :: "white.png"
 EMISSIVE_DEFAULT :: "black.png"
 NORMAL_DEFAULT   :: "flat_normal.png"
 
 // Can either pass in nothing for a particular texture path, or pass in an empty string to use defaults
-make_material_from_files :: proc(diffuse_path:   string = DIFFUSE_DEFAULT,
-                                 specular_path:  string = SPECULAR_DEFAULT,
-                                 emissive_path:  string = EMISSIVE_DEFAULT,
-                                 normal_path:    string = NORMAL_DEFAULT,
-                                 shininess:      f32    = 32.0,
+make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
+                                 specular_path := SPECULAR_DEFAULT,
+                                 emissive_path := EMISSIVE_DEFAULT,
+                                 normal_path   := NORMAL_DEFAULT,
+                                 shininess: f32 = 32.0,
                                  blend: Material_Blend_Mode = .OPAQUE,
                                  in_texture_dir: bool = false) -> (material: Material, ok: bool) {
   // HACK: Quite ugly but I think this makes it a nicer interface

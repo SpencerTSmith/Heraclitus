@@ -4,9 +4,24 @@ import "core:math/linalg/glsl"
 import "core:log"
 import gl "vendor:OpenGL"
 
+// Hmm might go union route for this?
+// Physics_Hull :: union {
+//   AABB,
+//   Sphere,
+// }
+
 AABB :: struct {
   min: vec3,
   max: vec3,
+}
+
+Sphere :: struct {
+  center: vec3,
+  radius: f32,
+}
+
+sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) {
+
 }
 
 // Factored out into a generic function since we use it elsewhere

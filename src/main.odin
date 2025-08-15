@@ -398,8 +398,8 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  // append(&state.entities, helmet)
+  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  append(&state.entities, helmet)
 
   helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
   append(&state.entities, helmet2)
@@ -431,8 +431,11 @@ main :: proc() {
     }
   }
 
-  lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0 ,0}, scale={0.5, 0.5, 0.5})
+  lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
+
+  chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+  append(&state.entities, chess)
 
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
@@ -517,8 +520,6 @@ main :: proc() {
       state.bloom_on = !state.bloom_on
     }
 
-    update_camera_look(dt_s)
-
     // 'Simulate' (not really doing much right now) if in game mode
     if state.mode == .GAME {
       move_camera_game(&state.camera, dt_s)
@@ -558,7 +559,8 @@ main :: proc() {
           // pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
         }
       }
-    } else {
+    }
+    if state.mode == .EDIT {
       move_camera_edit(&state.camera, dt_s)
     }
 
@@ -650,7 +652,7 @@ main :: proc() {
           }
 
           // We're good we can just draw opqque entities
-          draw_entity(e)
+          draw_entity(e, draw_aabbs=state.draw_debug)
         }
 
         // Skybox here so it is seen behind transparent objects, binds its own shader

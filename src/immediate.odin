@@ -5,7 +5,7 @@ import "core:mem"
 
 import gl "vendor:OpenGL"
 
-MAX_IMMEDIATE_VERTEX_COUNT :: 4096
+MAX_IMMEDIATE_VERTEX_COUNT :: 4096 * 4
 
 Immediate_Vertex :: struct {
   position: vec3,
@@ -118,7 +118,7 @@ immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   assert(gpu_buffer_is_mapped(immediate.vertex_buffer), "Uninitialized Immediate State")
 
   if immediate.vertex_count + 1 >= MAX_IMMEDIATE_VERTEX_COUNT {
-    log.error("Too many (%v) immediate vertices!!!!!!\n", immediate.vertex_count)
+    log.errorf("Too many (%v) immediate vertices!!!!!!\n", immediate.vertex_count)
     return
   }
 
@@ -284,9 +284,14 @@ immediate_flush :: proc() {
       if batch.vertex_count > 0 {
         bind_texture(batch.texture, "tex")
 
+
+        depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
+        defer gl.DepthFunc(u32(depth_func_before))
+
         // TODO: Make sure we set relevant GL State
         switch batch.space {
         case .SCREEN:
+          gl.DepthFunc(gl.ALWAYS)
           set_shader_uniform("transform", get_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far))
         case .WORLD:
           set_shader_uniform("transform", get_camera_perspective(state.camera) * get_camera_view(state.camera))

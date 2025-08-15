@@ -5,7 +5,6 @@ import "core:log"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 
-
 Camera :: struct {
   position:   vec3,
   velocity:   vec3,
@@ -44,6 +43,7 @@ update_camera_look :: proc(dt_s: f64) {
 }
 
 move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
+  update_camera_look(dt_s)
   input_direction: vec3
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
@@ -79,6 +79,7 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
 }
 
 move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
+  update_camera_look(dt_s)
   using linalg
 
   dt_s := f32(dt_s)
@@ -189,6 +190,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     draw_aabb(wish_cam_aabb, CORAL)
   }
 
+  camera.on_ground = false
   for e in state.entities {
     if .HAS_COLLISION not_in e.flags { continue }
     entity_aabb := entity_world_aabb(e)
@@ -211,7 +213,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
       // This has the added side effect of increasing speed by running into a wall purposefully
       // Our wish dir is into the wall, but that velocity gets taken away, therefore we can accelerate
       // very fast because its much easier for wish dir to not match up with the current velocity
-      OVERBOUNCE :: 1.4
+      OVERBOUNCE :: 1.2
       reproject := dot(camera.velocity, normal) * OVERBOUNCE
       camera.velocity -= reproject * normal // Only the velocity thats going into the wall gets subtracted away
     }
@@ -222,9 +224,20 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     camera.velocity = {0, camera.velocity.y, 0}
   }
 
-  if length(camera.velocity) > MAX_SPEED * 1.2 {
-    draw_text("Speed Excellence!", state.default_font, f32(state.window.w) * 0.5, f32(state.window.h) * 0.1, RED, .CENTER)
-  }
+  // Neat message
+  // if length(camera.velocity) > MAX_SPEED * 1.2 {
+    BOX_COLOR :: vec4{0.0, 0.0, 0.0, 0.7}
+    BOX_PAD   :: 10.0
+
+    text := "Speed Excellence!"
+    x := f32(state.window.w) * 0.5
+    y := f32(state.window.w) * 0.05
+
+    box_width, box_height := text_draw_size(text, state.default_font)
+    box_height -= state.default_font.line_height * 0.5
+    immediate_quad({x - BOX_PAD - box_width/2, y - BOX_PAD - box_height/2}, box_width + BOX_PAD * 2, box_height + BOX_PAD, BOX_COLOR)
+    draw_text(text, state.default_font, x, y, RED, .CENTER)
+  // }
 
   // Draw out input and velocity vectors
   if state.draw_debug {

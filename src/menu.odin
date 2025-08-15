@@ -21,9 +21,7 @@ Menu :: struct {
 @(private="file")
 Menu_Item :: enum {
   RESUME,
-  TEMP_0,
-  TEMP_1,
-  TEMP_2,
+  RESET,
   QUIT,
 }
 @(private="file")
@@ -46,9 +44,7 @@ init_menu :: proc () -> (ok: bool) {
 
   menu_items = {
     .RESUME = {"Resume", "", false, {0, 0}, {0, 0}},
-    .TEMP_0 = {"Temp",   "", false, {0, 0}, {0, 0}},
-    .TEMP_1 = {"Temp",   "", false, {0, 0}, {0, 0}},
-    .TEMP_2 = {"Temp",   "", false, {0, 0}, {0, 0}},
+    .RESET  = {"Reset",  "", false, {0, 0}, {0, 0}},
     .QUIT   = {"Quit",   "Confirm Quit?", false, {0, 0}, {0, 0}},
   }
 
@@ -65,7 +61,8 @@ toggle_menu :: proc() {
     glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
     state.mode = .MENU
   case .EDIT:
-    log.error("Shouln't be possible")
+    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
+    state.mode = .MENU
   }
 }
 
@@ -111,6 +108,9 @@ update_menu_input :: proc() {
   if key_pressed(.ENTER) || mouse_pressed(.LEFT) {
     #partial switch current_item {
     case .RESUME:
+      toggle_menu()
+    case .RESET:
+      state.camera.position = {0,0,0}
       toggle_menu()
     case .QUIT:
       if menu_items[.QUIT].ask_to_confirm == true {

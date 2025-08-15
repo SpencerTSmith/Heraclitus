@@ -168,7 +168,7 @@ text_draw_height :: proc(text: string, font: Font) -> f32 {
   return h
 }
 
-draw_text :: proc(text: string, font: Font, x, y: f32, rgba: vec4 = WHITE, align: Text_Alignment = .LEFT) {
+draw_text :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE, align: Text_Alignment = .LEFT) {
   assert(font.atlas.id != 0, "Tried to use uninitialized font")
 
   x_start := align_text_start_x(text, font, x, align)
@@ -192,7 +192,7 @@ draw_text :: proc(text: string, font: Font, x, y: f32, rgba: vec4 = WHITE, align
     char_uv0 := vec2{glyph.x0, glyph.y0}
     char_uv1 := vec2{glyph.x1, glyph.y1}
 
-    immediate_quad(char_xy, char_w, char_h, rgba, char_uv0, char_uv1, font.atlas)
+    immediate_quad(char_xy, char_w, char_h, text_color, char_uv0, char_uv1, font.atlas)
 
     x_cursor += glyph.advance
   }

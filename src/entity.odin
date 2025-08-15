@@ -43,13 +43,17 @@ entity_has_transparency :: proc(e: Entity) -> bool {
   return model_has_transparency(model^)
 }
 
-draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0) {
+draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0, draw_aabbs := false) {
   if .HAS_RENDERABLE not_in e.flags { return }
 
   model := get_model(e.model)
 
-  if state.draw_debug {
+  if draw_aabbs {
     draw_aabb(entity_world_aabb(e))
+
+    for mesh in model.meshes {
+      draw_aabb(transform_aabb(mesh.aabb, e.position, e.rotation, e.scale), BLUE)
+    }
   }
 
   set_shader_uniform("model", entity_model_mat4(e))
@@ -57,7 +61,6 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0) {
 }
 
 // Could think about caching these and only recomputing if we've moved
-// NOTE: This does not ROTATE the aabb!
 entity_world_aabb :: proc(e: Entity) -> AABB {
   model      := get_model(e.model)
   world_aabb := transform_aabb_fast(model.aabb, e.position, e.rotation, e.scale)

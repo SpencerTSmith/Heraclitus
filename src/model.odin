@@ -32,6 +32,8 @@ Mesh :: struct {
   index_offset:   i32,
   index_count:    i32,
   material_index: i32,
+
+  aabb: AABB // For each mesh
 }
 
 // A model is composed of ONE vertex buffer containing both vertices and indices, vertices first, then indices
@@ -281,7 +283,15 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
         // Need to offset indices since we store all in the same vertex buffer!
         primitive_per_index_offset := len(model_verts)
 
+        // We will also construct an AABB for each primitive
+        mesh_aabb: AABB = {
+          min = {max(f32), max(f32), max(f32)},
+          max = {min(f32), min(f32), min(f32)},
+        }
+
+        //
         // Now actually make the new vertices
+        //
         if position_access != nil &&
            normal_access   != nil &&
            uv_access       != nil {
@@ -317,6 +327,10 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
             if tangent_access != nil {
               new_vertex.tangent.xyz = glsl.normalize(node_world_normal_transform * new_vertex.tangent.xyz)
             }
+
+            // Collect AABB vertices
+            mesh_aabb.min = glsl.min(mesh_aabb.min, new_vertex.position)
+            mesh_aabb.max = glsl.max(mesh_aabb.max, new_vertex.position)
 
             append(&model_verts, new_vertex)
           }
@@ -399,6 +413,8 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
           index_count    = cast(i32)primitive_index_count,
           index_offset   = cast(i32)primitive_index_offset,
           material_index = cast(i32)primitive_material_index,
+
+          aabb = mesh_aabb,
         }
 
         append(&model_meshes, new_mesh)
