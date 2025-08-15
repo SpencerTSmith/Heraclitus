@@ -185,6 +185,16 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   wish_cam_aabb.min += (wish_pos - camera.position)
   wish_cam_aabb.max += (wish_pos - camera.position)
 
+  sphere: Sphere = {
+    center = {0, 0, 20},
+    radius = 5,
+  }
+  if sphere_intersects_aabb(sphere, cam_aabb) {
+    immediate_sphere(sphere.center, sphere.radius, RED)
+  } else {
+    immediate_sphere(sphere.center, sphere.radius)
+  }
+
   if state.draw_debug {
     draw_aabb(cam_aabb)
     draw_aabb(wish_cam_aabb, CORAL)

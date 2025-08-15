@@ -2,6 +2,7 @@ package main
 
 import "core:log"
 import "core:mem"
+import "core:math"
 
 import gl "vendor:OpenGL"
 
@@ -19,6 +20,7 @@ Immediate_Vertex :: struct {
 Immediate_Mode :: enum {
   TRIANGLES,
   LINES,
+  LINE_STRIPS,
 }
 
 Immediate_Space :: enum {
@@ -271,6 +273,51 @@ immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, rgba: vec4 = WH
   immediate_vertex(base3, rgba)
 }
 
+// Only wire frame for now
+// TODO: Filled in option too
+immediate_sphere :: proc(center: vec3, radius: f32, rgba: vec4 = WHITE) {
+  wish_mode    := Immediate_Mode.LINE_STRIPS
+  wish_space   := Immediate_Space.WORLD
+  wish_texture := immediate.white_texture
+  immediate_begin(wish_mode, wish_texture, wish_space)
+
+  using math
+
+  // Draw the horizontal rings
+  LAT_RINGS  :: 8 * 2
+  LONG_RINGS :: 8 * 2
+  for r in 1..<LAT_RINGS {
+    // Which ring are we on, as an angle
+    theta := f32(r) / LAT_RINGS * PI
+
+    // The individual line segemnts that make up the ring
+    for s in 0..=LONG_RINGS {
+      phi := f32(s) / LONG_RINGS * PI * 2.0
+
+      // Just a rotation matrix basically based on theta and phi, then translating by the center
+      immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
+                        (cos(theta) * radius) + center.y,
+                        (sin(phi) * sin(theta) * radius) + center.z}, rgba)
+    }
+  }
+
+  // Same for the vertical rings
+  for s in 0..<LONG_RINGS {
+    // Which ring are we on, as an angle
+    phi := f32(s) / LONG_RINGS * PI * 2.0
+
+    // The individual line segemnts that make up the ring
+    for r in 0..=LAT_RINGS {
+      theta := f32(r) / LAT_RINGS * PI
+
+      // Just a rotation matrix basically based on theta and phi, then translating by the center
+      immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
+                        (cos(theta) * radius) + center.y,
+                        (sin(phi) * sin(theta) * radius) + center.z}, rgba)
+    }
+  }
+}
+
 immediate_flush :: proc() {
   assert(state.began_drawing, "Tried to flush immediate vertex info before we have begun drawing this frame.")
 
@@ -305,6 +352,8 @@ immediate_flush :: proc() {
           gl.DrawArrays(gl.TRIANGLES, first_vertex, vertex_count)
         case .LINES:
           gl.DrawArrays(gl.LINES, first_vertex, vertex_count)
+        case .LINE_STRIPS:
+          gl.DrawArrays(gl.LINE_STRIP, first_vertex, vertex_count)
         }
       }
     }

@@ -398,8 +398,8 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  append(&state.entities, helmet)
+  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  // append(&state.entities, helmet)
 
   helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
   append(&state.entities, helmet2)
@@ -434,8 +434,8 @@ main :: proc() {
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
-  chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-  append(&state.entities, chess)
+  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+  // append(&state.entities, chess)
 
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
@@ -688,6 +688,10 @@ main :: proc() {
 
             set_shader_uniform("model", entity_model_mat4(temp))
             draw_model(light_model, l.color)
+
+            if state.draw_debug {
+              immediate_sphere(l.position, l.radius, l.color)
+            }
           }
         }
 

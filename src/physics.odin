@@ -20,8 +20,28 @@ Sphere :: struct {
   radius: f32,
 }
 
-sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) {
+// From real-time collision detection
+closest_point_on_aabb :: proc(point: vec3, aabb: AABB) -> vec3 {
+  // Clamp the closest point either to the given point (if its inside the box)
+  // Or to a point on the edge/surface/vertex of the bounding box in each axis
+  closest: vec3
+  for p, idx in point {
+    closest[idx] = clamp(p, aabb.min[idx], aabb.max[idx])
+  }
 
+  return closest
+}
+
+// From real-time-collision detection
+sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) -> bool {
+  // Find the closest point on the aabb to sphere, then if the squared distance of that to the sphere's center is
+  // less than the squared sphere's radius we know we are intersecting!
+
+  closest_point := closest_point_on_aabb(sphere.center, aabb)
+
+  dist := closest_point - sphere.center
+
+  return glsl.dot(dist, dist) <= sphere.radius * sphere.radius
 }
 
 // Factored out into a generic function since we use it elsewhere
