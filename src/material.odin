@@ -155,10 +155,10 @@ bind_material :: proc(material: Material) {
     emissive := get_texture(material.emissive)
     normal   := get_texture(material.normal)
 
-    bind_texture(diffuse^,  "mat_diffuse");
-    bind_texture(specular^, "mat_specular");
-    bind_texture(emissive^, "mat_emissive");
-    bind_texture(normal^,   "mat_normal");
+    bind_texture(diffuse^,  "mat_diffuse")
+    bind_texture(specular^, "mat_specular")
+    bind_texture(emissive^, "mat_emissive")
+    bind_texture(normal^,   "mat_normal")
 
     set_shader_uniform("mat_shininess", material.shininess)
 
@@ -256,7 +256,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
   switch type {
   case .NONE:
     log.error("Texture type cannont be none")
-  case ._2D: fallthrough;
+  case ._2D: fallthrough
   case .CUBE:
     if samples > 0 {
       assert(type == ._2D)
@@ -320,11 +320,11 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
       log.error("Texture type cannot be none\n")
     case ._2D:
       assert(len(datas) == 1)
-      gl.TextureSubImage2D(texture.id, 0, 0, 0, i32(width), i32(height), gl_format, gl.UNSIGNED_BYTE, datas[0]);
+      gl.TextureSubImage2D(texture.id, 0, 0, 0, i32(width), i32(height), gl_format, gl.UNSIGNED_BYTE, datas[0])
     case .CUBE:
       if type == .CUBE {
         for data, face in datas {
-          gl.TextureSubImage3D(texture.id, 0, 0, 0, i32(face), i32(width), i32(height), 1, gl_format, gl.UNSIGNED_BYTE, data);
+          gl.TextureSubImage3D(texture.id, 0, 0, 0, i32(face), i32(width), i32(height), 1, gl_format, gl.UNSIGNED_BYTE, data)
         }
       }
     case .CUBE_ARRAY:

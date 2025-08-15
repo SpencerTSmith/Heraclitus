@@ -71,7 +71,7 @@ make_font :: proc(file_name: string, pixel_height: f32, allocator := context.all
   }
 
   stbtt.GetFontVMetrics(&font_info, &font.ascent, &font.descent, &font.line_gap)
-  font.scale = stbtt.ScaleForPixelHeight(&font_info, pixel_height);
+  font.scale = stbtt.ScaleForPixelHeight(&font_info, pixel_height)
 
   font.line_height = font.scale * f32(font.ascent - font.descent + font.line_gap)
 
@@ -80,7 +80,7 @@ make_font :: proc(file_name: string, pixel_height: f32, allocator := context.all
 
   packed_chars: [FONT_CHAR_COUNT]stbtt.packedchar
   pack_context: stbtt.pack_context
-  stbtt.PackBegin(&pack_context, raw_data(bitmap), FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT, 0, 1, nil);
+  stbtt.PackBegin(&pack_context, raw_data(bitmap), FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT, 0, 1, nil)
   stbtt.PackFontRange(&pack_context, raw_data(font_data), 0, pixel_height, FONT_FIRST_CHAR, FONT_CHAR_COUNT, &packed_chars[0])
   stbtt.PackEnd(&pack_context)
 
@@ -100,7 +100,7 @@ make_font :: proc(file_name: string, pixel_height: f32, allocator := context.all
   font.atlas = make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
 
   // Make R show up as alpha
-  swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED};
+  swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED}
   gl.TextureParameteriv(font.atlas.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
 
   return font, ok

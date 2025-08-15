@@ -203,13 +203,13 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
 
       // Check the initial binding point
       // NOTE: will be junk if not actually set in shader
-      // TODO: should proably be more thorough in checking types that might have
+      // FIXME: should proably be more thorough in checking types that might have
       // binding
       if uniform.type == .SAMPLER_2D   ||
          uniform.type == .SAMPLER_CUBE ||
          uniform.type == .SAMPLER_2D_MS ||
          uniform.type == .SAMPLER_CUBE_ARRAY {
-           gl.GetUniformiv(program.id, uniform.location, &uniform.binding);
+           gl.GetUniformiv(program.id, uniform.location, &uniform.binding)
       }
 
       uniforms[uniform.name] = uniform

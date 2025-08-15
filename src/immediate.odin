@@ -66,9 +66,8 @@ init_immediate_renderer :: proc() -> (ok: bool) {
   immediate = {
     vertex_buffer = vertex_buffer,
     vertex_count  = 0,
-    shader        = shader,
-
-    batches = make([dynamic]Immediate_Batch, state.perm_alloc)
+    shader  = shader,
+    batches = make([dynamic]Immediate_Batch, state.perm_alloc),
   }
 
   // FIXME: AHHHHHHHHH
@@ -107,6 +106,11 @@ immediate_begin :: proc(wish_mode: Immediate_Mode, wish_texture: Texture, wish_s
      immediate.curr_batch.texture != wish_texture {
     immediate.curr_batch = start_new_batch(wish_mode, wish_texture, wish_space)
   }
+}
+
+// Forces the creation of a new batch
+immediate_begin_force :: proc() {
+  immediate.curr_batch = start_new_batch(immediate.curr_batch.mode, immediate.curr_batch.texture, immediate.curr_batch.space)
 }
 
 free_immediate_renderer :: proc() {

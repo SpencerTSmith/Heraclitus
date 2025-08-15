@@ -39,6 +39,10 @@ sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) -> bool {
 
   closest_point := closest_point_on_aabb(sphere.center, aabb)
 
+  immediate_line(sphere.center, closest_point, RED)
+  immediate_sphere(closest_point, 0.01, RED)
+  immediate_begin_force()
+
   dist := closest_point - sphere.center
 
   return glsl.dot(dist, dist) <= sphere.radius * sphere.radius

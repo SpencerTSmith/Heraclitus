@@ -1,7 +1,7 @@
 package main
 
 import "core:math/linalg/glsl"
-
+import "core:log"
 
 Entity_Flags :: enum {
   HAS_COLLISION,
@@ -26,6 +26,11 @@ make_entity :: proc(model:    string,
                     rotation: vec3   = {0, 0, 0},
                     scale:    vec3   = {1, 1, 1}) -> Entity {
   model, ok := load_model(model)
+  if !ok {
+    // TODO: Unique handles for each entity would make debugging simpler
+    log.warnf("Entity failed to load model: %v", model)
+  }
+
   entity := Entity {
     flags    = flags,
     position = position,
@@ -60,7 +65,7 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0, draw_aab
   draw_model(model^, mul_color=color, instances=instances)
 }
 
-// Could think about caching these and only recomputing if we've moved
+// TODO: Cache these and only recomputing if we've moved
 entity_world_aabb :: proc(e: Entity) -> AABB {
   model      := get_model(e.model)
   world_aabb := transform_aabb_fast(model.aabb, e.position, e.rotation, e.scale)

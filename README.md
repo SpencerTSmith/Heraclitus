@@ -5,12 +5,16 @@
 - Improve immediate rendering batching
     - Look for already started batches that match state and append... or...
     - Sort batches by state change when flushing
+    - Maybe not... this might be the job of higher level layers
+        - The UI will want its draw commands submitted in a particular order...
+        - So far don't think it matters for 3d debug visuals
 - Sort of just normalizing vectors everywhere, probably redundantly... profile and find out if this is significant enough to fix
 - More AZDO:
     - Texture handles
     - Multi-draw indirect
-        - Try with just doing so for models with multiple mesh primitives... looks simple before doing next step
+        - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
     - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for multi-draw-indirect
+- Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalc
 
 # Complete:
 - AABB basic collision detection and response
@@ -18,9 +22,11 @@
 - AZDO OpenGL techniques:
     - Frames in flight sync, triple-up persistently mapped buffers
 - Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
-    - AABB and vector debug visuals
+    - AABB, sphere, and vector debug visuals
     - Text rendering
 - Point light shadow mapping
+    - Cube map array render target... pretty efficient storage, and can minimize draw calls with instanced rendering (6 instances for each map side)
+    - Culls entities if not intersecting light radius sphere
 - Sun shadow mapping
 - Full blinn-phong shading model
 - Menu (press ESC)

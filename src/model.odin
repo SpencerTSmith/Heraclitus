@@ -33,7 +33,7 @@ Mesh :: struct {
   index_count:    i32,
   material_index: i32,
 
-  aabb: AABB // For each mesh
+  aabb: AABB, // For each mesh... might do something diff... we will seeeeeee
 }
 
 // A model is composed of ONE vertex buffer containing both vertices and indices, vertices first, then indices
@@ -47,7 +47,7 @@ Model :: struct {
   meshes:    []Mesh,
   materials: []Material,
 
-  aabb: AABB // For the model
+  aabb: AABB, // For the model
 }
 
 make_model :: proc{
@@ -583,14 +583,14 @@ SKYBOX_VERTICES :: []vec3{
   { 1.0, -1.0, -1.0},
   { 1.0, -1.0, -1.0},
   {-1.0, -1.0,  1.0},
-  { 1.0, -1.0,  1.0}
+  { 1.0, -1.0,  1.0},
 }
 
 DEFAULT_TRIANGLE_VERT :: []Mesh_Vertex {
   { position = {-0.5, -0.5, 0.0}}, // bottom right
   { position = { 0.5, -0.5, 0.0}}, // bottom left
   { position = { 0.0,  0.5, 0.0}}, // top
-};
+}
 
 DEFAULT_SQUARE_VERT :: []Mesh_Vertex {
   { position = { 0.5,  0.5, 0.0}, uv = {1.0, 0.0}, normal = {0.0,  0.0, 1.0} }, // top right
@@ -650,7 +650,7 @@ DEFAULT_CUBE_VERT :: []Mesh_Vertex {
 
 DEFAULT_CUBE_INDX :: []Mesh_Index {
    0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17,
-  18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
+  18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
 }
 
 DEFAULT_MODEL_POSITIONS :: []vec3 {

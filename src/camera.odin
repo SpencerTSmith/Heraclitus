@@ -186,7 +186,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   wish_cam_aabb.max += (wish_pos - camera.position)
 
   sphere: Sphere = {
-    center = {0, 0, 20},
+    center = {0, -2.0, 20},
     radius = 5,
   }
   if sphere_intersects_aabb(sphere, cam_aabb) {
@@ -235,7 +235,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   // Neat message
-  // if length(camera.velocity) > MAX_SPEED * 1.2 {
+  if length(camera.velocity) > MAX_SPEED * 1.2 {
     BOX_COLOR :: vec4{0.0, 0.0, 0.0, 0.7}
     BOX_PAD   :: 10.0
 
@@ -247,7 +247,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     box_height -= state.default_font.line_height * 0.5
     immediate_quad({x - BOX_PAD - box_width/2, y - BOX_PAD - box_height/2}, box_width + BOX_PAD * 2, box_height + BOX_PAD, BOX_COLOR)
     draw_text(text, state.default_font, x, y, RED, .CENTER)
-  // }
+  }
 
   // Draw out input and velocity vectors
   if state.draw_debug {
@@ -308,7 +308,7 @@ get_perspective :: proc(fov_y, aspect_ratio, z_near, z_far: f32) -> (perspective
 
 // Ehh this can go here
 get_orthographic :: proc(left, right, bottom, top, z_near, z_far: f32) -> (orthographic: mat4) {
- return glsl.mat4Ortho3d(left, right, bottom, top, z_near, z_far);
+ return glsl.mat4Ortho3d(left, right, bottom, top, z_near, z_far)
 }
 
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3) {

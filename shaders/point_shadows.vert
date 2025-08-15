@@ -17,6 +17,7 @@ out VS_OUT {
 uniform int light_index;
 uniform mat4 model;
 
+// NOTE: This only works with a cubemap array target!
 void main() {
   int face_index = gl_InstanceID;
 
@@ -28,7 +29,8 @@ void main() {
 
   gl_Position = proj_view * world_pos;
 
-  // We can use instanced rendering to do just one draw call for the entire cubemap, in the array
+  // We can use instanced rendering to do just one draw call for the entire cubemap, in the array,
+  // as well as bypassing trying to do the same in the geometry shader
   gl_Layer = light_index * 6 + face_index;
 
   vs_out.world_position = world_pos;

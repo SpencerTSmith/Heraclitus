@@ -34,7 +34,7 @@ Program_Mode :: enum {
 }
 
 Frame_Info :: struct {
-  fence: gl.sync_t
+  fence: gl.sync_t,
 }
 
 State :: struct {
@@ -183,7 +183,7 @@ init_state :: proc() -> (ok: bool) {
     position     = {0.0, 0.0, 5.0},
     curr_fov_y   = 90.0,
     target_fov_y = 90.0,
-    aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0}}
+    aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},},
   }
 
   entities     = make([dynamic]Entity, perm_alloc)
@@ -587,7 +587,7 @@ main :: proc() {
       lights = {
         direction = direction_light_uniform(state.sun) if state.sun_on else {},
         spot      = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
-      }
+      },
     }
 
     if state.point_lights_on {
@@ -631,7 +631,6 @@ main :: proc() {
               center = l.position,
               radius = l.radius,
             }
-
             for e in state.entities {
               if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
                 draw_entity(e, instances=6)

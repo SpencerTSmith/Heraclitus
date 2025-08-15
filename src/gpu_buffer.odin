@@ -132,7 +132,7 @@ bind_vertex_buffer :: proc(buffer: GPU_Buffer) {
 }
 
 unbind_vertex_buffer :: proc() {
-  gl.BindVertexArray(0);
+  gl.BindVertexArray(0)
 }
 
 // NOTE: right now not possible to get a buffer you can read from with this interface
