@@ -392,8 +392,8 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  // append(&state.entities, helmet)
+  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  append(&state.entities, helmet)
 
   helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
   append(&state.entities, helmet2)
@@ -425,17 +425,17 @@ main :: proc() {
     }
   }
 
-  floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
+  floor := make_entity("cube/BoxTextured.gltf", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
 
-  block := make_entity("", position={0, -2, -20}, scale={100.0, 10.0, 10.0})
+  block := make_entity("cube/BoxTextured.gltf", position={0, -2, -20}, scale={10.0, 10.0, 10.0})
   append(&state.entities, block)
 
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
-  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-  // append(&state.entities, chess)
+  chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+  append(&state.entities, chess)
 
   light_material,_ := make_material("point_light.png", blend=.BLEND, in_texture_dir=true)
   light_model,_ := make_model(DEFAULT_SQUARE_VERT, DEFAULT_SQUARE_INDX, light_material)

@@ -202,16 +202,6 @@ float sun_shadow(sampler2D shadow_map, vec4 light_space_position, vec3 to_light_
 
   shadow /= float(sample_count);
 
-  // float shadow = 0.0;
-  // vec2 texel_size = 1.0 / textureSize(shadow_map, 0);
-  // for (int x = -3; x <= 3; ++x) {
-  //   for (int y = -3; y <= 3; ++y) {
-  //     float pcf_depth = texture(shadow_map, projected.xy + vec2(x, y) * texel_size).r;
-  //     shadow += actual_depth - bias > pcf_depth ? 1.0 : 0.0;
-  //   }
-  // }
-  // shadow /= 49.0;
-  //
   return shadow;
 }
 
@@ -263,7 +253,7 @@ void main() {
 
   vec3 diffuse_sample  = vec3(texture(mat_diffuse, fs_in.uv));
   vec3 specular_sample = vec3(texture(mat_specular, fs_in.uv));
-  vec3 emissive        = vec3(texture(mat_emissive, fs_in.uv));
+  vec3 emissive_sample = vec3(texture(mat_emissive, fs_in.uv));
 
   // Textures are in range 0 -> 1
   vec3 normal_map = texture(mat_normal, fs_in.uv).rgb;
@@ -314,7 +304,7 @@ void main() {
 
   ambient *= diffuse_sample;
 
-  result = all_point_phong + direction_phong + spot_phong + emissive + ambient;
+  result = all_point_phong + direction_phong + spot_phong + emissive_sample + ambient;
 
   frag_color = vec4(result, alpha) * mul_color;
 }
