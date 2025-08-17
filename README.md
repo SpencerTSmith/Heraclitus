@@ -1,12 +1,11 @@
-# TODO:
+# Fix Soon:
 - Better render pass state tracking... maybe push and pop GL state procs? Since we are caching them we'll be able to check those calls and not do em if not necessary
 - Split shadow-casting point lights and non-shadow-casting lights... this can just be a bool... but should be separate arrays in the global frame uniform
-- AABB collision response
 - Improve immediate rendering batching
     - Look for already started batches that match state and append... or...
     - Sort batches by state change when flushing
     - Maybe not... this might be the job of higher level layers
-        - The UI will want its draw commands submitted in a particular order...
+        - The UI will want its draw commands submitted in a particular order... any batch sorting may override that
         - So far don't think it matters for 3d debug visuals
 - Sort of just normalizing vectors everywhere, probably redundantly... profile and find out if this is significant enough to fix
 - More AZDO:

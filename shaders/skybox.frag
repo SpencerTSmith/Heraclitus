@@ -28,17 +28,7 @@ vec3 depth_to_color(float linear_depth, float far) {
 
 void main() {
   vec4 result = vec4(0.0);
-  switch (frame.debug_mode) {
-  case DEBUG_MODE_NONE:
-    result = texture(skybox, fs_in.uvw);
-    break;
-
-  case DEBUG_MODE_DEPTH:
-    float depth = gl_FragCoord.z;
-    float linear_depth = linearize_depth(depth, frame.z_near, frame.z_far);
-    result = vec4(depth_to_color(linear_depth, frame.z_far), 1.0);
-    break;
-  }
+  result = texture(skybox, fs_in.uvw);
 
   frag_color = result;
 }

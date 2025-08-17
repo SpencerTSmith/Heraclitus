@@ -13,8 +13,8 @@ import gl "vendor:OpenGL"
 import "vendor:glfw"
 
 WINDOW_DEFAULT_TITLE :: "Heraclitus"
-WINDOW_DEFAULT_W :: 1280 * 1.75
-WINDOW_DEFAULT_H :: 720  * 1.75
+WINDOW_DEFAULT_W :: 1280 * 2
+WINDOW_DEFAULT_H :: 720  * 2
 
 FRAMES_IN_FLIGHT :: 3
 TARGET_FPS :: 240
@@ -64,20 +64,21 @@ State :: struct {
   frame_count:        uint,
   frames:             [FRAMES_IN_FLIGHT]Frame_Info,
   curr_frame_index:   int,
+
   began_drawing:      bool,
 
-  clear_color:        vec3,
+  draw_calls:         int,
 
   z_near:             f32,
   z_far:              f32,
 
   sun:                Direction_Light,
-  sun_on:             bool,
   sun_depth_buffer:   Framebuffer,
 
   flashlight:         Spot_Light,
-  flashlight_on:      bool,
 
+  sun_on:             bool,
+  flashlight_on:      bool,
   point_lights_on:    bool,
 
   // Could maybe replace this but this makes it easier to add them
@@ -272,7 +273,7 @@ begin_drawing :: proc() {
     frame.fence = nil
   }
 
-  clear := WHITE * 0.2
+  clear := WHITE
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
@@ -281,7 +282,7 @@ begin_drawing :: proc() {
 }
 
 begin_main_pass :: proc() {
-  gl.BindFramebuffer(gl.FRAMEBUFFER, state.hdr_ms_buffer.id)
+  bind_framebuffer(state.hdr_ms_buffer)
 
   gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
   gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
@@ -321,12 +322,11 @@ begin_ui_pass :: proc() {
 
 // For now excludes transparent objects and the skybox
 begin_shadow_pass :: proc(framebuffer: Framebuffer) {
-  assert(framebuffer.depth_target.id > 0)
+  assert(framebuffer.depth_target.id > 0, "Framebuffer must have depth target for shadow mapping")
   gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer.id)
 
   x := 0
   y := 0
-
   width  := framebuffer.depth_target.width
   height := framebuffer.depth_target.height
 
@@ -348,6 +348,7 @@ flush_drawing :: proc() {
   state.curr_frame_index = (state.curr_frame_index + 1) % FRAMES_IN_FLIGHT
 
   state.began_drawing = false
+  state.draw_calls = 0
 
   glfw.SwapBuffers(state.window.handle)
 }
@@ -391,8 +392,8 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  append(&state.entities, helmet)
+  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  // append(&state.entities, helmet)
 
   helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
   append(&state.entities, helmet2)
@@ -424,17 +425,17 @@ main :: proc() {
     }
   }
 
-  lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
-  append(&state.entities, lantern)
-
-  chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-  append(&state.entities, chess)
-
   floor := make_entity("", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
 
   block := make_entity("", position={0, -2, -20}, scale={100.0, 10.0, 10.0})
   append(&state.entities, block)
+
+  lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
+  append(&state.entities, lantern)
+
+  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+  // append(&state.entities, chess)
 
   light_material,_ := make_material("point_light.png", blend=.BLEND, in_texture_dir=true)
   light_model,_ := make_model(DEFAULT_SQUARE_VERT, DEFAULT_SQUARE_INDX, light_material)
@@ -554,7 +555,6 @@ main :: proc() {
       camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
       z_near          = state.z_near,
       z_far           = state.z_far,
-      debug_mode      = .NONE,
 
       // And the lights
       lights = {
@@ -738,9 +738,6 @@ main :: proc() {
         gl.BindVertexArray(state.empty_vao)
         gl.DrawArrays(gl.TRIANGLES, 0, 6)
       }
-
-      // immediate_quad({1800, 100}, 300, 300, uv0 = {1.0, 1.0}, uv1={0.0, 0.0}, texture=state.post_buffer.color_targets[1])
-      // immediate_quad({1800, 100}, 800, 800, uv0 = {0.0, 1.0}, uv1={1.0, 0.0}, texture=state.ping_pong_buffers[0].color_targets[0])
 
       if state.draw_debug {
         begin_ui_pass()

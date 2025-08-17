@@ -26,11 +26,11 @@ GPU_Buffer :: struct {
   mapped:     rawptr,
   total_size: int,
 
-  range_size: int, // Frame range, aligned for you
+  // Frame range, aligned for you, just for mapped buffers
+  range_size: int,
 
   // Vertex specific stuff
   vao:          u32,
-  item_size:    int,
   index_offset: int,
 }
 
@@ -108,12 +108,12 @@ make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count:
   total_size := vertex_length_align + index_length_align
 
   buffer = make_gpu_buffer(.VERTEX, total_size, vertex_data, persistent)
-  buffer.item_size = size_of(vertex_type)
+
   buffer.vao = u32(vao)
 
   buffer.index_offset = vertex_length_align
 
-  gl.VertexArrayVertexBuffer(u32(vao), 0, buffer.id, 0, i32(buffer.item_size))
+  gl.VertexArrayVertexBuffer(u32(vao), 0, buffer.id, 0, i32(size_of(vertex_type)))
   if index_count > 0 {
     gl.VertexArrayElementBuffer(u32(vao), buffer.id)
   }

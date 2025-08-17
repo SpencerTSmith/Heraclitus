@@ -8,6 +8,8 @@ Point_Light :: struct {
   radius:      f32,
   intensity:   f32,
   ambient:     f32,
+
+  // shadows: bool,
 }
 
 Point_Light_Uniform :: struct #align(16) {
@@ -103,6 +105,7 @@ point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform
   return uniform
 }
 
+// FIXME: AHHHHHHH... just learn how to do cascaded shadow maps
 @(private)
 prev_center: vec3
 

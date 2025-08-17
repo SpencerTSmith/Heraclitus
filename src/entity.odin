@@ -47,7 +47,7 @@ entity_has_transparency :: proc(e: Entity) -> bool {
   return model_has_transparency(model^)
 }
 
-draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0, draw_aabbs := false) {
+draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false) {
   if draw_aabbs {
     draw_aabb(entity_world_aabb(e))
 
@@ -67,8 +67,7 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 0, draw_aab
 // TODO: Cache these and only recomputing if we've moved
 entity_world_aabb :: proc(e: Entity) -> AABB {
   model      := get_model(e.model)
-  world_aabb := transform_aabb_fast(model.aabb, e.position, e.rotation, e.scale)
-  // world_aabb := transform_aabb(model.aabb, entity_model_mat4(e))
+  world_aabb := transform_aabb(model.aabb, e.position, e.rotation, e.scale)
 
   return world_aabb
 }

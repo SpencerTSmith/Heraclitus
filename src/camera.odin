@@ -12,33 +12,33 @@ Camera :: struct {
 
   on_ground: bool,
 
+  crouched: bool,
+
   aabb: AABB,
 }
 
-update_camera_look :: proc(dt_s: f64) {
-
-  // Don't really need the precision?
+update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
   x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
   y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
 
-  state.camera.yaw   -= state.camera.sensitivity * x_delta
-  state.camera.pitch -= state.camera.sensitivity * y_delta
-  state.camera.pitch = clamp(state.camera.pitch, -89.0, 89.0)
+  camera.yaw   -= camera.sensitivity * x_delta
+  camera.pitch -= camera.sensitivity * y_delta
+  camera.pitch = clamp(camera.pitch, -89.0, 89.0)
 
   if mouse_scrolled_up() {
-    state.camera.target_fov_y -= 5.0
+    camera.target_fov_y -= 5.0
   }
   if mouse_scrolled_down() {
-    state.camera.target_fov_y += 5.0
+    camera.target_fov_y += 5.0
   }
-  state.camera.target_fov_y = clamp(state.camera.target_fov_y, 10.0, 120)
+  camera.target_fov_y = clamp(state.camera.target_fov_y, 10.0, 120)
 
   CAMERA_ZOOM_SPEED :: 10.0
-  state.camera.curr_fov_y = lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
+  camera.curr_fov_y = lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
 }
 
 move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
-  update_camera_look(dt_s)
+  update_camera_look(camera, dt_s)
   input_direction: vec3
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
@@ -74,7 +74,7 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
 }
 
 move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
-  update_camera_look(dt_s)
+  update_camera_look(camera, dt_s)
 
   dt_s := f32(dt_s)
 
@@ -97,6 +97,16 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
   if key_down(.A) {
     wish_dir -= camera_right
+  }
+
+  if key_pressed(.LEFT_CONTROL) {
+    camera.crouched = !camera.crouched
+    if camera.crouched {
+      camera.position.y -= 2 // Hmmm, is this ok?
+      camera.aabb = {{-1.0, -2.0, -1.0}, {1.0, 1.0, 1.0},}
+    } else {
+      camera.aabb = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},}
+    }
   }
 
   wish_dir.y = 0
@@ -168,6 +178,9 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     camera.velocity.y = 15.0
     camera.on_ground  = false
   }
+
+  // NOTE: I believe this would be classified as semi-implicit euler simulation
+  // as we integrate velocity before position
 
   //
   // Shitty Collision!

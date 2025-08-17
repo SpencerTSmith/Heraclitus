@@ -39,6 +39,9 @@ F32_MIN :: min(f32)
 F32_MAX :: max(f32)
 U64_MAX :: max(u64)
 
+// Purely for convenience because I am lazy and don't want to go to top of file to import a module to do a little print debugging
+print :: fmt.printf
+
 vec2 :: glsl.vec2
 vec3 :: glsl.vec3
 vec4 :: glsl.vec4
@@ -258,9 +261,11 @@ close_program :: proc() {
 }
 
 draw_debug_stats :: proc() {
-  template :=
+  text := fmt.aprintf(
 `
 FPS: %0.4v
+Model Draw Calls: %v
+Entities: %v
 Mode: %v
 Velocity: %0.4v
 Speed: %0.4v
@@ -270,19 +275,20 @@ Yaw: %0.4v
 Pitch: %0.4v
 Fov: %0.4v
 Point Lights: %v
-`
-  text := fmt.aprintf(template,
-                      state.fps,
-                      state.mode,
-                      state.camera.velocity,
-                      length(state.camera.velocity),
-                      state.camera.position,
-                      state.camera.on_ground,
-                      state.camera.yaw,
-                      state.camera.pitch,
-                      state.camera.curr_fov_y,
-                      len(state.point_lights) if state.point_lights_on else 0,
-                      allocator = context.temp_allocator)
+`,
+  state.fps,
+  state.draw_calls,
+  len(state.entities),
+  state.mode,
+  state.camera.velocity,
+  length(state.camera.velocity),
+  state.camera.position,
+  state.camera.on_ground,
+  state.camera.yaw,
+  state.camera.pitch,
+  state.camera.curr_fov_y,
+  len(state.point_lights) if state.point_lights_on else 0,
+  allocator = context.temp_allocator)
 
   x := f32(state.window.w) * 0.0125
   y := f32(state.window.h) * 0.0125

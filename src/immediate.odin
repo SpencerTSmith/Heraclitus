@@ -214,6 +214,64 @@ immediate_line_3D :: proc(xyz0, xyz1: vec3, rgba: vec4 = WHITE) {
   immediate_vertex(xyz1, rgba = rgba)
 }
 
+immediate_fill_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
+  corners := box_corners(xyz_min, xyz_max)
+
+  wish_mode    := Immediate_Mode.TRIANGLES
+  wish_space   := Immediate_Space.WORLD
+  wish_texture := immediate.white_texture
+
+  immediate_begin(wish_mode, wish_texture, wish_space)
+
+  immediate_vertex(corners[0], rgba)
+  immediate_vertex(corners[1], rgba)
+  immediate_vertex(corners[2], rgba)
+
+  immediate_vertex(corners[3], rgba)
+  immediate_vertex(corners[2], rgba)
+  immediate_vertex(corners[0], rgba)
+
+  immediate_vertex(corners[0], rgba)
+  immediate_vertex(corners[3], rgba)
+  immediate_vertex(corners[4], rgba)
+
+  immediate_vertex(corners[5], rgba)
+  immediate_vertex(corners[0], rgba)
+  immediate_vertex(corners[4], rgba)
+
+  immediate_vertex(corners[3], rgba)
+  immediate_vertex(corners[2], rgba)
+  immediate_vertex(corners[7], rgba)
+
+  immediate_vertex(corners[4], rgba)
+  immediate_vertex(corners[3], rgba)
+  immediate_vertex(corners[7], rgba)
+
+  immediate_vertex(corners[0], rgba)
+  immediate_vertex(corners[5], rgba)
+  immediate_vertex(corners[6], rgba)
+
+  immediate_vertex(corners[1], rgba)
+  immediate_vertex(corners[0], rgba)
+  immediate_vertex(corners[6], rgba)
+
+  immediate_vertex(corners[1], rgba)
+  immediate_vertex(corners[6], rgba)
+  immediate_vertex(corners[7], rgba)
+
+  immediate_vertex(corners[2], rgba)
+  immediate_vertex(corners[1], rgba)
+  immediate_vertex(corners[7], rgba)
+
+  immediate_vertex(corners[5], rgba)
+  immediate_vertex(corners[4], rgba)
+  immediate_vertex(corners[7], rgba)
+
+  immediate_vertex(corners[6], rgba)
+  immediate_vertex(corners[5], rgba)
+  immediate_vertex(corners[7], rgba)
+}
+
 immediate_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
   corners := box_corners(xyz_min, xyz_max)
 
@@ -222,6 +280,7 @@ immediate_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
   wish_texture := immediate.white_texture
   immediate_begin(wish_mode, wish_texture, wish_space)
 
+  // Back
   immediate_line(corners[0], corners[1], rgba)
   immediate_line(corners[1], corners[2], rgba)
   immediate_line(corners[2], corners[3], rgba)
@@ -335,11 +394,10 @@ immediate_flush :: proc() {
       if batch.vertex_count > 0 {
         bind_texture(batch.texture, "tex")
 
-
+        // TODO: Again make this a more generalizable thing probably
         depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
         defer gl.DepthFunc(u32(depth_func_before))
 
-        // TODO: Make sure we set relevant GL State
         switch batch.space {
         case .SCREEN:
           gl.DepthFunc(gl.ALWAYS)

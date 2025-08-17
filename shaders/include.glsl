@@ -45,7 +45,6 @@ layout(std140, binding = FRAME_UBO_BINDING) uniform Frame_UBO {
   vec4  camera_position;
   float z_near;
   float z_far;
-  int   debug_mode;
   vec4  scene_extents;
   struct {
   	Direction_Light direction;
@@ -54,5 +53,3 @@ layout(std140, binding = FRAME_UBO_BINDING) uniform Frame_UBO {
     Spot_Light			spot;
   } lights;
 } frame;
-#define DEBUG_MODE_NONE  0
-#define DEBUG_MODE_DEPTH 1

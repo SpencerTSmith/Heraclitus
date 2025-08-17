@@ -49,11 +49,6 @@ Uniform :: struct {
   binding:  i32,
 }
 
-Shader_Debug_Mode :: enum i32 {
-  NONE  = 0,
-  DEPTH = 1,
-}
-
 UBO_Bind :: enum u32 {
   FRAME = 0,
 }
@@ -67,7 +62,6 @@ Frame_UBO :: struct {
   camera_position: vec4,
   z_near:          f32,
   z_far:           f32,
-  debug_mode:      Shader_Debug_Mode, // i32 or glsl int
   scene_extents:   vec4,
 
   // Frame
@@ -249,7 +243,7 @@ free_shader_program :: proc(program: ^Shader_Program) {
 }
 
 set_shader_uniform :: proc(name: string, value: $T,
-                                 program: Shader_Program = state.current_shader) {
+                           program: Shader_Program = state.current_shader) {
   assert(state.current_shader.id == program.id)
 
   if name in program.uniforms {
@@ -273,8 +267,6 @@ set_shader_uniform :: proc(name: string, value: $T,
 	    log.warn("Unable to match type (%v) to gl call for uniform\n", typeid_of(T))
     }
   } else {
-    // HACK: Need to think of nicer way to handle these situations
-    // I would like to be alerted... but also annoying in some situations when prototyping
-    // fmt.printf("Uniform (\"%v\") not in current shader (id = %v)\n", name, program.id)
+    // log.warnf("Uniform (\"%v\") not in current shader (id = %v)\n", name, program.id)
   }
 }

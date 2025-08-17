@@ -143,6 +143,7 @@ text_draw_size :: proc(text: string, font: Font) -> (w, h: f32) {
   return max_line_width, height
 }
 
+@(private="file")
 align_text_start_x :: proc(text: string, font: Font, x: f32, align: Text_Alignment) -> (x_start: f32) {
   switch align {
   case .LEFT:

@@ -19,6 +19,9 @@ Sphere :: struct {
 draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE) {
   range_cast := f32(range)
 
+  // Red cube at the origin
+  immediate_fill_box({-0.1,-0.1,-0.1}, {0.1,0.1,0.1}, RED)
+
   for z := -range; z <= range; z += spacing {
     z_cast := f32(z)
     for x := -range; x <= range; x += spacing {
@@ -64,9 +67,6 @@ sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) -> bool {
   // less than the squared sphere's radius we know we are intersecting!
   closest_point := closest_point_on_aabb(sphere.center, aabb)
 
-  immediate_line(sphere.center, closest_point, RED)
-  immediate_sphere(closest_point, 0.01, RED)
-
   dist := closest_point - sphere.center
 
   return dot(dist, dist) <= sphere.radius * sphere.radius
@@ -77,14 +77,14 @@ box_corners :: proc(xyz_min, xyz_max: vec3) -> [8]vec3 {
   min := xyz_min
   max := xyz_max
   corners := [8]vec3{
-    {min.x, min.y, min.z}, // left, bottom, back
-    {max.x, min.y, min.z}, // right, bottom, back
-    {max.x, max.y, min.z}, // right, top, back
-    {min.x, max.y, min.z}, // left, top, back
-    {min.x, max.y, max.z}, // left, top, front
-    {min.x, min.y, max.z}, // left, bottom, front
-    {max.x, min.y, max.z}, // right, bottom, front
-    {max.x, max.y, max.z}, // right, top, front
+    {min.x, min.y, min.z}, // 0 left, bottom, back
+    {max.x, min.y, min.z}, // 1 right, bottom, back
+    {max.x, max.y, min.z}, // 2 right, top, back
+    {min.x, max.y, min.z}, // 3 left, top, back
+    {min.x, max.y, max.z}, // 4 left, top, front
+    {min.x, min.y, max.z}, // 5 left, bottom, front
+    {max.x, min.y, max.z}, // 6 right, bottom, front
+    {max.x, max.y, max.z}, // 7 right, top, front
   }
 
   return corners
@@ -117,7 +117,7 @@ aabb_min_penetration_vector :: proc(a: AABB, b:AABB) -> (vec: vec3) {
 
   center_a := (a.min + a.max) / 2.0
   center_b := (b.min + b.max) / 2.0
-  center_d := center_a - center_b // Need this to determine which way the penetration vector should point!
+  center_d := center_a - center_b // Need this to determine which way the penetration vector should point.
 
   min_overlap := overlap_x
   axis := 0 // x
