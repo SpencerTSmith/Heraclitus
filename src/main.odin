@@ -386,7 +386,7 @@ main :: proc() {
   if !init_state() do return
   defer free_state()
 
-  block := make_entity("box/Box.gltf", position={0, -2, -20}, scale={10.0, 10.0, 10.0})
+  block := make_entity("cube/BoxTextured.gltf", position={0, -2, -20}, scale={10.0, 10.0, 10.0})
   append(&state.entities, block)
 
   floor := make_entity("cube/BoxTextured.gltf", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
@@ -446,15 +446,6 @@ main :: proc() {
   // Clean up temp allocator from initialization... fresh for per-frame allocations
   free_all(context.temp_allocator)
 
-
-  vao := make_vertex_vao(Mesh_Vertex)
-
-  vbo: u32
-  gl.CreateBuffers(1, &vbo)
-  ebo: u32
-  gl.CreateBuffers(1, &ebo)
-
-
   last_frame_time := time.tick_now()
   dt_s := 0.0
   for (!should_close()) {
@@ -507,8 +498,6 @@ main :: proc() {
       move_camera_game(&state.camera, dt_s)
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
-
-      state.entities[0].rotation.z += f32(10.0 * dt_s)
 
       //
       // Collision
