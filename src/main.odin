@@ -386,6 +386,12 @@ main :: proc() {
   if !init_state() do return
   defer free_state()
 
+  block := make_entity("box/Box.gltf", position={0, -2, -20}, scale={10.0, 10.0, 10.0})
+  append(&state.entities, block)
+
+  floor := make_entity("cube/BoxTextured.gltf", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
+  append(&state.entities, floor)
+
   duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
   append(&state.entities, duck1)
 
@@ -425,12 +431,6 @@ main :: proc() {
     }
   }
 
-  floor := make_entity("cube/BoxTextured.gltf", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
-  append(&state.entities, floor)
-
-  block := make_entity("cube/BoxTextured.gltf", position={0, -2, -20}, scale={10.0, 10.0, 10.0})
-  append(&state.entities, block)
-
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
@@ -445,6 +445,15 @@ main :: proc() {
 
   // Clean up temp allocator from initialization... fresh for per-frame allocations
   free_all(context.temp_allocator)
+
+
+  vao := make_vertex_vao(Mesh_Vertex)
+
+  vbo: u32
+  gl.CreateBuffers(1, &vbo)
+  ebo: u32
+  gl.CreateBuffers(1, &ebo)
+
 
   last_frame_time := time.tick_now()
   dt_s := 0.0

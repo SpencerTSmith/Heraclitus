@@ -307,4 +307,5 @@ void main() {
   result = all_point_phong + direction_phong + spot_phong + emissive_sample + ambient;
 
   frag_color = vec4(result, alpha) * mul_color;
+  // frag_color = vec4(0.0);
 }

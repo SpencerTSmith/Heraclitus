@@ -51,8 +51,8 @@ Model :: struct {
 make_model :: proc{
   make_model_from_file,
   make_model_from_data,
-  make_model_from_default_container,
-  // make_model_from_default_white_cube,
+  // make_model_from_default_container,
+  make_model_from_default_white_cube,
   make_model_from_data_one_material_one_mesh,
 }
 
