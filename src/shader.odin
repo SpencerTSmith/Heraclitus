@@ -53,7 +53,7 @@ UBO_Bind :: enum u32 {
   FRAME = 0,
 }
 
-MAX_POINT_LIGHTS :: 128
+MAX_POINT_LIGHTS :: 12
 Frame_UBO :: struct {
   projection:      mat4,
   orthographic:    mat4,

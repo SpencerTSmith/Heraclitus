@@ -35,6 +35,12 @@ struct Spot_Light {
 };
 
 #define MAX_POINT_LIGHTS 128
+struct Lights {
+  	Direction_Light direction;
+  	Point_Light     points[MAX_POINT_LIGHTS];
+  	int							points_count;
+    Spot_Light			spot;
+};
 
 #define FRAME_UBO_BINDING 0
 layout(std140, binding = FRAME_UBO_BINDING) uniform Frame_UBO {
@@ -46,10 +52,5 @@ layout(std140, binding = FRAME_UBO_BINDING) uniform Frame_UBO {
   float z_near;
   float z_far;
   vec4  scene_extents;
-  struct {
-  	Direction_Light direction;
-  	Point_Light     points[MAX_POINT_LIGHTS];
-  	int							points_count;
-    Spot_Light			spot;
-  } lights;
+  Lights lights;
 } frame;
