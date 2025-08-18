@@ -9,9 +9,9 @@ import gl "vendor:OpenGL"
 // But I would like a common interface for getting and writing to GPU buffers without worrying whether it is mapped or not
 // As well as writing to them, at the right index
 
-// NOTE: As well if the buffer is persistent it WILL triple buffer it
-// To allow writes to the same buffer used by multiple frames not to get stomped
-// Basically: persistent == triple_buffered
+// TODO: Separate concept of persistently mapped and triple buffered
+// Not every case of a persistently mapped buffer must be triple buffered as in the case of our texture_handles ssbo
+// In that case it does not need to be triple buffered, but instead maybe only memory barriered if we need to begin streaming in handles
 
 GPU_Buffer_Type :: enum {
   NONE,

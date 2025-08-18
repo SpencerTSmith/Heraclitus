@@ -393,7 +393,7 @@ immediate_flush :: proc() {
     frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
     for batch in immediate.batches {
       if batch.vertex_count > 0 {
-        bind_texture(batch.texture, "tex")
+        bind_texture("tex", batch.texture)
 
         // TODO: Again make this a more generalizable thing probably
         depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)

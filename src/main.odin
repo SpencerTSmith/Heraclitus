@@ -435,14 +435,14 @@ main :: proc() {
       }
 
       // Move da point lights around
-      // seconds := seconds_since_start()
-      // if state.point_lights_on {
-      //   for &pl in state.point_lights {
-      //     pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-      //     pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      //     pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      //   }
-      // }
+      seconds := seconds_since_start()
+      if state.point_lights_on {
+        for &pl in state.point_lights {
+          pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+          pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+          pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+        }
+      }
     }
     if state.mode == .EDIT {
       move_camera_edit(&state.camera, dt_s)
@@ -472,7 +472,6 @@ main :: proc() {
         spot      = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
       },
     }
-
     if state.point_lights_on {
       for pl, idx in state.point_lights {
         if idx >= MAX_POINT_LIGHTS {
@@ -528,13 +527,13 @@ main :: proc() {
         bind_shader_program(state.shaders["phong"])
 
         if state.sun_on {
-          bind_texture(state.skybox.texture, "skybox")
+          bind_texture("skybox", state.skybox.texture)
         } else {
-          bind_texture({}, "skybox")
+          bind_texture("skybox", {})
         }
 
-        bind_texture(sun_depth_buffer.depth_target, "sun_shadow_map")
-        bind_texture(state.point_depth_buffer.depth_target, "point_light_shadows")
+        bind_texture("sun_shadow_map", sun_depth_buffer.depth_target)
+        bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
         // Go through and draw opque entities, collect transparent entities
         transparent_entities := make([dynamic]^Entity, context.temp_allocator)
@@ -616,13 +615,13 @@ main :: proc() {
           // Now collect bright spots
           bind_framebuffer(state.post_buffer)
           bind_shader("get_bright")
-          bind_texture(state.ping_pong_buffers[0].color_targets[0], "image")
+          bind_texture("image", state.ping_pong_buffers[0].color_targets[0])
           gl.BindVertexArray(state.empty_vao)
           gl.DrawArrays(gl.TRIANGLES, 0, 6)
 
           // Now do da blur
           bind_shader("gaussian")
-          bind_texture(state.post_buffer.color_targets[1], "image")
+          bind_texture("image", state.post_buffer.color_targets[1])
           bind_framebuffer(state.ping_pong_buffers[0])
 
           BLOOM_GAUSSIAN_COUNT :: 10
@@ -634,7 +633,7 @@ main :: proc() {
             gl.DrawArrays(gl.TRIANGLES, 0, 6)
 
             horizontal = !horizontal
-            bind_texture(state.ping_pong_buffers[int(!horizontal)].color_targets[0], "image")
+            bind_texture("image", state.ping_pong_buffers[int(!horizontal)].color_targets[0])
             bind_framebuffer(state.ping_pong_buffers[int(horizontal)])
           }
         }
@@ -644,8 +643,8 @@ main :: proc() {
         //
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
         bind_shader_program(state.shaders["resolve_hdr"])
-        bind_texture(state.post_buffer.color_targets[0], "screen_texture")
-        bind_texture(state.ping_pong_buffers[0].color_targets[0], "bloom_blur")
+        bind_texture("screen_texture", state.post_buffer.color_targets[0])
+        bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
 
         set_shader_uniform("exposure", f32(0.5))
 

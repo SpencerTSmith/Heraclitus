@@ -8,7 +8,6 @@ import "core:path/filepath"
 import "vendor:cgltf"
 import gl "vendor:OpenGL"
 
-
 Skybox :: struct {
   buffer:  GPU_Buffer,
   texture: Texture,
@@ -539,7 +538,7 @@ draw_skybox :: proc(skybox: Skybox) {
   bind_vertex_buffer(skybox.buffer)
   defer unbind_vertex_buffer()
 
-  bind_texture(skybox.texture, "skybox")
+  bind_texture("skybox", skybox.texture)
 
   gl.DrawArrays(gl.TRIANGLES, 0, 36)
 }

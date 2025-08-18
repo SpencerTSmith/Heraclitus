@@ -265,17 +265,15 @@ void main() {
   vec3 ambient = vec3(0.02); // Little bit of global ambient
 
   vec3 all_point_phong = vec3(0.0);
-  for (int i = 0; i < frame.lights.points_count; i++)
-  {
+  for (int i = 0; i < frame.lights.points_count; i++) {
     Point_Light light = frame.lights.points[i];
     float distance    = length(light.position.xyz - fs_in.world_position);
 
-    if (distance < light.radius)
-    {
+    if (distance < light.radius) {
       float point_shadow = 1.0 - point_shadow(point_light_shadows, i, fs_in.world_position, normal,
                                               light.position.xyz, light.radius, frame.camera_position.xyz);
 
-      vec3 point_phong  = point_phong(light, diffuse_sample, specular_sample, mat_shininess,
+      vec3 point_phong = point_phong(light, diffuse_sample, specular_sample, mat_shininess,
                                       normal, view_direction, fs_in.world_position);
       point_phong *= point_shadow;
 
@@ -304,5 +302,4 @@ void main() {
   result = all_point_phong + direction_phong + spot_phong + emissive_sample + ambient;
 
   frag_color = vec4(result, alpha) * mul_color;
-  // frag_color = vec4(0.0);
 }

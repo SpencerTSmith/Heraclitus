@@ -9,17 +9,18 @@
         - So far don't think it matters for 3d debug visuals
 - Sort of just normalizing vectors everywhere, probably redundantly... profile and find out if this is significant enough to fix
 - More AZDO:
-    - Texture handles
     - Multi-draw indirect
         - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
-    - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for multi-draw-indirect
+    - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalc
+- Switch fully to PBR lighting model
 
 # Complete:
 - AABB basic collision detection and response
 - Quake-like player-movement (Bunny-hopping, wall-running, strafe-jumping)
 - AZDO OpenGL techniques:
     - Frames in flight sync, triple-up persistently mapped buffers
+    - Bindless textures for model materials (Still doing traditional binding api for less commonly bound textures like shadow maps, skybox, etc)
 - Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
     - AABB, sphere, and vector debug visuals
     - Text rendering

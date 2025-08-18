@@ -211,7 +211,7 @@ bind_texture :: proc{
   bind_texture_name,
 }
 
-bind_texture_slot :: proc(texture: Texture, slot: u32) {
+bind_texture_slot :: proc(slot: u32, texture: Texture) {
   // NOTE: Just creating a copy of this struct... maybe not so good an idea?
   // just store pointers?
   if state.bound_textures[slot].id != texture.id {
@@ -220,10 +220,10 @@ bind_texture_slot :: proc(texture: Texture, slot: u32) {
   }
 }
 
-bind_texture_name :: proc(texture: Texture, name: string) {
+bind_texture_name :: proc(name: string, texture: Texture) {
   if name in state.current_shader.uniforms {
     slot := state.current_shader.uniforms[name].binding
-    bind_texture_slot(texture, u32(slot))
+    bind_texture_slot(u32(slot), texture)
   }
 }
 
@@ -376,7 +376,7 @@ make_texture_bindless :: proc(texture: ^Texture) {
     // For now we only ever append, believe this means we don't need to sync?
     state.texture_handles_count += 1
   } else {
-    log.infof("Texture: %v is already bindless.", texture.id)
+    // log.infof("Texture: %v is already bindless.", texture.id)
   }
 }
 
