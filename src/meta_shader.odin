@@ -109,39 +109,45 @@ gen_glsl_code :: proc() {
     fmt.sbprintf(b, "struct %v {{\n", t)
     for field in reflect.struct_fields_zipped(t) {
       if reflect.is_struct(field.type) {
+        // TODO: Assert that we have already generated the code for this struct, if not we need to go do that before we generate this struct
+        // GLSL does not allow out of order declaration
         fmt.sbprintf(b, "  %v %v;\n", field.type.id, field.name)
       } else {
-        s := to_glsl_basic_type_string(field.type.id)
+        basic := to_glsl_basic_type_string(field.type.id)
 
         // Wasn't one of the above basic types
-        if s == "" {
+        if basic == "" {
           info := reflect.type_info_base(type_info_of(field.type.id))
 
           // Is it an array?
           if reflect.is_array(info) {
-            array_type := info.variant.(reflect.Type_Info_Array)
-            count := array_type.count
+            array_info := info.variant.(reflect.Type_Info_Array)
 
-            basic_type := to_glsl_basic_type_string(array_type.elem.id)
+            // Is it possibly an array of basic types?
+            array_type := to_glsl_basic_type_string(array_info.elem.id)
 
-            if basic_type == "" {
-              // FIXME: Its an array of structures probably, but an assumption
-              fmt.sbprintf(b, "  %v %v[%v];\n", array_type.elem.id, field.name, count)
+            if array_type == "" {
+              // NOTE: Its an array of structures probably, but an assumption
+              assert(reflect.is_struct(array_info.elem), "Unkown array type enountered for GLSL Code Generation")
+
+              fmt.sbprintf(b, "  %v %v[%v];\n", array_info.elem.id, field.name, array_info.count)
             } else {
               // Its an array of basic types
-              fmt.sbprintf(b, "  %v %v[%v];\n", basic_type, field.name, count)
+              fmt.sbprintf(b, "  %v %v[%v];\n", array_type, field.name, array_info.count)
             }
           } else {
             log.errorf("Uh oh, don't know how to handle this type for GLSL Code Generation: %v", field)
           }
         } else { // Was just a basic type
-          fmt.sbprintf(b, "  %v %v;\n", s, field.name)
+          fmt.sbprintf(b, "  %v %v;\n", basic, field.name)
         }
       }
     }
     fmt.sbprint(b, "};\n\n")
   }
 
+  // TODO: There's gotta be some way to 'tag' structs as ones that need to match up with the generated GLSL code
+  // That way, don't need to remember to add it here and can instead
   to_glsl_struct(&b, Direction_Light_Uniform)
   to_glsl_struct(&b, Spot_Light_Uniform)
   to_glsl_struct(&b, Point_Light_Uniform)

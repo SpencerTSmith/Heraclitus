@@ -114,9 +114,14 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   // Accelerate!
   //
   MAX_SPEED :: 40.0
+  MAX_AIR_SPEED :: 30.0
   if length(wish_dir) > 0 {
     // How fast are we going in the direction we want to go?
     curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
+
+    if !camera.on_ground && curr_speed_in_wish_dir > MAX_AIR_SPEED {
+      curr_speed_in_wish_dir = MAX_AIR_SPEED
+    }
 
     // How much to get to max speed from current speed?
     add_speed := MAX_SPEED - curr_speed_in_wish_dir

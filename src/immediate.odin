@@ -185,6 +185,54 @@ immediate_quad :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
 }
 
+// NOTE: Hardcoded to billboard towards the camera for now
+immediate_billboard :: proc(center: vec3, w, h: f32, rgba: vec4 = WHITE,
+                            uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
+                            texture: Texture = immediate.white_texture) {
+  wish_mode  := Immediate_Mode.TRIANGLES
+  wish_space := Immediate_Space.WORLD
+
+  immediate_begin(wish_mode, texture, wish_space)
+
+  to_cam := normalize(state.camera.position - center)
+
+  up    := WORLD_UP
+  right := normalize(cross(up, to_cam))
+  up    = normalize(cross(to_cam, right))
+
+  half_w := w / 2
+  half_h := h / 2
+
+  top_left := Immediate_Vertex{
+    position = center - (right * half_w) + (up * half_h),
+    uv       = uv0,
+    color    = rgba,
+  }
+  top_right := Immediate_Vertex{
+    position = center + (right * half_w) + (up * half_h),
+    uv       = {uv1.x, uv0.y},
+    color    = rgba,
+  }
+  bottom_left := Immediate_Vertex{
+    position = center - (right * half_w) - (up * half_h),
+    uv       = {uv0.x, uv1.y},
+    color    = rgba,
+  }
+  bottom_right := Immediate_Vertex{
+    position = center + (right * half_w) - (up * half_h),
+    uv       = uv1,
+    color    = rgba,
+  }
+
+  immediate_vertex(top_left.position, top_left.color, top_left.uv)
+  immediate_vertex(top_right.position, top_right.color, top_right.uv)
+  immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
+
+  immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
+  immediate_vertex(top_right.position, top_right.color, top_right.uv)
+  immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
+}
+
 immediate_line :: proc {
   immediate_line_2D,
   immediate_line_3D,
@@ -390,6 +438,10 @@ immediate_flush :: proc() {
     bind_vertex_buffer(immediate.vertex_buffer)
     defer unbind_vertex_buffer()
 
+    // Transforms
+    orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far)
+    perspective  := get_camera_perspective(state.camera) * get_camera_view(state.camera)
+
     frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
     for batch in immediate.batches {
       if batch.vertex_count > 0 {
@@ -402,9 +454,9 @@ immediate_flush :: proc() {
         switch batch.space {
         case .SCREEN:
           gl.DepthFunc(gl.ALWAYS)
-          set_shader_uniform("transform", mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far))
+          set_shader_uniform("transform", orthographic)
         case .WORLD:
-          set_shader_uniform("transform", get_camera_perspective(state.camera) * get_camera_view(state.camera))
+          set_shader_uniform("transform", perspective)
         }
 
         first_vertex := i32(frame_base + batch.vertex_base)

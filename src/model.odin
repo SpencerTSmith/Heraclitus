@@ -33,9 +33,12 @@ Mesh :: struct {
   aabb: AABB, // For each mesh... might do something diff... we will seeeeeee
 }
 
-// A model is composed of ONE vertex buffer containing both vertices and indices, vertices first, then indices
-// at the right alignment, with "sub" meshes (gltf primitives like) that share the same material
+// NOTE: A model is composed of ONE vertex buffer containing both vertices and indices, vertices first, then indices
+// at the right alignment, with "sub" meshes (conceptually like gltf primitives) that share the same material
+
 Model :: struct {
+  name: string, // Just for debugging, only filled if made from a file
+
   buffer:       GPU_Buffer,
   vertex_count: i32,
   index_count:  i32,
@@ -425,6 +428,8 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
     model, ok = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:])
   } else do log.errorf("Unable to parse cgltf file \"%v\"\n", file_name)
 
+  model.name = strings.clone(file_name)
+
   return model, ok
 }
 
@@ -479,7 +484,7 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
 
 
   for mesh in model.meshes {
-    bind_material(model.materials[mesh.material_index])
+    set_material(model.materials[mesh.material_index])
 
     true_offset := i32(model.buffer.index_offset) + (mesh.index_offset * size_of(Mesh_Index))
 
@@ -507,7 +512,13 @@ free_model :: proc(model: ^Model) {
   for &material in model.materials {
     free_material(&material)
   }
+
   free_gpu_buffer(&model.buffer)
+
+  delete(model.name)
+
+  // Zero it out
+  model^ = {}
 }
 
 // TODO: Make this work with the asset system

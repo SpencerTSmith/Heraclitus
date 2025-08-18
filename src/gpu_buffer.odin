@@ -234,8 +234,10 @@ gpu_buffer_frame_base_ptr :: proc(buffer: GPU_Buffer, frame_index: int = state.c
 }
 
 free_gpu_buffer :: proc(buffer: ^GPU_Buffer) {
-  if buffer.mapped != nil {
-    gl.UnmapNamedBuffer(buffer.id)
+  if buffer.id != 0 {
+    if buffer.mapped != nil {
+      gl.UnmapNamedBuffer(buffer.id)
+    }
+    gl.DeleteBuffers(1, &buffer.id)
   }
-  gl.DeleteBuffers(1, &buffer.id)
 }

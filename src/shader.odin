@@ -199,13 +199,6 @@ bind_shader_program :: proc(program: Shader_Program) {
     gl.UseProgram(program.id)
 
     state.current_shader = program
-
-    // FIXME: Nasty bug due to current architecture where if a model gets drawn and
-    // the current shader doesn't have texture bindings for a material
-    // those textures don't get bound BUT the current material does get set...
-    // This fixes it but I'm not satisfied... gotta be nice way to check
-    // if a shader supports a material, if not don't set the current material
-    state.current_material = {}
   }
 }
 

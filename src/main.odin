@@ -69,7 +69,6 @@ State :: struct {
 
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
-  current_material: Material,
   bound_textures:   [16]Texture,
 
   // NOTE: Needed to make draw calls, even if not using one
@@ -112,8 +111,7 @@ init_state :: proc() -> (ok: bool) {
   state.window.h     = WINDOW_DEFAULT_H
   state.window.title = WINDOW_DEFAULT_TITLE
 
-  c_title := strings.clone_to_cstring(state.window.title, allocator = context.temp_allocator)
-  defer free_all(context.temp_allocator)
+  c_title := strings.clone_to_cstring(state.window.title, allocator=context.temp_allocator)
 
   glfw.SetWindowTitle(state.window.handle, c_title)
 
@@ -163,6 +161,7 @@ init_state :: proc() -> (ok: bool) {
   gl.Enable(gl.STENCIL_TEST)
   gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE)
 
+  // Make the meta shader
   gen_glsl_code()
 
   state.gl_is_initialized = true
@@ -351,9 +350,9 @@ main :: proc() {
   chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
   append(&state.entities, chess)
 
-  light_material,_ := make_material("point_light.png", blend=.BLEND, in_texture_dir=true)
-  light_model,_ := make_model(DEFAULT_SQUARE_VERT, DEFAULT_SQUARE_INDX, light_material)
-  defer free_model(&light_model)
+  // NOTE: Just for doing little billboards for the point lights
+  light_texture,_ := make_texture("data/textures/point_light.png", nonlinear_color=true)
+  defer free_texture(&light_texture)
 
   sun_depth_buffer,_ := make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH})
 
@@ -572,21 +571,17 @@ main :: proc() {
 
         // Draw point light billboards
         if state.point_lights_on {
-          bind_shader_program(state.shaders["billboard"])
           for l in state.point_lights {
-            temp := Entity{
-              position = l.position.xyz,
-              scale    = {1.0, 1.0, 1.0},
-            }
-
-            set_shader_uniform("model", entity_model_mat4(temp))
-            draw_model(light_model, l.color)
-
             if state.draw_debug {
               immediate_sphere(l.position, l.radius, l.color)
             }
+
+            w:f32 = 1.0
+            h:f32 = 1.0
+            immediate_billboard(l.position, w, h, l.color, uv0={0,1},uv1={1,0}, texture=light_texture)
           }
         }
+
 
         if state.draw_debug {
           draw_grid(color = {1.0, 1.0, 1.0, 0.4})

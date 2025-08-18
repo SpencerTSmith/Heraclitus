@@ -27,6 +27,8 @@ Sampler_Config :: enum {
 }
 
 Texture :: struct {
+  name: string, // Just for debugging, only filled if made from a file
+
   id:     u32,
   handle: u64,
   index:  int, // Into the texture_handles gpu_buffer
@@ -161,27 +163,23 @@ free_material :: proc(material: ^Material) {
   free_texture(normal)
 }
 
-bind_material :: proc(material: Material) {
+set_material :: proc(material: Material) {
   assert(state.current_shader.id != 0)
 
-  if state.current_material != material {
-    diffuse  := get_texture(material.diffuse)
-    specular := get_texture(material.specular)
-    emissive := get_texture(material.emissive)
-    normal   := get_texture(material.normal)
+  diffuse  := get_texture(material.diffuse)
+  specular := get_texture(material.specular)
+  emissive := get_texture(material.emissive)
+  normal   := get_texture(material.normal)
 
-    // NOTE: We are bindless with materials now!
-    // So we just send over indexes
+  // NOTE: We are bindless with materials now!
+  // So we just send over indexes
 
-    set_shader_uniform("mat_diffuse_idx",  diffuse.index)
-    set_shader_uniform("mat_specular_idx", specular.index)
-    set_shader_uniform("mat_emissive_idx", emissive.index)
-    set_shader_uniform("mat_normal_idx",   normal.index)
+  set_shader_uniform("mat_diffuse_idx",  diffuse.index)
+  set_shader_uniform("mat_specular_idx", specular.index)
+  set_shader_uniform("mat_emissive_idx", emissive.index)
+  set_shader_uniform("mat_normal_idx",   normal.index)
 
-    set_shader_uniform("mat_shininess", material.shininess)
-
-    state.current_material = material
-  }
+  set_shader_uniform("mat_shininess", material.shininess)
 }
 
 make_texture :: proc {
@@ -197,12 +195,16 @@ make_texture_from_missing :: proc() -> (texture: Texture) {
 }
 
 free_texture :: proc(texture: ^Texture) {
-  if texture != nil {
+  if texture != nil && texture.id != 0 {
     if texture.handle != 0 {
       gl.MakeTextureHandleNonResidentARB(texture.handle)
-      texture.handle = 0 // So we don't try to make non-resident twice
     }
+
+    delete(texture.name)
     gl.DeleteTextures(1, &texture.id)
+
+    // Zero it out
+    texture^ = {}
   }
 }
 
@@ -456,6 +458,9 @@ make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false)
   format := format_for_channels(channels, nonlinear_color)
 
   texture = make_texture_from_data(._2D, format, .REPEAT_TRILINEAR, {data}, w, h)
+
+  // TODO: Probably would be better to pass in the desired allocator, in case we ever want to start streaming in models
+  texture.name = strings.clone(file_name)
 
   return texture, true
 }
