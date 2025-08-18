@@ -5,6 +5,7 @@ import "core:fmt"
 import "core:os"
 import "core:reflect"
 import "core:log"
+import "core:time"
 
 // NOTE: This is simply a little meta-program to reduce code duplication between glsl and odin
 
@@ -14,6 +15,29 @@ UBO_Bind :: enum u32 {
 }
 
 MAX_POINT_LIGHTS :: 128
+
+Point_Light_Uniform :: struct #align(16) {
+  proj_views:    [6]mat4,
+
+  position:  vec4,
+
+  color:     vec4,
+
+  radius:    f32,
+  intensity: f32,
+  ambient:   f32,
+}
+
+Direction_Light_Uniform :: struct #align(16) {
+  proj_view: mat4,
+
+  direction: vec4,
+
+  color:     vec4,
+
+  intensity: f32,
+  ambient:   f32,
+}
 
 Frame_Uniform :: struct {
   projection:      mat4,
@@ -31,8 +55,28 @@ Frame_Uniform :: struct {
   flash_light:  Spot_Light_Uniform,
 }
 
+Spot_Light_Uniform :: struct #align(16) {
+  position:     vec4,
+  direction:    vec4,
+  color:        vec4,
+
+  radius:       f32,
+  intensity:    f32,
+  ambient:      f32,
+
+  inner_cutoff: f32,
+  outer_cutoff: f32,
+}
+
 gen_glsl_code :: proc() {
   b := strings.builder_make(allocator=context.temp_allocator)
+
+  buf: [time.MIN_YYYY_DATE_LEN]u8
+  buf2: [time.MIN_HMS_12_LEN]u8
+  now := time.now()
+  date  := time.to_string_dd_mm_yyyy(now, buf[:])
+  hours := time.to_string_hms_12(now, buf2[:])
+  fmt.sbprintf(&b, "// NOTE: This code was generated on %v (%v)\n\n", date, hours)
 
   // Gotta have it
   fmt.sbprint(&b, "#extension GL_ARB_bindless_texture : require\n\n")
@@ -104,7 +148,7 @@ gen_glsl_code :: proc() {
   to_glsl_struct(&b, Frame_Uniform)
 
   //
-  // Generate bind points
+  // Generate buffer bindings
   //
   bind_names: [UBO_Bind]string
   for e in UBO_Bind {
@@ -130,9 +174,99 @@ gen_glsl_code :: proc() {
 vec4 bindless_sample(int index, vec2 uv) {
   return texture(textures[index], uv);
 }
-  `
+`
 
   fmt.sbprint(&b, append_always)
 
   os.write_entire_file(SHADER_DIR + "generated.glsl", transmute([]u8) strings.to_string(b))
+}
+
+spot_light_uniform :: proc(light: Spot_Light) -> (uniform: Spot_Light_Uniform) {
+  uniform = Spot_Light_Uniform{
+    position  = vec4_from_3(light.position),
+    direction = vec4_from_3(light.direction),
+
+    color     = light.color,
+
+    radius    = light.radius,
+    intensity = light.intensity,
+    ambient   = light.ambient,
+
+    inner_cutoff = light.inner_cutoff,
+    outer_cutoff = light.outer_cutoff,
+  }
+
+  return uniform
+}
+
+point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform) {
+  uniform = Point_Light_Uniform{
+    proj_views = point_light_projviews(light),
+    position   = vec4_from_3(light.position),
+
+    color     = light.color,
+
+    radius    = light.radius,
+    intensity = light.intensity,
+    ambient   = light.ambient,
+  }
+
+  return uniform
+}
+
+// FIXME: AHHHHHHH... just learn how to do cascaded shadow maps
+@(private)
+prev_center: vec3
+
+direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_Light_Uniform) {
+  scene_bounds: f32 = 50.0
+  sun_distance: f32 = 50.0
+
+  center := state.camera.position
+
+  // FIXME: Just a hack to prevent shadow swimming until i can unstick my head out of my ass and figure
+  // out the texel snapping shit
+  if length(center - prev_center) < 10.0 {
+    center = prev_center
+  }
+
+  prev_center = center
+
+  light_proj := mat4_orthographic(-scene_bounds, scene_bounds, -scene_bounds, scene_bounds, 5.0, sun_distance * 2.0)
+
+  sun_position := center - (light.direction * sun_distance)
+  light_view := mat4_look_at(sun_position, center, WORLD_UP)
+
+  uniform = Direction_Light_Uniform {
+    proj_view = light_proj * light_view,
+
+    direction = vec4_from_3(light.direction),
+
+    color     = light.color,
+
+    intensity = light.intensity,
+    ambient   = light.ambient,
+  }
+
+  return uniform
+}
+
+
+// NOTE: Assumes the shadow CUBE map is a CUBE so 1:1 aspect ratio for each side
+point_light_projviews :: proc(light: Point_Light) -> [6]mat4 {
+  Z_NEAR :: f32(1.0)
+  ASPECT :: f32(1.0)
+  FOV    :: f32(90.0)
+
+  proj := mat4_perspective(radians(FOV), ASPECT, Z_NEAR, light.radius)
+  projviews := [6]mat4{
+    proj * get_view(light.position.xyz, { 1.0,  0.0,  0.0}, {0.0, -1.0,  0.0}),
+    proj * get_view(light.position.xyz, {-1.0,  0.0,  0.0}, {0.0, -1.0,  0.0}),
+    proj * get_view(light.position.xyz, { 0.0,  1.0,  0.0}, {0.0,  0.0,  1.0}),
+    proj * get_view(light.position.xyz, { 0.0, -1.0,  0.0}, {0.0,  0.0, -1.0}),
+    proj * get_view(light.position.xyz, { 0.0,  0.0,  1.0}, {0.0, -1.0,  0.0}),
+    proj * get_view(light.position.xyz, { 0.0,  0.0, -1.0}, {0.0, -1.0,  0.0}),
+  }
+
+  return projviews
 }

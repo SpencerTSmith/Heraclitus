@@ -1,3 +1,5 @@
+// NOTE: This code was generated on 18-08-2025 (07:08:01 am)
+
 #extension GL_ARB_bindless_texture : require
 
 struct Direction_Light_Uniform {
@@ -58,4 +60,3 @@ layout(binding = TEXTURES_BINDING, std430) readonly buffer Texture_Handles {
 vec4 bindless_sample(int index, vec2 uv) {
   return texture(textures[index], uv);
 }
-  
