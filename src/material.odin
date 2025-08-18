@@ -17,6 +17,8 @@ Texture_Type :: enum {
   CUBE_ARRAY,
 }
 
+// NOTE: Maybe once more complicated sampler setups can move samplers into separate thing, but for
+// now we really only need these combos for everything anyways
 Sampler_Config :: enum {
   NONE,
   REPEAT_TRILINEAR,
@@ -25,7 +27,10 @@ Sampler_Config :: enum {
 }
 
 Texture :: struct {
-  id:      u32,
+  id:     u32,
+  handle: u64,
+  index:  int, // Into the texture_handles gpu_buffer
+
   type:    Texture_Type,
   width:   int,
   height:  int,
@@ -129,6 +134,16 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
     log.errorf("Unable to create normal texture \"%v\" for material, using missing", normal)
   }
 
+  p_diffuse  := get_texture(material.diffuse)
+  p_specular := get_texture(material.specular)
+  p_emissive := get_texture(material.emissive)
+  p_normal   := get_texture(material.normal)
+
+  make_texture_bindless(p_diffuse)
+  make_texture_bindless(p_specular)
+  make_texture_bindless(p_emissive)
+  make_texture_bindless(p_normal)
+
   material.shininess = shininess
   material.blend = blend
   return material, ok
@@ -155,10 +170,17 @@ bind_material :: proc(material: Material) {
     emissive := get_texture(material.emissive)
     normal   := get_texture(material.normal)
 
-    bind_texture(diffuse^,  "mat_diffuse")
-    bind_texture(specular^, "mat_specular")
-    bind_texture(emissive^, "mat_emissive")
-    bind_texture(normal^,   "mat_normal")
+    // NOTE: We are bindless with materials now!
+    // So we just send over indexes
+    // bind_texture(diffuse^,  "mat_diffuse")
+    // bind_texture(specular^, "mat_specular")
+    // bind_texture(emissive^, "mat_emissive")
+    // bind_texture(normal^,   "mat_normal")
+
+    set_shader_uniform("mat_diffuse_idx",  diffuse.index)
+    set_shader_uniform("mat_specular_idx", specular.index)
+    set_shader_uniform("mat_emissive_idx", emissive.index)
+    set_shader_uniform("mat_normal_idx",   normal.index)
 
     set_shader_uniform("mat_shininess", material.shininess)
 
@@ -180,6 +202,10 @@ make_texture_from_missing :: proc() -> (texture: Texture) {
 
 free_texture :: proc(texture: ^Texture) {
   if texture != nil {
+    if texture.handle != 0 {
+      gl.MakeTextureHandleNonResidentARB(texture.handle)
+      texture.handle = 0 // So we don't try to make non-resident twice
+    }
     gl.DeleteTextures(1, &texture.id)
   }
 }
@@ -337,6 +363,27 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
   return texture
 }
 
+// NOTE: Creates a handle, makes it resident, appends to the end of the texture_handles gpu_buffer, and returns its index
+make_texture_bindless :: proc(texture: ^Texture) {
+  if texture.handle == 0 {
+    texture.handle = gl.GetTextureHandleARB(texture.id)
+    gl.MakeTextureHandleResidentARB(texture.handle)
+
+    // Write handle to ssbo
+    handles := cast([^]u64) state.texture_handles.mapped
+
+    texture.index = state.texture_handles_count
+    assert(texture.index < MAX_TEXTURE_HANDLES)
+
+    handles[texture.index] = texture.handle
+
+    // For now we only ever append, believe this means we don't need to sync?
+    state.texture_handles_count += 1
+  } else {
+    log.infof("Texture: %v is already bindless.", texture.id)
+  }
+}
+
 format_for_channels :: proc(channels: int, nonlinear_color: bool = false) -> Pixel_Format {
   format: Pixel_Format
   switch channels {
@@ -403,7 +450,6 @@ make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true
 }
 
 make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false) -> (texture: Texture, ok: bool) {
-
   data, w, h, channels := get_image_data(file_name)
   if data == nil {
     log.errorf("Could not load texture \"%v\"\n", file_name)

@@ -2,15 +2,41 @@ package main
 
 import "core:fmt"
 import "core:log"
-import "core:slice"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:path/filepath"
+import "core:time"
 
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
 // NOTE: For everything that doesn't have a home yet
+
+WINDOW_DEFAULT_TITLE :: "Heraclitus"
+WINDOW_DEFAULT_W :: 1280 * 2
+WINDOW_DEFAULT_H :: 720  * 2
+
+FRAMES_IN_FLIGHT :: 3
+TARGET_FPS :: 60
+TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
+
+GL_MAJOR :: 4
+GL_MINOR :: 6
+
+MAX_TEXTURE_HANDLES :: 512
+
+POINT_SHADOW_MAP_SIZE  :: 512 * 2
+SUN_SHADOW_MAP_SIZE    :: 512 * 8
+
+Program_Mode :: enum {
+  GAME,
+  MENU,
+  EDIT,
+}
+
+Frame_Info :: struct {
+  fence: gl.sync_t,
+}
 
 MODEL_UP      :: vec3{0.0, 1.0, 0.0}
 MODEL_RIGHT   :: vec3{1.0, 0.0, 0.0}
@@ -94,11 +120,21 @@ point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
   return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom
 }
 
+Window :: struct {
+  handle:   glfw.WindowHandle,
+  w, h:     int,
+  title:    string,
+  resized:  bool,
+}
+
 resize_window :: proc() {
   // Reset
   state.window.resized = false
 
   ok: bool
+
+  // FIXME: We need to remember which framebuffers need to be the same size as the backbuffer...
+  // Could maybe store all these in an map or something so we can just iterate and remember these
   state.hdr_ms_buffer, ok = remake_framebuffer(&state.hdr_ms_buffer, state.window.w, state.window.h)
   state.post_buffer, ok = remake_framebuffer(&state.post_buffer, state.window.w, state.window.h)
   state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], state.window.w, state.window.h)
@@ -108,135 +144,8 @@ resize_window :: proc() {
     log.fatal("Window has been resized but unable to recreate multisampling framebuffer")
     state.running = false
   }
-}
 
-Framebuffer :: struct {
-  id:            u32,
-  attachments:   []Framebuffer_Attachment,
-  color_targets: []Texture,
-  depth_target:  Texture,
-  sample_count:  int,
-}
-
-Framebuffer_Attachment :: enum {
-  COLOR,
-  HDR_COLOR,
-  DEPTH,
-  DEPTH_STENCIL,
-  DEPTH_CUBE,
-  DEPTH_CUBE_ARRAY,
-}
-
-// For now depth target can either be depth only or depth+stencil,
-// also can only have one attachment of each type
-make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
-                         attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL}
-                         ) -> (buffer: Framebuffer, ok: bool) {
-  fbo: u32
-  gl.CreateFramebuffers(1, &fbo)
-
-  color_targets := make([dynamic]Texture, context.temp_allocator)
-  depth_target: Texture
-
-  gl_attachments := make([dynamic]u32, context.temp_allocator)
-
-  for attachment in attachments {
-    switch attachment {
-    case .COLOR:
-      color_target := alloc_texture(._2D, .RGBA8, .NONE, width, height, samples=samples)
-      attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
-      gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
-
-      append(&color_targets, color_target)
-      append(&gl_attachments, attachment)
-
-    case .HDR_COLOR:
-      color_target := alloc_texture(._2D, .RGBA16F, .NONE, width, height, samples=samples)
-      attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
-      gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
-
-      append(&color_targets, color_target)
-      append(&gl_attachments, attachment)
-
-    case .DEPTH:
-      assert(depth_target.id == 0) // Only one depth attachment
-
-      depth_target = alloc_texture(._2D, .DEPTH32, .NONE, width, height)
-
-      // Really for shadow mapping... but eh
-      gl.TextureParameteri(depth_target.id, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
-      gl.TextureParameteri(depth_target.id, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
-      border_color := vec4{1.0, 1.0, 1.0, 1.0}
-      gl.TextureParameterfv(depth_target.id, gl.TEXTURE_BORDER_COLOR, &border_color[0])
-
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-
-    case .DEPTH_STENCIL:
-      assert(depth_target.id == 0)
-
-      depth_target = alloc_texture(._2D, .DEPTH24_STENCIL8, .NONE, width, height, samples=samples)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-
-    case .DEPTH_CUBE:
-      assert(depth_target.id == 0)
-
-      depth_target = alloc_texture(.CUBE, .DEPTH32, .CLAMP_LINEAR, width, height)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-
-    case .DEPTH_CUBE_ARRAY:
-      assert(depth_target.id == 0)
-
-      assert(array_depth > 0)
-      depth_target = alloc_texture(.CUBE_ARRAY, .DEPTH32, .CLAMP_LINEAR, width, height, array_depth=array_depth)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-    }
-  }
-
-  gl.NamedFramebufferDrawBuffers(fbo, cast(i32)len(color_targets), raw_data(gl_attachments))
-
-  buffer = {
-    id            = fbo,
-    attachments   = slice.clone(attachments, state.perm_alloc),
-    color_targets = slice.clone(color_targets[:], state.perm_alloc),
-    depth_target  = depth_target,
-    sample_count  = samples,
-  }
-  if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE {
-    log.error("Unable to create complete framebuffer: %v", buffer)
-    return {}, false
-  }
-
-  ok = true
-  return buffer, ok
-}
-
-bind_framebuffer :: proc(buffer: Framebuffer) {
-  gl.BindFramebuffer(gl.FRAMEBUFFER, buffer.id)
-}
-
-free_framebuffer :: proc(frame_buffer: ^Framebuffer) {
-  for &c in frame_buffer.color_targets {
-    free_texture(&c)
-  }
-  free_texture(&frame_buffer.depth_target)
-  gl.DeleteFramebuffers(1, &frame_buffer.id)
-}
-
-// Will use the same sample count as the old
-remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (new_buffer: Framebuffer, ok: bool) {
-  old_samples     := frame_buffer.sample_count
-  old_attachments := frame_buffer.attachments
-  free_framebuffer(frame_buffer)
-  new_buffer, ok = make_framebuffer(width, height, old_samples, attachments=old_attachments)
-
-  return new_buffer, ok
-}
-
-Window :: struct {
-  handle:   glfw.WindowHandle,
-  w, h:     int,
-  title:    string,
-  resized:  bool,
+  log.infof("Window has resized to %vpx, %vpx", state.window.w, state.window.h)
 }
 
 resize_window_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
@@ -254,10 +163,6 @@ get_aspect_ratio :: proc(window: Window) -> (aspect: f32) {
 
 should_close :: proc() -> bool {
   return bool(glfw.WindowShouldClose(state.window.handle)) || !state.running
-}
-
-close_program :: proc() {
-  state.running = false
 }
 
 draw_debug_stats :: proc() {

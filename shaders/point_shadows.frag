@@ -1,12 +1,13 @@
 #version 450 core
 
+#include "include.glsl"
+
 in VS_OUT {
   vec4 world_position;
   vec2 uv;
   flat int  light_index;
 } fs_in;
 
-#include "include.glsl"
 
 layout(binding = 0) uniform sampler2D mat_diffuse;
 

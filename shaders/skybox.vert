@@ -1,12 +1,12 @@
 #version 450 core
 
+#include "include.glsl"
+
 layout(location = 0) in vec3 vert_position;
 
 out VS_OUT {
   vec3 uvw;
 } vs_out;
-
-#include "include.glsl"
 
 void main() {
   vs_out.uvw = vert_position;

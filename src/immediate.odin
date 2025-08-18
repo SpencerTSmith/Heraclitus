@@ -386,6 +386,7 @@ immediate_flush :: proc() {
 
   if immediate.vertex_count > 0 {
     bind_shader_program(immediate.shader)
+
     bind_vertex_buffer(immediate.vertex_buffer)
     defer unbind_vertex_buffer()
 

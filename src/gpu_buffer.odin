@@ -17,6 +17,7 @@ GPU_Buffer_Type :: enum {
   NONE,
   UNIFORM,
   VERTEX,
+  STORAGE,
 }
 
 // NOTE: Fat struct... too much voodoo?
@@ -138,6 +139,7 @@ unbind_vertex_buffer :: proc() {
 // NOTE: right now not possible to get a buffer you can read from with this interface
 make_gpu_buffer :: proc(type: GPU_Buffer_Type, size: int, data: rawptr = nil, persistent: bool = true) -> (buffer: GPU_Buffer) {
   assert(state.gl_is_initialized)
+
   buffer.type = type
 
   gl.CreateBuffers(1, &buffer.id)
@@ -177,16 +179,32 @@ write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: int, data: rawptr) {
 
 // Only for uniform buffers
 bind_gpu_buffer_base :: proc(buffer: GPU_Buffer, binding: UBO_Bind) {
-  assert(buffer.type == .UNIFORM)
+  assert(buffer.type == .UNIFORM || buffer.type == .STORAGE, "Only Uniform and Storage Buffers may be bound to locations")
 
-  gl.BindBufferBase(gl.UNIFORM_BUFFER, u32(binding), buffer.id)
+  gl_target: u32
+  #partial switch buffer.type {
+  case .UNIFORM:
+    gl_target = gl.UNIFORM_BUFFER
+  case .STORAGE:
+    gl_target = gl.SHADER_STORAGE_BUFFER
+  }
+
+  gl.BindBufferBase(gl_target, u32(binding), buffer.id)
 }
 
 // Only for uniform buffers
 bind_gpu_buffer_range :: proc(buffer: GPU_Buffer, binding: UBO_Bind, offset, size: int) {
-  assert(buffer.type == .UNIFORM)
+  assert(buffer.type == .UNIFORM || buffer.type == .STORAGE, "Only Uniform and Storage Buffers may be bound to locations")
 
-  gl.BindBufferRange(gl.UNIFORM_BUFFER, u32(binding), buffer.id, offset, size)
+  gl_target: u32
+  #partial switch buffer.type {
+  case .UNIFORM:
+    gl_target = gl.UNIFORM_BUFFER
+  case .STORAGE:
+    gl_target = gl.SHADER_STORAGE_BUFFER
+  }
+
+  gl.BindBufferRange(gl_target, u32(binding), buffer.id, offset, size)
 }
 
 // Helper fast paths for triple buffered frame dependent buffers

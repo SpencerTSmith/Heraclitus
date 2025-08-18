@@ -1,5 +1,7 @@
 #version 450 core
 
+#include "include.glsl"
+
 in VS_OUT {
   vec2 uv;
   vec3 normal;
@@ -10,19 +12,15 @@ in VS_OUT {
 
 layout(location=0) out vec4 frag_color;
 
-#include "include.glsl"
-
-layout(binding = 0) uniform sampler2D mat_diffuse;
-layout(binding = 1) uniform sampler2D mat_specular;
-layout(binding = 2) uniform sampler2D mat_emissive;
-layout(binding = 3) uniform sampler2D mat_normal;
+uniform int mat_diffuse_idx;
+uniform int mat_specular_idx;
+uniform int mat_emissive_idx;
+uniform int mat_normal_idx;
 uniform float mat_shininess;
 
-layout(binding = 4) uniform samplerCube skybox;
-
-layout(binding = 5) uniform sampler2D sun_shadow_map;
-
-layout(binding = 6) uniform samplerCubeArray point_light_shadows;
+layout(binding = 0) uniform samplerCube skybox;
+layout(binding = 1) uniform sampler2D sun_shadow_map;
+layout(binding = 2) uniform samplerCubeArray point_light_shadows;
 
 uniform vec4 mul_color;
 
@@ -92,7 +90,6 @@ vec3 spot_phong(Spot_Light light, vec3 diffuse_sample, vec3 specular_sample, flo
 
 	vec3 phong = attenuation * light.intensity * light.color.rgb * (spot_intensity * (diffuse + specular));
 
-	// FIXME: just to make sure not getting negative
 	return clamp(phong, 0.0, 1.0);
 }
 
@@ -249,18 +246,18 @@ float point_shadow(samplerCubeArray map, int light_index, vec3 frag_pos, vec3 fr
 
 void main() {
   vec3 result = vec3(0.0);
-  float alpha = texture(mat_diffuse, fs_in.uv).a;
 
-  vec3 diffuse_sample  = vec3(texture(mat_diffuse, fs_in.uv));
-  vec3 specular_sample = vec3(texture(mat_specular, fs_in.uv));
-  vec3 emissive_sample = vec3(texture(mat_emissive, fs_in.uv));
+  float alpha = texture(textures[mat_diffuse_idx], fs_in.uv).a;
+  vec3 diffuse_sample  = vec3(bindless_sample(mat_diffuse_idx,  fs_in.uv));
+  vec3 specular_sample = vec3(bindless_sample(mat_specular_idx, fs_in.uv));
+  vec3 emissive_sample = vec3(bindless_sample(mat_emissive_idx, fs_in.uv));
+  vec3 normal_sample   = vec3(bindless_sample(mat_normal_idx,   fs_in.uv));
 
   // Textures are in range 0 -> 1
-  vec3 normal_map = texture(mat_normal, fs_in.uv).rgb;
+  vec3 normal_map = normal_sample;
   // To [-1, 1]
   normal_map = normalize(normal_map * 2.0 - 1.0);
 
-  // vec3 normal = normalize(fs_in.normal);
   vec3 normal = normalize(fs_in.TBN * normal_map);
 
   vec3 view_direction = normalize(frame.camera_position.xyz - fs_in.world_position);

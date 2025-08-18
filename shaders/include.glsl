@@ -1,3 +1,5 @@
+#extension GL_ARB_bindless_texture : require
+
 struct Point_Light {
   mat4  proj_views[6];
 	vec4  position;
@@ -43,7 +45,7 @@ struct Lights {
 };
 
 #define FRAME_UBO_BINDING 0
-layout(std140, binding = FRAME_UBO_BINDING) uniform Frame_UBO {
+layout(binding = FRAME_UBO_BINDING, std140) uniform Frame_UBO {
   mat4  projection;
   mat4  orthographic;
   mat4  view;
@@ -54,3 +56,15 @@ layout(std140, binding = FRAME_UBO_BINDING) uniform Frame_UBO {
   vec4  scene_extents;
   Lights lights;
 } frame;
+
+//
+// Bindless!
+//
+#define TEXTURE_HANDLES_BINDING 1
+layout(binding = TEXTURE_HANDLES_BINDING, std430) readonly buffer Texture_Handles {
+  sampler2D textures[];
+};
+
+vec4 bindless_sample(int index, vec2 uv) {
+  return texture(textures[index], uv);
+}

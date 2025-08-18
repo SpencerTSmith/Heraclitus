@@ -108,7 +108,7 @@ update_menu_input :: proc() {
       toggle_menu()
     case .QUIT:
       if menu.items[.QUIT].ask_to_confirm == true {
-        close_program()
+        state.running = false
       } else {
         menu.items[.QUIT].ask_to_confirm = true
       }

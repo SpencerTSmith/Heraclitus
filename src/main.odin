@@ -12,86 +12,65 @@ import "core:log"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
-WINDOW_DEFAULT_TITLE :: "Heraclitus"
-WINDOW_DEFAULT_W :: 1280 * 2
-WINDOW_DEFAULT_H :: 720  * 2
-
-FRAMES_IN_FLIGHT :: 3
-TARGET_FPS :: 240
-TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
-
-GL_MAJOR :: 4
-GL_MINOR :: 6
-
-POINT_SHADOW_MAP_SIZE  :: 512 * 2
-SUN_SHADOW_MAP_SIZE    :: 512 * 8
-
-Program_Mode :: enum {
-  GAME,
-  MENU,
-  EDIT,
-}
-
-Frame_Info :: struct {
-  fence: gl.sync_t,
-}
-
 State :: struct {
-  running:            bool,
-  mode:               Program_Mode,
+  running: bool,
+  mode: Program_Mode,
 
   gl_is_initialized:  bool,
 
-  window:             Window,
+  window: Window,
 
-  perm:               virtual.Arena,
-  perm_alloc:         mem.Allocator,
+  perm:       virtual.Arena,
+  perm_alloc: mem.Allocator,
 
-  camera:             Camera,
+  camera: Camera,
 
-  entities:           [dynamic]Entity,
-  point_lights:       [dynamic]Point_Light,
+  entities: [dynamic]Entity,
 
-  start_time:         time.Time,
+  point_lights: [dynamic]Point_Light,
+
+  start_time: time.Time,
 
   hdr_ms_buffer:      Framebuffer,
   post_buffer:        Framebuffer,
   ping_pong_buffers:  [2]Framebuffer,
-
   point_depth_buffer: Framebuffer,
 
-  fps:                f64,
-  frame_count:        uint,
-  frames:             [FRAMES_IN_FLIGHT]Frame_Info,
-  curr_frame_index:   int,
+  fps:              f64,
+  frame_count:      uint,
+  frames:           [FRAMES_IN_FLIGHT]Frame_Info,
+  curr_frame_index: int,
 
-  began_drawing:      bool,
+  began_drawing: bool,
 
-  draw_calls:         int,
+  draw_calls: int,
 
-  z_near:             f32,
-  z_far:              f32,
+  z_near: f32,
+  z_far:  f32,
 
-  sun:                Direction_Light,
-  sun_depth_buffer:   Framebuffer,
+  sun:              Direction_Light,
+  sun_depth_buffer: Framebuffer,
 
-  flashlight:         Spot_Light,
+  flashlight:Spot_Light,
 
-  sun_on:             bool,
-  flashlight_on:      bool,
-  point_lights_on:    bool,
+  sun_on:          bool,
+  flashlight_on:   bool,
+  point_lights_on: bool,
 
   // Could maybe replace this but this makes it easier to add them
-  shaders:            map[string]Shader_Program,
+  shaders: map[string]Shader_Program,
 
-  skybox:             Skybox,
+  skybox: Skybox,
 
-  frame_uniforms:     GPU_Buffer,
+  frame_uniforms: GPU_Buffer,
+
+  texture_handles:       GPU_Buffer,
+  texture_handles_count: int,
 
   // TODO: Maybe these should be pointers and not copies
-  current_shader:     Shader_Program,
-  current_material:   Material,
-  bound_textures:     [16]Texture,
+  current_shader:   Shader_Program,
+  current_material: Material,
+  bound_textures:   [16]Texture,
 
   // NOTE: Needed to make draw calls, even if not using one
   empty_vao:          u32,
@@ -99,10 +78,13 @@ State :: struct {
   input:              Input_State,
 
   draw_debug:   bool,
-  default_font:       Font,
+  default_font: Font,
 
-  bloom_on:           bool,
+  bloom_on: bool,
 }
+
+// NOTE: Global
+state: State
 
 init_state :: proc() -> (ok: bool) {
   state.start_time = time.now()
@@ -119,7 +101,6 @@ init_state :: proc() -> (ok: bool) {
   glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
   glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
   glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
-  // glfw.WindowHint(glfw.SAMPLES, 4) We render into our own buffer
 
   state.window.handle = glfw.CreateWindow(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H, WINDOW_DEFAULT_TITLE, nil, nil)
   if state.window.handle == nil {
@@ -148,6 +129,26 @@ init_state :: proc() -> (ok: bool) {
   glfw.SetScrollCallback(state.window.handle, mouse_scroll_callback)
 
   gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
+
+  //
+  // Query GL extensions
+  //
+  needed_extensions := []string {
+    "GL_ARB_shader_viewport_layer_array",
+    "GL_ARB_bindless_texture",
+  }
+
+  extension_count: i32
+  gl.GetIntegerv(gl.NUM_EXTENSIONS, &extension_count)
+  for i in 0..<extension_count {
+    have := gl.GetStringi(gl.EXTENSIONS, u32(i))
+
+    for need in needed_extensions {
+      if string(have) == need {
+        log.infof("Necessary GL extension: %v is supported!", need)
+      }
+    }
+  }
 
   gl.Enable(gl.MULTISAMPLE)
 
@@ -196,7 +197,7 @@ init_state :: proc() -> (ok: bool) {
   state.shaders["skybox"]        = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
   state.shaders["resolve_hdr"]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
   state.shaders["billboard"]     = make_shader_program("billboard.vert", "billboard.frag", allocator=state.perm_alloc) or_return
-  state.shaders["sun_depth"]     = make_shader_program("direction_shadow.vert", "direction_shadow.frag", allocator=state.perm_alloc) or_return
+  state.shaders["sun_depth"]     = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
   state.shaders["point_shadows"] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
   state.shaders["gaussian"]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
   state.shaders["get_bright"]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
@@ -238,7 +239,11 @@ init_state :: proc() -> (ok: bool) {
 
   state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
 
-  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_UBO), persistent = true)
+  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_UBO), persistent=true)
+
+  // For bindless textures!
+  state.texture_handles = make_gpu_buffer(.STORAGE, size_of(u64) * MAX_TEXTURE_HANDLES, persistent=true)
+  bind_gpu_buffer_base(state.texture_handles, .TEXTURES)
 
   cube_map_sides := [6]string{
     "skybox/right.jpg",
@@ -262,99 +267,6 @@ init_state :: proc() -> (ok: bool) {
 
   return true
 }
-
-begin_drawing :: proc() {
-  // This simple?
-  frame := &state.frames[state.curr_frame_index]
-  if frame.fence != nil {
-    gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, U64_MAX)
-    gl.DeleteSync(frame.fence)
-
-    frame.fence = nil
-  }
-
-  clear := WHITE
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
-
-  state.began_drawing = true
-}
-
-begin_main_pass :: proc() {
-  bind_framebuffer(state.hdr_ms_buffer)
-
-  gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-  gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
-
-  gl.Enable(gl.DEPTH_TEST)
-
-  gl.Enable(gl.CULL_FACE)
-  gl.CullFace(gl.BACK)
-
-  gl.Enable(gl.BLEND)
-  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-}
-
-begin_post_pass :: proc() {
-  gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-  gl.Disable(gl.DEPTH_TEST)
-
-  clear := BLACK
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
-}
-
-begin_ui_pass :: proc() {
-  // We draw straight to the screen in this case... maybe we want to do other stuff later
-  gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-
-  gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-
-  gl.Disable(gl.DEPTH_TEST)
-
-  gl.Enable(gl.BLEND)
-  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-  gl.Disable(gl.CULL_FACE)
-}
-
-// For now excludes transparent objects and the skybox
-begin_shadow_pass :: proc(framebuffer: Framebuffer) {
-  assert(framebuffer.depth_target.id > 0, "Framebuffer must have depth target for shadow mapping")
-  gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer.id)
-
-  x := 0
-  y := 0
-  width  := framebuffer.depth_target.width
-  height := framebuffer.depth_target.height
-
-  gl.Viewport(i32(x), i32(y), i32(width), i32(height))
-  gl.Clear(gl.DEPTH_BUFFER_BIT)
-  gl.Enable(gl.DEPTH_TEST)
-  gl.Enable(gl.CULL_FACE)
-  gl.CullFace(gl.FRONT) // Peter-panning fix for shadow bias
-}
-
-flush_drawing :: proc() {
-
-  // Remember to flush the remaining portion
-  immediate_frame_flush()
-
-  // And set up for next frame
-  frame := &state.frames[state.curr_frame_index]
-  frame.fence = gl.FenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-  state.curr_frame_index = (state.curr_frame_index + 1) % FRAMES_IN_FLIGHT
-
-  state.began_drawing = false
-  state.draw_calls = 0
-
-  glfw.SwapBuffers(state.window.handle)
-}
-
-// NOTE: Global
-state: State
 
 main :: proc() {
   logger := log.create_console_logger()
@@ -697,6 +609,9 @@ main :: proc() {
           gl.COLOR_BUFFER_BIT,
           gl.LINEAR)
 
+        //
+        // Bloom
+        //
         if state.bloom_on {
           // Now collect bright spots
           bind_framebuffer(state.post_buffer)
@@ -724,7 +639,9 @@ main :: proc() {
           }
         }
 
+        //
         // Resolve hdr (with bloom) to backbuffer
+        //
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
         bind_shader_program(state.shaders["resolve_hdr"])
         bind_texture(state.post_buffer.color_targets[0], "screen_texture")
@@ -738,6 +655,7 @@ main :: proc() {
       }
 
       if state.draw_debug {
+        // Gets draw to backbuffer
         begin_ui_pass()
         draw_debug_stats()
       }

@@ -478,6 +478,7 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
 
   set_shader_uniform("mul_color", mul_color)
 
+
   for mesh in model.meshes {
     bind_material(model.materials[mesh.material_index])
 

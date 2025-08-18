@@ -82,14 +82,12 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
   camera_forward, _, camera_right := get_camera_axes(camera^)
 
-  ground_forward := normalize0(vec3{camera_forward.x, 0, camera_forward.z})
-
   // Z, forward
   if key_down(.W) {
-    wish_dir += ground_forward
+    wish_dir += camera_forward
   }
   if key_down(.S) {
-    wish_dir -= ground_forward
+    wish_dir -= camera_forward
   }
   // X, strafe
   if key_down(.D) {
@@ -270,7 +268,10 @@ get_view :: proc(position, forward, up: vec3) -> (view: mat4) {
 }
 
 camera_world_aabb :: proc(c: Camera) -> AABB {
-  world_aabb := transform_aabb(c.aabb, c.position, vec3{0,0,0}, vec3{1,1,1})
+  world_aabb: AABB = {
+    min = c.aabb.min + c.position,
+    max = c.aabb.max + c.position,
+  }
 
   return world_aabb
 }

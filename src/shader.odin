@@ -50,7 +50,8 @@ Uniform :: struct {
 }
 
 UBO_Bind :: enum u32 {
-  FRAME = 0,
+  FRAME    = 0,
+  TEXTURES = 1,
 }
 
 MAX_POINT_LIGHTS :: 12
@@ -91,7 +92,7 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
 
         include_code, file_ok := os.read_entire_file(rel_path, context.temp_allocator)
         if !file_ok {
-          log.error("Couldn't read shader file: %s, for include", rel_path)
+          log.errorf("Couldn't read shader file: %s, for include", rel_path)
           ok = false
           return
         }
@@ -118,8 +119,8 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
   if success == 0 {
     info: [512]u8
     gl.GetShaderInfoLog(u32(shader), 512, nil, &info[0])
-    log.error("Error compiling shader:\n%s\n", string(info[:]))
-    log.error("%s", with_include)
+    log.errorf("Error compiling shader:\n%s\n", string(info[:]))
+    log.errorf("%s", with_include)
     ok = false
     return
   }
@@ -134,7 +135,7 @@ make_shader_from_file :: proc(file_name: string, type: Shader_Type, prepend_comm
 
   source, file_ok := os.read_entire_file(rel_path, context.temp_allocator)
   if !file_ok {
-    log.error("Couldn't read shader file: %s", rel_path)
+    log.errorf("Couldn't read shader file: %s", rel_path)
     ok = false
     return
   }
@@ -163,7 +164,7 @@ make_shader_program :: proc(vert_path, frag_path: string, allocator := context.a
   if success == 0 {
     info: [512]u8
     gl.GetProgramInfoLog(program.id, 512, nil, &info[0])
-    log.error("Error linking shader program:\n%s", string(info[:]))
+    log.errorf("Error linking shader program:\n%s", string(info[:]))
     ok = false
     return
   }
@@ -247,7 +248,7 @@ set_shader_uniform :: proc(name: string, value: $T,
   assert(state.current_shader.id == program.id)
 
   if name in program.uniforms {
-    when T == i32 || T == int || T == bool{
+    when T == i32 || T == int || T == bool {
       gl.Uniform1i(program.uniforms[name].location, i32(value))
     } else when T == f32 {
       gl.Uniform1f(program.uniforms[name].location, value)

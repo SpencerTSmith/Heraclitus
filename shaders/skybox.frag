@@ -1,10 +1,10 @@
 #version 450 core
 
+#include "include.glsl"
+
 in VS_OUT {
   vec3 uvw;
 } fs_in;
-
-#include "include.glsl"
 
 layout(binding = 0) uniform samplerCube skybox;
 
