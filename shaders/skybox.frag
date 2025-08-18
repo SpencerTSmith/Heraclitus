@@ -1,6 +1,6 @@
 #version 450 core
 
-#include "include.glsl"
+#include "generated.glsl"
 
 in VS_OUT {
   vec3 uvw;

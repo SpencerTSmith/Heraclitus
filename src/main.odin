@@ -163,6 +163,8 @@ init_state :: proc() -> (ok: bool) {
   gl.Enable(gl.STENCIL_TEST)
   gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE)
 
+  gen_glsl_code()
+
   state.gl_is_initialized = true
 
   err := virtual.arena_init_growing(&state.perm)
@@ -239,7 +241,7 @@ init_state :: proc() -> (ok: bool) {
 
   state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
 
-  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_UBO), persistent=true)
+  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), persistent=true)
 
   // For bindless textures!
   state.texture_handles = make_gpu_buffer(.STORAGE, size_of(u64) * MAX_TEXTURE_HANDLES, persistent=true)
@@ -435,14 +437,14 @@ main :: proc() {
       }
 
       // Move da point lights around
-      seconds := seconds_since_start()
-      if state.point_lights_on {
-        for &pl in state.point_lights {
-          pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-          pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-          pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-        }
-      }
+      // seconds := seconds_since_start()
+      // if state.point_lights_on {
+      //   for &pl in state.point_lights {
+      //     pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+      //     pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+      //     pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+      //   }
+      // }
     }
     if state.mode == .EDIT {
       move_camera_edit(&state.camera, dt_s)
@@ -457,7 +459,7 @@ main :: proc() {
 
     projection := get_camera_perspective(state.camera)
     view       := get_camera_view(state.camera)
-    frame_ubo: Frame_UBO = {
+    frame_ubo: Frame_Uniform = {
       projection      = projection,
       view            = view,
       proj_view       = projection * view,
@@ -467,18 +469,16 @@ main :: proc() {
       z_far           = state.z_far,
 
       // And the lights
-      lights = {
-        direction = direction_light_uniform(state.sun) if state.sun_on else {},
-        spot      = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
-      },
+      sun_light   = direction_light_uniform(state.sun) if state.sun_on else {},
+      flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
     }
     if state.point_lights_on {
       for pl, idx in state.point_lights {
         if idx >= MAX_POINT_LIGHTS {
           log.error("TOO MANY POINT LIGHTS!")
         } else {
-          frame_ubo.lights.points[idx] = point_light_uniform(pl)
-          frame_ubo.lights.points_count += 1
+          frame_ubo.point_lights[idx] = point_light_uniform(pl)
+          frame_ubo.points_count += 1
         }
       }
     }

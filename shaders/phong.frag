@@ -1,6 +1,6 @@
 #version 450 core
 
-#include "include.glsl"
+#include "generated.glsl"
 
 in VS_OUT {
   vec2 uv;
@@ -68,7 +68,7 @@ float attenuation(vec3 light_pos, float light_radius, vec3 frag_pos) {
   return smoothstep(0.0, 1.0, falloff);
 }
 
-vec3 spot_phong(Spot_Light light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
+vec3 spot_phong(Spot_Light_Uniform light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
                      vec3 normal, vec3 view_direction, vec3 frag_position) {
 
 	vec3 light_direction = normalize(light.position.xyz - frag_position);
@@ -93,7 +93,7 @@ vec3 spot_phong(Spot_Light light, vec3 diffuse_sample, vec3 specular_sample, flo
 	return clamp(phong, 0.0, 1.0);
 }
 
-vec3 direction_phong(Direction_Light light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
+vec3 direction_phong(Direction_Light_Uniform light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
                           vec3 normal, vec3 view_direction) {
 	vec3 light_direction = normalize(-light.direction.xyz);
 
@@ -109,7 +109,7 @@ vec3 direction_phong(Direction_Light light, vec3 diffuse_sample, vec3 specular_s
 	return clamp(phong, 0.0, 1.0);
 }
 
-vec3 point_phong(Point_Light light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
+vec3 point_phong(Point_Light_Uniform light, vec3 diffuse_sample, vec3 specular_sample, float shininess,
                       vec3 normal, vec3 view_direction, vec3 frag_position) {
 	vec3 light_direction = normalize(light.position.xyz - frag_position);
 
@@ -265,8 +265,8 @@ void main() {
   vec3 ambient = vec3(0.02); // Little bit of global ambient
 
   vec3 all_point_phong = vec3(0.0);
-  for (int i = 0; i < frame.lights.points_count; i++) {
-    Point_Light light = frame.lights.points[i];
+  for (int i = 0; i < frame.points_count; i++) {
+    Point_Light_Uniform light = frame.point_lights[i];
     float distance    = length(light.position.xyz - fs_in.world_position);
 
     if (distance < light.radius) {
@@ -283,19 +283,19 @@ void main() {
     }
   }
 
-  vec3 direction_phong = direction_phong(frame.lights.direction, diffuse_sample, specular_sample, mat_shininess,
+  vec3 direction_phong = direction_phong(frame.sun_light, diffuse_sample, specular_sample, mat_shininess,
                                           normal, view_direction);
 
-  float shadow = 1.0 - sun_shadow(sun_shadow_map, fs_in.sun_space_position, -frame.lights.direction.direction.xyz, normal);
+  float shadow = 1.0 - sun_shadow(sun_shadow_map, fs_in.sun_space_position, -frame.sun_light.direction.xyz, normal);
 
   direction_phong *= shadow;
 
-  ambient += phong_ambient(frame.lights.direction.ambient, frame.lights.direction.color.xyz);
+  ambient += phong_ambient(frame.sun_light.ambient, frame.sun_light.color.xyz);
 
-  vec3 spot_phong = spot_phong(frame.lights.spot, diffuse_sample, specular_sample, mat_shininess,
+  vec3 spot_phong = spot_phong(frame.flash_light, diffuse_sample, specular_sample, mat_shininess,
                                     normal, view_direction, fs_in.world_position);
 
-  ambient += phong_ambient(frame.lights.spot.ambient, frame.lights.spot.color.xyz);
+  ambient += phong_ambient(frame.flash_light.ambient, frame.flash_light.color.xyz);
 
   ambient *= diffuse_sample;
 

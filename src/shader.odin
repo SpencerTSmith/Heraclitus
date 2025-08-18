@@ -7,7 +7,7 @@ import "core:path/filepath"
 
 import gl "vendor:OpenGL"
 
-SHADER_DIR :: "shaders"
+SHADER_DIR :: "shaders" + PATH_SLASH
 
 Shader_Type :: enum u32 {
   VERT = gl.VERTEX_SHADER,
@@ -47,31 +47,6 @@ Uniform :: struct {
   location: i32,
   size:     i32,
   binding:  i32,
-}
-
-UBO_Bind :: enum u32 {
-  FRAME    = 0,
-  TEXTURES = 1,
-}
-
-MAX_POINT_LIGHTS :: 12
-Frame_UBO :: struct {
-  projection:      mat4,
-  orthographic:    mat4,
-  view:            mat4,
-  proj_view:       mat4,
-  camera_position: vec4,
-  z_near:          f32,
-  z_far:           f32,
-  scene_extents:   vec4,
-
-  // Frame
-  lights: struct {
-    direction:    Direction_Light_Uniform,
-    points:       [MAX_POINT_LIGHTS]Point_Light_Uniform,
-    points_count: u32,
-    spot:         Spot_Light_Uniform,
-  },
 }
 
 make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: Shader, ok: bool) {

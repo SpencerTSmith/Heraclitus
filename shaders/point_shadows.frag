@@ -1,6 +1,6 @@
 #version 450 core
 
-#include "include.glsl"
+#include "generated.glsl"
 
 in VS_OUT {
   vec4 world_position;
@@ -17,7 +17,7 @@ void main() {
     discard;
   }
 
-  Point_Light light = frame.lights.points[fs_in.light_index];
+  Point_Light_Uniform light = frame.point_lights[fs_in.light_index];
 
   // get distance between fragment and light source
   float light_dist = length(fs_in.world_position.xyz - light.position.xyz);

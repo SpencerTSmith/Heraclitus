@@ -21,7 +21,7 @@ GPU_Buffer_Type :: enum {
 }
 
 // NOTE: Fat struct... too much voodoo?
-GPU_Buffer :: struct {
+GPU_Buffer :: struct #no_copy {
   id:         u32,
   type:       GPU_Buffer_Type,
   mapped:     rawptr,
@@ -57,11 +57,7 @@ make_vertex_vao :: proc($vert_type: typeid) -> u32 {
   type_info := type_info_of(vert_type)
 
   if reflect.is_struct(type_info) {
-    field_count := reflect.struct_field_count(vert_type)
-
-    for i in 0..<field_count {
-      field := reflect.struct_field_at(vert_type, i)
-
+    for field, i in reflect.struct_fields_zipped(vert_type) {
       field_gl_type: u32
       field_length := 1
 
@@ -114,9 +110,9 @@ make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count:
 
   buffer.index_offset = vertex_length_align
 
-  gl.VertexArrayVertexBuffer(u32(vao), 0, buffer.id, 0, i32(size_of(vertex_type)))
+  gl.VertexArrayVertexBuffer(vao, 0, buffer.id, 0, i32(size_of(vertex_type)))
   if index_count > 0 {
-    gl.VertexArrayElementBuffer(u32(vao), buffer.id)
+    gl.VertexArrayElementBuffer(vao, buffer.id)
   }
 
   write_gpu_buffer(buffer, 0, vertex_length, vertex_data)

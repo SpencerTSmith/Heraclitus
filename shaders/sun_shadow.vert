@@ -1,6 +1,6 @@
 #version 450 core
 
-#include "include.glsl"
+#include "generated.glsl"
 
 layout(location = 0) in vec3 vert_position;
 layout(location = 1) in vec2 vert_uv;
@@ -12,7 +12,7 @@ out VS_OUT {
 uniform mat4 model;
 
 void main() {
-  mat4 proj_view = frame.lights.direction.proj_view;
+  mat4 proj_view = frame.sun_light.proj_view;
 
   vs_out.uv = vert_uv;
 

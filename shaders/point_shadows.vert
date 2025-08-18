@@ -2,7 +2,7 @@
 
 // So don't have to deal with geometry shader nonsense
 #extension GL_ARB_shader_viewport_layer_array : enable
-#include "include.glsl"
+#include "generated.glsl"
 
 layout(location = 0) in vec3 vert_position;
 layout(location = 1) in vec2 vert_uv;
@@ -21,7 +21,7 @@ uniform mat4 model;
 void main() {
   int face_index = gl_InstanceID;
 
-  Point_Light light = frame.lights.points[light_index];
+  Point_Light_Uniform light = frame.point_lights[light_index];
 
   mat4 proj_view = light.proj_views[face_index];
 

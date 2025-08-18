@@ -139,6 +139,7 @@ begin_drawing :: proc() {
   }
 
   clear := WHITE
+  gl.ClearNamedFramebufferfv(0,                             gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
@@ -166,6 +167,7 @@ begin_post_pass :: proc() {
   gl.Disable(gl.DEPTH_TEST)
 
   clear := BLACK
+  gl.ClearNamedFramebufferfv(0,                             gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
   gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))

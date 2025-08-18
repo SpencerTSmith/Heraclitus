@@ -1,6 +1,6 @@
 #version 450 core
 
-#include "include.glsl"
+#include "generated.glsl"
 
 layout(location = 0) in vec3 vert_position;
 layout(location = 1) in vec2 vert_uv;
@@ -22,7 +22,7 @@ void main() {
 
   vs_out.world_position = vec3(model * vec4(vert_position, 1.0));
 
-  mat4 sun_proj_view = frame.lights.direction.proj_view;
+  mat4 sun_proj_view = frame.sun_light.proj_view;
   vs_out.sun_space_position = sun_proj_view * vec4(vs_out.world_position, 1.0);
 
   // FIXME: slow, probably
