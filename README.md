@@ -16,6 +16,8 @@
 - Switch fully to PBR lighting model
 
 # Complete:
+- Cool GLSL metaprogramming
+    - Generate GLSL code that needs to match up with host code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
 - AABB basic collision detection and response
 - Quake-like player-movement (Bunny-hopping, wall-running, strafe-jumping)
 - AZDO OpenGL techniques:
