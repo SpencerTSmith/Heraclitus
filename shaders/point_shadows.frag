@@ -8,11 +8,10 @@ in VS_OUT {
   flat int  light_index;
 } fs_in;
 
-
-layout(binding = 0) uniform sampler2D mat_diffuse;
+uniform int mat_diffuse_idx;
 
 void main() {
-  float alpha = texture(mat_diffuse, fs_in.uv).a;
+  float alpha = bindless_sample(mat_diffuse_idx, fs_in.uv).a;
 
   if (alpha < 0.5) {
     discard;

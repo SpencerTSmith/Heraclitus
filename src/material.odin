@@ -172,10 +172,6 @@ bind_material :: proc(material: Material) {
 
     // NOTE: We are bindless with materials now!
     // So we just send over indexes
-    // bind_texture(diffuse^,  "mat_diffuse")
-    // bind_texture(specular^, "mat_specular")
-    // bind_texture(emissive^, "mat_emissive")
-    // bind_texture(normal^,   "mat_normal")
 
     set_shader_uniform("mat_diffuse_idx",  diffuse.index)
     set_shader_uniform("mat_specular_idx", specular.index)

@@ -9,8 +9,6 @@ in VS_OUT {
   vec2 uv;
 } fs_in;
 
-uniform mat4 model;
-
 uniform int mat_diffuse_idx;
 
 void main() {
