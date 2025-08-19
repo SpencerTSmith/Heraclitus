@@ -1,5 +1,9 @@
 package main
 
+import "core:log"
+
+import "vendor:glfw"
+
 Camera :: struct {
   position:   vec3,
   velocity:   vec3,
@@ -18,6 +22,8 @@ Camera :: struct {
 }
 
 update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
+  glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
+
   x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
   y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
 
@@ -38,7 +44,12 @@ update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
 }
 
 move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
-  update_camera_look(camera, dt_s)
+  if mouse_down(.MIDDLE) {
+    update_camera_look(camera, dt_s)
+  } else {
+    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
+  }
+
   input_direction: vec3
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
@@ -203,6 +214,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   camera.on_ground = false
   for e in state.entities {
     if .HAS_COLLISION not_in e.flags { continue }
+
     entity_aabb := entity_world_aabb(e)
 
     if aabbs_intersect(wish_cam_aabb, entity_aabb) {

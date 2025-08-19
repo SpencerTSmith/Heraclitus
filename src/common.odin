@@ -46,12 +46,13 @@ WORLD_UP      :: vec3{0.0, 1.0,  0.0}
 WORLD_RIGHT   :: vec3{1.0, 0.0,  0.0}
 WORLD_FORWARD :: vec3{0.0, 0.0, -1.0}
 
-RED   :: vec4{1.0, 0.0, 0.0,  1.0}
-GREEN :: vec4{0.0, 1.0, 0.0,  1.0}
-BLUE  :: vec4{0.0, 0.0, 1.0,  1.0}
-CORAL :: vec4{1.0, 0.5, 0.31, 1.0}
-BLACK :: vec4{0.0, 0.0, 0.0,  1.0}
-WHITE :: vec4{1.0, 1.0, 1.0,  1.0}
+RED    :: vec4{1.0, 0.0, 0.0,  1.0}
+GREEN  :: vec4{0.0, 1.0, 0.0,  1.0}
+BLUE   :: vec4{0.0, 0.0, 1.0,  1.0}
+YELLOW :: vec4{1.0, 1.0, 0.0,  1.0}
+CORAL  :: vec4{1.0, 0.5, 0.31, 1.0}
+BLACK  :: vec4{0.0, 0.0, 0.0,  1.0}
+WHITE  :: vec4{1.0, 1.0, 1.0,  1.0}
 
 LEARN_OPENGL_BLUE   :: vec4{0.2, 0.3, 0.3, 1.0}
 LEARN_OPENGL_ORANGE :: vec4{1.0, 0.5, 0.2, 1.0}

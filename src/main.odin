@@ -197,14 +197,13 @@ init_state :: proc() -> (ok: bool) {
   state.shaders["phong"]         = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
   state.shaders["skybox"]        = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
   state.shaders["resolve_hdr"]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
-  state.shaders["billboard"]     = make_shader_program("billboard.vert", "billboard.frag", allocator=state.perm_alloc) or_return
   state.shaders["sun_depth"]     = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
   state.shaders["point_shadows"] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
   state.shaders["gaussian"]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
   state.shaders["get_bright"]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
 
   state.sun = {
-    direction = {-0.5, -1.0,  0.7},
+    direction = {0.5, -1.0,  0.7},
     color     = { 0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
     ambient   = 0.05,
@@ -299,7 +298,12 @@ main :: proc() {
   if !init_state() do return
   defer free_state()
 
-  block := make_entity("cube/BoxTextured.gltf", position={0, -2, -20}, scale={10.0, 10.0, 10.0})
+  for pos in DEFAULT_MODEL_POSITIONS {
+    block := make_entity("cube/BoxTextured.gltf", position=pos - {20,0,30})
+    append(&state.entities, block)
+  }
+
+  block := make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
   append(&state.entities, block)
 
   floor := make_entity("cube/BoxTextured.gltf", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
@@ -311,13 +315,10 @@ main :: proc() {
   duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
   append(&state.entities, duck2)
 
-  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  append(&state.entities, helmet)
-
-  helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={5.0, 0.0, 0.0})
+  helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
   append(&state.entities, helmet2)
 
-  guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 0.0}, scale={0.01, 0.01, 0.01})
+  guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
   append(&state.entities, guitar)
 
   sponza := make_entity("sponza/Sponza.gltf", flags={.HAS_RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
@@ -347,8 +348,11 @@ main :: proc() {
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
-  chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-  append(&state.entities, chess)
+  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  // append(&state.entities, helmet)
+
+  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+  // append(&state.entities, chess)
 
   // NOTE: Just for doing little billboards for the point lights
   light_texture,_ := make_texture("data/textures/point_light.png", nonlinear_color=true)
@@ -436,14 +440,14 @@ main :: proc() {
       }
 
       // Move da point lights around
-      // seconds := seconds_since_start()
-      // if state.point_lights_on {
-      //   for &pl in state.point_lights {
-      //     pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-      //     pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      //     pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-      //   }
-      // }
+      seconds := seconds_since_start()
+      if state.point_lights_on {
+        for &pl in state.point_lights {
+          pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+          pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+          pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+        }
+      }
     }
     if state.mode == .EDIT {
       move_camera_edit(&state.camera, dt_s)
@@ -486,7 +490,9 @@ main :: proc() {
 
     // What to draw based on mode
     switch state.mode {
-    case .EDIT: fallthrough
+    case .EDIT:
+      draw_editor_ui()
+      fallthrough
     case .GAME:
       if state.sun_on {
         begin_shadow_pass(sun_depth_buffer)
@@ -569,7 +575,7 @@ main :: proc() {
           }
         }
 
-        // Draw point light billboards
+        // Draw point light billboards, and radius spheres if debug vis on
         if state.point_lights_on {
           for l in state.point_lights {
             if state.draw_debug {

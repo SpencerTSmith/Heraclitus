@@ -199,6 +199,19 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE,
   }
 }
 
+DEFAULT_TEXT_BACKGROUND :: vec4{0.0, 0.0, 0.0, 0.7}
+
+// FIXME: Lots of duplicated running through the text string and counting up the sizes
+draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE, align: Text_Alignment = .LEFT,
+                                  padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) {
+  box_width, box_height := text_draw_size(text, font)
+
+  x_start := align_text_start_x(text, font, x, align)
+
+  immediate_quad({x_start - padding, y - padding - box_height * 0.6}, box_width + padding * 2, box_height + padding, background_color)
+  draw_text(text, font, x, y, text_color, align)
+}
+
 free_font :: proc(font: ^Font) {
   free_texture(&font.atlas)
 }

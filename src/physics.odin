@@ -1,10 +1,16 @@
 package main
 
+import "core:log"
+
 // Hmm might go union route for this?
 // Physics_Hull :: union {
 //   AABB,
 //   Sphere,
 // }
+
+// NOTE: Lots of this comes straight from the book Real-Time Collision Detection
+
+PHYSICS_EPSILON :: 0.00001
 
 AABB :: struct {
   min: vec3,
@@ -14,6 +20,64 @@ AABB :: struct {
 Sphere :: struct {
   center: vec3,
   radius: f32,
+}
+
+Ray :: struct {
+  origin:    vec3,
+  direction: vec3, // Normalized
+}
+
+// Normalizes direction for you
+make_ray :: proc(origin: vec3, direction: vec3) -> (ray: Ray) {
+  ray = {
+    origin    = origin,
+    direction = normalize0(direction),
+  }
+
+  return ray
+}
+
+// An 3D AABB is an intersection of 3 'Slabs' really, so we just test if the ray overlaps
+// ALL 3 'Slabs'
+ray_intersects_aabb :: proc(ray: Ray, box: AABB) -> (intersects: bool, t_min: f32, point: vec3) {
+  t_max := F32_MAX // NOTE: Infinite ray
+  t_min  = 0.0
+
+  for i in 0..<3 {
+    // Ray is parallel to this axis (element is 0)
+    if abs(ray.direction[i]) < PHYSICS_EPSILON {
+
+      // If the ray is a parallel to an axis and the origin is not in the box, we know
+      // the ray can't possible intersect ever
+      if ray.origin[i] < box.min[i] || ray.origin[i] > box.max[i] {
+        log.info("Sometimes parallel")
+        return false, t_min, {}
+      }
+    } else {
+      inverse_dir := 1.0 / ray.direction[i]
+
+      t1 := (box.min[i] - ray.origin[i]) * inverse_dir
+      t2 := (box.max[i] - ray.origin[i]) * inverse_dir
+
+      // Swap if needed so that t1 is the intersection with the nearest plane,
+      // and t2 is with farthest
+      if t1 > t2 {
+        t1, t2 = t2, t1
+      }
+
+      if t1 > t_min { t_min = t1 }
+      if t2 < t_max { t_max = t2 } // Dang typo in the book, but makes sense... wanting to shrink the interval, not let it grow
+
+      // We don't intersect anymore
+      if t_min > t_max {
+        log.info("AHHHHHHHHH")
+        return false, t_min, {}
+      }
+    }
+  }
+
+  point = ray.origin + ray.direction * t_min
+  return true, t_min, point
 }
 
 draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE) {
