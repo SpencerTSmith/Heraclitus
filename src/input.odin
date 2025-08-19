@@ -230,6 +230,7 @@ poll_input_state :: proc(dt_s: f64) {
 }
 
 // TODO: There's definitely a way to condense the mouse_* and key_* funcs to one
+
 key_released :: proc(key: Key) -> bool {
   info := state.input.keys[key]
 
@@ -312,6 +313,10 @@ mouse_scrolled_up :: proc() -> bool {
 
 mouse_scrolled_down :: proc() -> bool {
   return state.input.mouse.delta_scroll.y < 0
+}
+
+mouse_position :: proc() -> (x, y: f32) {
+  return cast(f32) state.input.mouse.curr_pos.x, cast(f32) state.input.mouse.curr_pos.y
 }
 
 // NOTE: Do not look behind this curtain, ugly ugly ugly,

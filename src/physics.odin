@@ -1,7 +1,5 @@
 package main
 
-import "core:log"
-
 // Hmm might go union route for this?
 // Physics_Hull :: union {
 //   AABB,
@@ -50,7 +48,6 @@ ray_intersects_aabb :: proc(ray: Ray, box: AABB) -> (intersects: bool, t_min: f3
       // If the ray is a parallel to an axis and the origin is not in the box, we know
       // the ray can't possible intersect ever
       if ray.origin[i] < box.min[i] || ray.origin[i] > box.max[i] {
-        log.info("Sometimes parallel")
         return false, t_min, {}
       }
     } else {
@@ -70,7 +67,6 @@ ray_intersects_aabb :: proc(ray: Ray, box: AABB) -> (intersects: bool, t_min: f3
 
       // We don't intersect anymore
       if t_min > t_max {
-        log.info("AHHHHHHHHH")
         return false, t_min, {}
       }
     }

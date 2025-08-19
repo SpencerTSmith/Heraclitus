@@ -94,6 +94,7 @@ radians :: glsl.radians
 vmin :: glsl.min
 vmax :: glsl.max
 
+inverse           :: glsl.inverse
 inverse_transpose :: glsl.inverse_transpose
 
 mat4_translate :: glsl.mat4Translate

@@ -1,7 +1,5 @@
 package main
 
-import "core:log"
-
 import "vendor:glfw"
 
 Camera :: struct {
@@ -41,47 +39,6 @@ update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
 
   CAMERA_ZOOM_SPEED :: 10.0
   camera.curr_fov_y = lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
-}
-
-move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
-  if mouse_down(.MIDDLE) {
-    update_camera_look(camera, dt_s)
-  } else {
-    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
-  }
-
-  input_direction: vec3
-
-  camera_forward, camera_up, camera_right := get_camera_axes(camera^)
-
-  // Z, forward
-  if key_down(.W) {
-    input_direction += camera_forward
-  }
-  if key_down(.S) {
-    input_direction -= camera_forward
-  }
-
-  // Y, vertical
-  if key_down(.SPACE) {
-    input_direction += camera_up
-  }
-  if key_down(.LEFT_CONTROL) {
-    input_direction -= camera_up
-  }
-
-  // X, strafe
-  if key_down(.D) {
-    input_direction += camera_right
-  }
-  if key_down(.A) {
-    input_direction -= camera_right
-  }
-
-  FREECAM_SPEED :: 35.0
-  camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
-  camera.velocity  = {0,0,0}
-  camera.on_ground = false
 }
 
 move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
