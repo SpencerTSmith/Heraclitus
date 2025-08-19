@@ -59,6 +59,8 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
   }
 
+  dt_s := f32(dt_s)
+
   input_direction: vec3
 
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
@@ -87,11 +89,29 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
+  // Pick entity
   if mouse_pressed(.LEFT) {
     x, y := mouse_position()
     editor.selected_entity = pick_entity(x, y, camera^)
   }
 
+  // Manipulate picked entity
+  if editor.selected_entity != nil {
+    EDITOR_PICKED_MOVE_SPEED :: 10.0
+
+    if key_down(.LEFT) {
+      editor.selected_entity.position.x -= EDITOR_PICKED_MOVE_SPEED * dt_s
+    }
+    if key_down(.RIGHT) {
+      editor.selected_entity.position.x += EDITOR_PICKED_MOVE_SPEED * dt_s
+    }
+    if key_down(.UP) {
+      editor.selected_entity.position.z -= EDITOR_PICKED_MOVE_SPEED * dt_s
+    }
+    if key_down(.DOWN) {
+      editor.selected_entity.position.z += EDITOR_PICKED_MOVE_SPEED * dt_s
+    }
+  }
 
   FREECAM_SPEED :: 35.0
   camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
