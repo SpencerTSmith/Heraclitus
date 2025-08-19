@@ -44,6 +44,7 @@ pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity
     if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes {
       // Get the closest entity
       if t_min < closest_t {
+        closest_t = t_min
         entity = &e
       }
     }
@@ -92,12 +93,21 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   // Pick entity
   if mouse_pressed(.LEFT) {
     x, y := mouse_position()
-    editor.selected_entity = pick_entity(x, y, camera^)
+
+    // Lets you 'unclick' an entity
+    if editor.selected_entity == nil {
+      editor.selected_entity = pick_entity(x, y, camera^)
+    } else {
+      editor.selected_entity = nil
+    }
   }
 
   // Manipulate picked entity
   if editor.selected_entity != nil {
     EDITOR_PICKED_MOVE_SPEED :: 10.0
+
+    // TODO: Think about if these should be relative to the camera's axes or to the world axes?
+    // But won't matter as much once we get more sophisticated widgets and ui
 
     if key_down(.LEFT) {
       editor.selected_entity.position.x -= EDITOR_PICKED_MOVE_SPEED * dt_s
@@ -105,11 +115,22 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     if key_down(.RIGHT) {
       editor.selected_entity.position.x += EDITOR_PICKED_MOVE_SPEED * dt_s
     }
-    if key_down(.UP) {
-      editor.selected_entity.position.z -= EDITOR_PICKED_MOVE_SPEED * dt_s
-    }
-    if key_down(.DOWN) {
-      editor.selected_entity.position.z += EDITOR_PICKED_MOVE_SPEED * dt_s
+
+    if key_down(.LEFT_SHIFT) {
+      if key_down(.UP) {
+        editor.selected_entity.position.z -= EDITOR_PICKED_MOVE_SPEED * dt_s
+      }
+      if key_down(.DOWN) {
+        editor.selected_entity.position.z += EDITOR_PICKED_MOVE_SPEED * dt_s
+      }
+    } else {
+      if key_down(.UP) {
+        editor.selected_entity.position.y += EDITOR_PICKED_MOVE_SPEED * dt_s
+      }
+      if key_down(.DOWN) {
+        editor.selected_entity.position.y -= EDITOR_PICKED_MOVE_SPEED * dt_s
+      }
+
     }
   }
 
@@ -125,5 +146,5 @@ draw_editor_ui :: proc() {
   x := f32(state.window.w) * 0.5
   y := f32(state.window.h) - f32(state.window.h) * 0.05
 
-  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW, align=.CENTER, padding=5.0)
+  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 1.5, align=.CENTER, padding=5.0)
 }
