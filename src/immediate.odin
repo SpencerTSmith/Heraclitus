@@ -12,7 +12,7 @@ Immediate_Vertex :: struct {
   color:    vec4,
 }
 
-// NOTE: When an immediate_* function takes in a vec2 for position it usually means its in screen coords
+// NOTE: When an immediate_* function takes in a vec2 for position it means its in screen coords
 // When taking in a vec3 for position its in world space
 
 Immediate_Mode :: enum {
@@ -145,9 +145,12 @@ immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   immediate.curr_batch.vertex_count += 1
 }
 
-// NOTE: A quad so takes in screen coordinates!
-// maybe in future it can be a 3d quad in world space
-immediate_quad :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
+immediate_quad :: proc {
+  immediate_quad_2D,
+  immediate_quad_3D,
+}
+
+immediate_quad_2D :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
                        uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
                        texture: Texture = immediate.white_texture) {
   wish_mode  := Immediate_Mode.TRIANGLES
@@ -183,6 +186,12 @@ immediate_quad :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
   immediate_vertex(top_right.position, top_right.color, top_right.uv)
   immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
+}
+
+immediate_quad_3D :: proc(xyz: vec3, w, h: f32, rgba: vec4 = WHITE,
+                          uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
+                          texture: Texture = immediate.white_texture) {
+
 }
 
 // NOTE: Hardcoded to billboard towards the camera for now

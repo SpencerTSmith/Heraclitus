@@ -75,49 +75,19 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
+
+  if key_pressed(.SPACE) && camera.on_ground {
+    camera.velocity.y = 15.0
+    camera.on_ground  = false
+  }
+
   wish_dir.y = 0
   wish_dir = normalize0(wish_dir)
 
   //
-  // Accelerate!
-  //
-  MAX_SPEED :: 40.0
-  MAX_AIR_SPEED :: 30.0
-  if length(wish_dir) > 0 {
-    // How fast are we going in the direction we want to go?
-    curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
-
-    if !camera.on_ground && curr_speed_in_wish_dir > MAX_AIR_SPEED {
-      curr_speed_in_wish_dir = MAX_AIR_SPEED
-    }
-
-    // How much to get to max speed from current speed?
-    add_speed := MAX_SPEED - curr_speed_in_wish_dir
-
-    // If we have room to grow in speed?
-    if add_speed > 0 {
-      GROUND_ACCELERATION :: 10.0
-      AIR_ACCELERATION    :: 4.0
-
-      factor: f32 = GROUND_ACCELERATION if camera.on_ground else AIR_ACCELERATION
-
-      accel_speed := factor * MAX_SPEED * dt_s
-
-      // If we can accelerate to more in this step than max, then just add only enough to get to max
-      if accel_speed > add_speed {
-        accel_speed = add_speed
-      }
-
-      acceleration := wish_dir * accel_speed
-
-      camera.velocity += acceleration
-    }
-  }
-
-  //
   // Friction, none in air to allow strafe jumping!
   //
-  GROUND_FRICTION :: 6.0
+  GROUND_FRICTION :: 8.0
   AIR_FRICTION    :: 0.0
   friction: f32 = GROUND_FRICTION if camera.on_ground else AIR_FRICTION
   speed := length(camera.velocity)
@@ -139,16 +109,41 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   //
-  // Gravity! and Jumpin'
+  // Accelerate!
   //
+  MAX_GROUND_SPEED :: 40.0
+  MAX_AIR_SPEED :: 35.0
+  if length(wish_dir) > 0 {
+    // How fast are we going in the direction we want to go?
+    curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
+
+    max_speed: f32 = MAX_GROUND_SPEED if camera.on_ground else MAX_AIR_SPEED
+
+    // How much to get to max speed from current speed?
+    add_speed := max_speed - curr_speed_in_wish_dir
+
+    // If we have room to grow in speed?
+    if add_speed > 0 {
+      GROUND_ACCELERATION :: 12.0
+      AIR_ACCELERATION    :: 4.0
+
+      factor: f32 = GROUND_ACCELERATION if camera.on_ground else AIR_ACCELERATION
+
+      accel_speed := factor * max_speed * dt_s
+
+      // If we can accelerate to more in this step than max, then just add only enough to get to max
+      if accel_speed > add_speed {
+        accel_speed = add_speed
+      }
+
+      acceleration := wish_dir * accel_speed
+
+      camera.velocity += acceleration
+    }
+  }
 
   GRAVITY :: -40
   camera.velocity.y += GRAVITY * dt_s
-
-  if key_pressed(.SPACE) && camera.on_ground {
-    camera.velocity.y = 15.0
-    camera.on_ground  = false
-  }
 
   // NOTE: I believe this would be classified as semi-implicit euler simulation
   // as we integrate velocity before position
@@ -204,18 +199,12 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   // Neat message
-  if length(camera.velocity) > MAX_SPEED * 1.2 {
-    // TODO: Factor this code into a draw_text_with_background()
-    BOX_COLOR :: vec4{0.0, 0.0, 0.0, 0.7}
-    BOX_PAD   :: 10.0
-
+  if length(camera.velocity) > MAX_GROUND_SPEED * 1.2 {
     text := "Speed Excellence!"
     x := f32(state.window.w) * 0.5
     y := f32(state.window.w) * 0.02
 
-    box_width, box_height := text_draw_size(text, state.default_font)
-    immediate_quad({x - BOX_PAD - box_width * 0.5, y - BOX_PAD - box_height * 0.6}, box_width + BOX_PAD * 2, box_height + BOX_PAD, BOX_COLOR)
-    draw_text(text, state.default_font, x, y, RED * 2.0, .CENTER)
+    draw_text_with_background(text, state.default_font, x, y, RED * 2.0, .CENTER, padding=10.0)
   }
 
   // Draw out input and velocity vectors

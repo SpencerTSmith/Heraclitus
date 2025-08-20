@@ -14,6 +14,8 @@
     - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalc
 - Switch fully to PBR lighting model
+- Start working on UI system, right now, getting ui elements (text) flushed with debug visuals, causing ugly bloom on brightly colored text
+    - Probably just gonna go with UI generates draw calls and we can just run through them at the end of frame with current immediate vertex system
 
 # Complete:
 - Cool GLSL metaprogramming

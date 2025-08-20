@@ -3,7 +3,6 @@ package main
 import "core:log"
 import "core:os"
 import "core:path/filepath"
-import "core:math"
 
 import stbtt "vendor:stb/truetype"
 import gl "vendor:OpenGL"
@@ -34,11 +33,11 @@ Font :: struct {
   pixel_height: f32,
   scale:        f32,
 
-  ascent:   i32,
-  descent:  i32,
-  line_gap: i32,
+  ascent:   i32, // Unscaled
+  descent:  i32, // Unscaled
+  line_gap: i32, // Unscaled
 
-  line_height: f32,
+  line_height: f32, // Scaled
 
   glyphs: [FONT_CHAR_COUNT]Font_Glyph,
   atlas:  Texture,
@@ -89,7 +88,7 @@ make_font :: proc(file_name: string, pixel_height: f32, allocator := context.all
       x0 = f32(char.x0) / FONT_ATLAS_WIDTH,
       y0 = f32(char.y0) / FONT_ATLAS_HEIGHT,
       x1 = f32(char.x1) / FONT_ATLAS_WIDTH,
-      y1 = f32(char.y1) / FONT_ATLAS_WIDTH,
+      y1 = f32(char.y1) / FONT_ATLAS_HEIGHT,
 
       advance = char.xadvance,
       x_off   = char.xoff,
@@ -106,7 +105,7 @@ make_font :: proc(file_name: string, pixel_height: f32, allocator := context.all
   return font, ok
 }
 
-// FIXME: May wish to use the bounding box of each glyph
+// TODO: May wish to use the bounding box of each glyph
 text_draw_rect :: proc(text: string, font: Font, x, y: f32,
                        align: Text_Alignment = .LEFT) -> (left, top, bottom, right: f32) {
   width, height := text_draw_size(text, font)
@@ -120,16 +119,15 @@ text_draw_rect :: proc(text: string, font: Font, x, y: f32,
 
 text_draw_size :: proc(text: string, font: Font) -> (w, h: f32) {
   max_line_width: f32
-  height := font.line_height
+
+  line_count := 1
 
   line_width: f32
-  for c, idx in text {
+  for c in text {
     if c == '\n' {
-      // Don't count the last new-line
-      if idx != len(text) - 1 {
-        height += font.line_height
-      }
-      max_line_width = math.max(line_width, max_line_width)
+      line_count += 1
+
+      max_line_width = max(line_width, max_line_width)
       line_width = 0
       continue
     }
@@ -138,7 +136,13 @@ text_draw_size :: proc(text: string, font: Font) -> (w, h: f32) {
     line_width += glyph.advance
   }
 
-  max_line_width = math.max(line_width, max_line_width)
+  lc := cast(f32) line_count
+  max_text_height := cast(f32)(font.ascent - font.descent) * font.scale
+  line_gap := cast(f32)(font.line_gap) * font.scale
+
+  height := lc * max_text_height + ((lc - 1.0) * line_gap)
+
+  max_line_width = max(line_width, max_line_width)
 
   return max_line_width, height
 }
@@ -201,14 +205,14 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE,
 
 DEFAULT_TEXT_BACKGROUND :: vec4{0.0, 0.0, 0.0, 0.7}
 
-// FIXME: Lots of duplicated running through the text string and counting up the sizes
 draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE, align: Text_Alignment = .LEFT,
                                   padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) {
-  box_width, box_height := text_draw_size(text, font)
+  l, t, b, r := text_draw_rect(text, font, x, y, align)
 
-  x_start := align_text_start_x(text, font, x, align)
+  w := r - l
+  h := b - t
 
-  immediate_quad({x_start - padding, y - padding - box_height * 0.6}, box_width + padding * 2, box_height + padding, background_color)
+  immediate_quad(vec2{l - padding, t - padding}, w + padding * 2, h + padding * 2, background_color)
   draw_text(text, font, x, y, text_color, align)
 }
 

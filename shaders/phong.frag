@@ -147,15 +147,14 @@ vec3 depth_to_color(float linear_depth, float far) {
 // Fix shadow acne, surfaces facing away get large bias, surfaces facing toward get less
 float shadow_bias(vec3 normal, vec3 to_light_dir) {
   float facing_dot  = max(dot(normal, to_light_dir), 0.0);
-  float slope_scale = 0.005;
-  float min_bias    = 0.0005;
-  float bias        = min_bias + slope_scale * (1.0 - facing_dot);
+  float slope_scale = 0.00001;
+  float min_bias    = 0.00001;
+  float bias        = max(min_bias, slope_scale * (1.0 - facing_dot));
 
   return bias;
 }
 
 float sun_shadow(sampler2D shadow_map, vec4 light_space_position, vec3 to_light_dir, vec3 normal) {
-
   // Perspective divide
   vec3 projected = light_space_position.xyz / light_space_position.w;
   // From NDC to [0, 1]

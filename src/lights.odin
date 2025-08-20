@@ -1,5 +1,8 @@
 package main
 
+POINT_SHADOW_MAP_SIZE  :: 512
+SUN_SHADOW_MAP_SIZE    :: 4096
+
 Point_Light :: struct {
   position:    vec3,
 

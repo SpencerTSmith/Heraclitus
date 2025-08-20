@@ -495,7 +495,7 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
     }
   }
 
-  state.draw_calls += instances
+  state.mesh_draw_calls += instances
 }
 
 model_has_transparency :: proc(model: Model) -> bool {

@@ -25,9 +25,6 @@ GL_MINOR :: 6
 
 MAX_TEXTURE_HANDLES :: 512
 
-POINT_SHADOW_MAP_SIZE  :: 512 * 2
-SUN_SHADOW_MAP_SIZE    :: 512 * 8
-
 Program_Mode :: enum {
   GAME,
   MENU,
@@ -165,49 +162,4 @@ get_aspect_ratio :: proc(window: Window) -> (aspect: f32) {
 
 should_close :: proc() -> bool {
   return bool(glfw.WindowShouldClose(state.window.handle)) || !state.running
-}
-
-draw_debug_stats :: proc() {
-  text := fmt.aprintf(
-`
-FPS: %0.4v
-Model Draw Calls: %v
-Entities: %v
-Mode: %v
-Velocity: %0.4v
-Speed: %0.4v
-Position: %0.4v
-On Ground: %v
-Yaw: %0.4v
-Pitch: %0.4v
-Fov: %0.4v
-Point Lights: %v
-`,
-  state.fps,
-  state.draw_calls,
-  len(state.entities),
-  state.mode,
-  state.camera.velocity,
-  length(state.camera.velocity),
-  state.camera.position,
-  state.camera.on_ground,
-  state.camera.yaw,
-  state.camera.pitch,
-  state.camera.curr_fov_y,
-  len(state.point_lights) if state.point_lights_on else 0,
-  allocator = context.temp_allocator)
-
-  x := f32(state.window.w) * 0.0125
-  y := f32(state.window.h) * 0.0125
-
-  BOX_COLOR :: vec4{0.0, 0.0, 0.0, 0.7}
-  BOX_PAD   :: 10.0
-  box_width, box_height := text_draw_size(text, state.default_font)
-
-  // HACK: Just looks a bit better to me, not going to work with all fonts probably
-  box_height -= state.default_font.line_height * 0.5
-
-  immediate_quad({x - BOX_PAD, y - BOX_PAD}, box_width + BOX_PAD * 2, box_height + BOX_PAD, BOX_COLOR)
-
-  draw_text(text, state.default_font, x, y)
 }

@@ -93,13 +93,11 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   // Pick entity
   if mouse_pressed(.LEFT) {
     x, y := mouse_position()
+    editor.selected_entity = pick_entity(x, y, camera^)
+  }
 
-    // Lets you 'unclick' an entity
-    if editor.selected_entity == nil {
-      editor.selected_entity = pick_entity(x, y, camera^)
-    } else {
-      editor.selected_entity = nil
-    }
+  if mouse_pressed(.RIGHT) {
+    editor.selected_entity = nil
   }
 
   // Manipulate picked entity
@@ -140,11 +138,49 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   camera.on_ground = false
 }
 
+draw_debug_stats :: proc() {
+  text := fmt.aprintf(
+`FPS: %0.4v
+Mesh Draw Calls: %v
+Entities: %v
+Mode: %v
+Velocity: %0.4v
+Speed: %0.4v
+Position: %0.4v
+On Ground: %v
+Yaw: %0.4v
+Pitch: %0.4v
+Fov: %0.4v
+Bloom On: %v
+Sun On: %v
+Point Lights: %v`,
+  state.fps,
+  state.mesh_draw_calls,
+  len(state.entities),
+  state.mode,
+  state.camera.velocity,
+  length(state.camera.velocity),
+  state.camera.position,
+  state.camera.on_ground,
+  state.camera.yaw,
+  state.camera.pitch,
+  state.camera.curr_fov_y,
+  state.bloom_on,
+  state.sun_on,
+  len(state.point_lights) if state.point_lights_on else 0,
+  allocator = context.temp_allocator)
+
+  x := f32(state.window.w) * 0.025
+  y := f32(state.window.h) * 0.025
+
+  draw_text_with_background(text, state.default_font, x, y, padding=10.0)
+}
+
 draw_editor_ui :: proc() {
   entity_text := fmt.tprintf("%v", editor.selected_entity^)
 
   x := f32(state.window.w) * 0.5
   y := f32(state.window.h) - f32(state.window.h) * 0.05
 
-  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 1.5, align=.CENTER, padding=5.0)
+  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 1.5, align=.CENTER, padding=10.0)
 }

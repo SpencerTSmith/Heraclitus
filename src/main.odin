@@ -43,7 +43,7 @@ State :: struct {
 
   began_drawing: bool,
 
-  draw_calls: int,
+  mesh_draw_calls: int,
 
   z_near: f32,
   z_far:  f32,
@@ -451,6 +451,41 @@ main :: proc() {
     }
     if state.mode == .EDIT {
       move_camera_edit(&state.camera, dt_s)
+      state.flashlight.position  = state.camera.position
+      state.flashlight.direction = get_camera_forward(state.camera)
+
+      //
+      // Collision
+      //
+      for &e in state.entities {
+        if .HAS_COLLISION not_in e.flags { continue }
+
+        entity_aabb := entity_world_aabb(e)
+
+        for &o in state.entities {
+          if &o == &e { continue } // Same entity
+
+          if .HAS_COLLISION not_in o.flags { continue }
+
+          other_aabb := entity_world_aabb(o)
+
+          if aabbs_intersect(entity_aabb, other_aabb) {
+            min_pen := aabb_min_penetration_vector(entity_aabb, other_aabb)
+
+            e.position += min_pen
+          }
+        }
+      }
+
+      // Move da point lights around
+      seconds := seconds_since_start()
+      if state.point_lights_on {
+        for &pl in state.point_lights {
+          pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
+          pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+          pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
+        }
+      }
     }
 
     // Frame sync
