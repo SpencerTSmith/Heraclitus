@@ -3,8 +3,9 @@ package main
 import "core:log"
 
 Entity_Flags :: enum {
-  HAS_COLLISION,
-  HAS_RENDERABLE,
+  COLLISION,
+  RENDERABLE,
+  STATIC, // Should never 'move'
 }
 
 Entity :: struct {
@@ -20,7 +21,7 @@ Entity :: struct {
 }
 
 make_entity :: proc(model:    string,
-                    flags:    bit_set[Entity_Flags] = {.HAS_COLLISION, .HAS_RENDERABLE},
+                    flags:    bit_set[Entity_Flags] = {.COLLISION, .RENDERABLE},
                     position: vec3   = {0, 0, 0},
                     rotation: vec3   = {0, 0, 0},
                     scale:    vec3   = {1, 1, 1}) -> Entity {
@@ -28,6 +29,10 @@ make_entity :: proc(model:    string,
   if !ok {
     // TODO: Unique handles for each entity would make debugging simpler
     log.warnf("Entity failed to load model: %v", model)
+  }
+
+  if .STATIC in flags {
+    assert(.STATIC in flags, "Static entities must have collsion")
   }
 
   entity := Entity {
@@ -56,7 +61,7 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aab
     // }
   }
 
-  if .HAS_RENDERABLE not_in e.flags { return }
+  if .RENDERABLE not_in e.flags { return }
 
   model := get_model(e.model)
 

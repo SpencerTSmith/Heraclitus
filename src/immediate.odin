@@ -188,26 +188,19 @@ immediate_quad_2D :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
 }
 
-immediate_quad_3D :: proc(xyz: vec3, w, h: f32, rgba: vec4 = WHITE,
+// NOTE: Hardcoded to billboard towards the camera for now
+// TODO: Kind of repeated code with immediate_quad... should maybe just take in a normal
+// And unify the two
+immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, rgba: vec4 = WHITE,
                           uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
                           texture: Texture = immediate.white_texture) {
-
-}
-
-// NOTE: Hardcoded to billboard towards the camera for now
-immediate_billboard :: proc(center: vec3, w, h: f32, rgba: vec4 = WHITE,
-                            uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
-                            texture: Texture = immediate.white_texture) {
   wish_mode  := Immediate_Mode.TRIANGLES
   wish_space := Immediate_Space.WORLD
 
   immediate_begin(wish_mode, texture, wish_space)
 
-  to_cam := normalize(state.camera.position - center)
-
-  up    := WORLD_UP
-  right := normalize(cross(up, to_cam))
-  up    = normalize(cross(to_cam, right))
+  norm := normalize(normal) // Just in case
+  right, up := orthonormal_axes(norm)
 
   half_w := w / 2
   half_h := h / 2

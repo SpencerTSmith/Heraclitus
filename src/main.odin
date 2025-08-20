@@ -303,11 +303,11 @@ main :: proc() {
     append(&state.entities, block)
   }
 
+  floor := make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
+  append(&state.entities, floor)
+
   block := make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
   append(&state.entities, block)
-
-  floor := make_entity("cube/BoxTextured.gltf", position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
-  append(&state.entities, floor)
 
   duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
   append(&state.entities, duck1)
@@ -321,7 +321,7 @@ main :: proc() {
   guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
   append(&state.entities, guitar)
 
-  sponza := make_entity("sponza/Sponza.gltf", flags={.HAS_RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
+  sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
   append(&state.entities, sponza)
 
   // Sponza lights
@@ -348,11 +348,14 @@ main :: proc() {
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
-  // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  // append(&state.entities, helmet)
+  // NOTE: Have to gen tangents for these and that takes too long
+  {
+    // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+    // append(&state.entities, helmet)
 
-  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-  // append(&state.entities, chess)
+    // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+    // append(&state.entities, chess)
+  }
 
   // NOTE: Just for doing little billboards for the point lights
   light_texture,_ := make_texture("data/textures/point_light.png", nonlinear_color=true)
@@ -420,14 +423,15 @@ main :: proc() {
       // Collision
       //
       for &e in state.entities {
-        if .HAS_COLLISION not_in e.flags { continue }
+        if .STATIC in e.flags { continue } // Static things should not be movable
+        if .COLLISION not_in e.flags { continue }
 
         entity_aabb := entity_world_aabb(e)
 
         for &o in state.entities {
           if &o == &e { continue } // Same entity
 
-          if .HAS_COLLISION not_in o.flags { continue }
+          if .COLLISION not_in o.flags { continue }
 
           other_aabb := entity_world_aabb(o)
 
@@ -584,10 +588,10 @@ main :: proc() {
 
             w:f32 = 1.0
             h:f32 = 1.0
-            immediate_billboard(l.position, w, h, l.color, uv0={0,1},uv1={1,0}, texture=light_texture)
+            normal := normalize(l.position - state.camera.position) // Billboard it!
+            immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=light_texture)
           }
         }
-
 
         if state.draw_debug {
           draw_grid(color = {1.0, 1.0, 1.0, 0.4})

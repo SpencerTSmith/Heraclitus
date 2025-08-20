@@ -138,6 +138,51 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   camera.on_ground = false
 }
 
+draw_editor_ui :: proc() {
+  entity_text := fmt.tprintf("%v", editor.selected_entity^)
+
+  x := f32(state.window.w) * 0.5
+  y := f32(state.window.h) - f32(state.window.h) * 0.05
+
+  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 1.5, align=.CENTER, padding=10.0)
+
+  //
+  // Draw move widgets
+  //
+  if editor.selected_entity != nil {
+    e := editor.selected_entity^
+    aabb := entity_world_aabb(e)
+
+    center_aabb := (aabb.min + aabb.max) * 0.5
+    //
+    // Axes
+    //
+    {
+      draw_vector(center_aabb, WORLD_RIGHT * 10,   RED)
+      draw_vector(center_aabb, WORLD_UP * 10,      GREEN)
+      draw_vector(center_aabb, WORLD_FORWARD * 10, BLUE)
+    }
+
+    //
+    // Move planes
+    //
+    {
+      x_pos := center_aabb
+      x_pos.x = aabb.max.x + 2.0
+      immediate_quad(x_pos, WORLD_RIGHT, 1, 1, RED)
+
+      y_pos := center_aabb
+      y_pos.y = aabb.min.y - 2.0
+      immediate_quad(y_pos, WORLD_UP, 1, 1, GREEN)
+
+      z_pos := center_aabb + WORLD_FORWARD * (aabb.max.z + 2.0)
+      z_pos.z = aabb.min.z - 2.0
+      immediate_quad(z_pos, WORLD_FORWARD, 1, 1, BLUE)
+    }
+  }
+}
+
+// Eh, should this go in editor? This is useful even when testing in game mode
 draw_debug_stats :: proc() {
   text := fmt.aprintf(
 `FPS: %0.4v
@@ -174,13 +219,4 @@ Point Lights: %v`,
   y := f32(state.window.h) * 0.025
 
   draw_text_with_background(text, state.default_font, x, y, padding=10.0)
-}
-
-draw_editor_ui :: proc() {
-  entity_text := fmt.tprintf("%v", editor.selected_entity^)
-
-  x := f32(state.window.w) * 0.5
-  y := f32(state.window.h) - f32(state.window.h) * 0.05
-
-  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 1.5, align=.CENTER, padding=10.0)
 }

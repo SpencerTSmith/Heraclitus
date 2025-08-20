@@ -279,6 +279,18 @@ aabb_intersect_point :: proc(a: AABB, p: vec3) -> bool {
   return intersects
 }
 
+orthonormal_axes :: proc(forward: vec3) -> (right, up: vec3) {
+  forw := normalize(forward) // Just in case
+
+  // Pick a direction that is not parallel to forward
+  tmp := WORLD_UP if abs(forw.x) > abs(forward.z) else WORLD_RIGHT
+
+  right = normalize(cross(forw, tmp))
+  up    = normalize(cross(forw, right))
+
+  return right, up
+}
+
 draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
   end := origin + direction
   immediate_line(origin, end, color)
@@ -286,8 +298,7 @@ draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
   // Need the space relative to the direction of the vector
   // To draw the pyramid tip
   forward := normalize(direction)
-  right   := normalize(cross(forward, WORLD_UP))
-  up      := normalize(cross(forward, right))
+  right, up := orthonormal_axes(forward)
 
   BOUNDS :: 0.025
   tip   := end

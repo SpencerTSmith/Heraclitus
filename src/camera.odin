@@ -165,7 +165,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
 
   camera.on_ground = false
   for e in state.entities {
-    if .HAS_COLLISION not_in e.flags { continue }
+    if .COLLISION not_in e.flags { continue }
 
     entity_aabb := entity_world_aabb(e)
 
