@@ -117,7 +117,7 @@ free_immediate_renderer :: proc() {
 }
 
 // NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right
-immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
+immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   assert(state.gl_is_initialized)
   assert(gpu_buffer_is_mapped(immediate.vertex_buffer), "Uninitialized Immediate State")
 
@@ -127,9 +127,9 @@ immediate_vertex :: proc(xyz: vec3, rgba: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
   }
 
   vertex := Immediate_Vertex{
-    position = xyz,
+    position = position,
     uv       = uv,
-    color    = rgba,
+    color    = color,
   }
 
   vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
@@ -150,33 +150,33 @@ immediate_quad :: proc {
   immediate_quad_3D,
 }
 
-immediate_quad_2D :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
-                       uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
-                       texture: Texture = immediate.white_texture) {
+immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
+                          top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
+                          texture: Texture = immediate.white_texture) {
   wish_mode  := Immediate_Mode.TRIANGLES
   wish_space := Immediate_Space.SCREEN
 
   immediate_begin(wish_mode, texture, wish_space)
 
   top_left := Immediate_Vertex{
-    position = {xy.x, xy.y, -state.z_near},
-    uv       = uv0,
-    color    = rgba,
+    position = {top_left_position.x, top_left_position.y, -state.z_near},
+    uv       = top_left_uv,
+    color    = color,
   }
   top_right := Immediate_Vertex{
-    position = {xy.x + w, xy.y, -state.z_near},
-    uv       = {uv1.x, uv0.y},
-    color    = rgba,
+    position = {top_left_position.x + w, top_left_position.y, -state.z_near},
+    uv       = {bottom_right_uv.x, top_left_uv.y},
+    color    = color,
   }
   bottom_left := Immediate_Vertex{
-    position = {xy.x, xy.y + h, -state.z_near},
-    uv       = {uv0.x, uv1.y},
-    color    = rgba,
+    position = {top_left_position.x, top_left_position.y + h, -state.z_near},
+    uv       = {top_left_uv.x, bottom_right_uv.y},
+    color    = color,
   }
   bottom_right := Immediate_Vertex{
-    position = {xy.x + w, xy.y + h, -state.z_near},
-    uv       = uv1,
-    color    = rgba,
+    position = {top_left_position.x + w, top_left_position.y + h, -state.z_near},
+    uv       = bottom_right_uv,
+    color    = color,
   }
 
   immediate_vertex(top_left.position, top_left.color, top_left.uv)
@@ -191,8 +191,8 @@ immediate_quad_2D :: proc(xy: vec2, w, h: f32, rgba: vec4 = WHITE,
 // NOTE: Hardcoded to billboard towards the camera for now
 // TODO: Kind of repeated code with immediate_quad... should maybe just take in a normal
 // And unify the two
-immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, rgba: vec4 = WHITE,
-                          uv0: vec2 = {0.0, 0.0}, uv1: vec2 = {0.0, 0.0},
+immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
+                          uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
                           texture: Texture = immediate.white_texture) {
   wish_mode  := Immediate_Mode.TRIANGLES
   wish_space := Immediate_Space.WORLD
@@ -208,22 +208,22 @@ immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, rgba: vec4 = WHITE,
   top_left := Immediate_Vertex{
     position = center - (right * half_w) + (up * half_h),
     uv       = uv0,
-    color    = rgba,
+    color    = color,
   }
   top_right := Immediate_Vertex{
     position = center + (right * half_w) + (up * half_h),
     uv       = {uv1.x, uv0.y},
-    color    = rgba,
+    color    = color,
   }
   bottom_left := Immediate_Vertex{
     position = center - (right * half_w) - (up * half_h),
     uv       = {uv0.x, uv1.y},
-    color    = rgba,
+    color    = color,
   }
   bottom_right := Immediate_Vertex{
     position = center + (right * half_w) - (up * half_h),
     uv       = uv1,
-    color    = rgba,
+    color    = color,
   }
 
   immediate_vertex(top_left.position, top_left.color, top_left.uv)
@@ -241,30 +241,30 @@ immediate_line :: proc {
 }
 
 // NOTE: A 2d line so takes in screen coordinates!
-immediate_line_2D :: proc(xy0, xy1: vec2, rgba: vec4 = WHITE) {
+immediate_line_2D :: proc(xy0, xy1: vec2, rgba := WHITE) {
   wish_mode    := Immediate_Mode.LINES
   wish_space   := Immediate_Space.SCREEN
   wish_texture := immediate.white_texture
 
   immediate_begin(wish_mode, wish_texture, wish_space)
 
-  immediate_vertex({xy0.x, xy0.y, -state.z_near}, rgba = rgba)
-  immediate_vertex({xy1.x, xy1.y, -state.z_near}, rgba = rgba)
+  immediate_vertex({xy0.x, xy0.y, -state.z_near}, color=rgba)
+  immediate_vertex({xy1.x, xy1.y, -state.z_near}, color=rgba)
 }
 
 // NOTE: 3d line
-immediate_line_3D :: proc(xyz0, xyz1: vec3, rgba: vec4 = WHITE) {
+immediate_line_3D :: proc(xyz0, xyz1: vec3, color := WHITE) {
   wish_mode    := Immediate_Mode.LINES
   wish_space   := Immediate_Space.WORLD
   wish_texture := immediate.white_texture
 
   immediate_begin(wish_mode, wish_texture, wish_space)
 
-  immediate_vertex(xyz0, rgba = rgba)
-  immediate_vertex(xyz1, rgba = rgba)
+  immediate_vertex(xyz0, color=color)
+  immediate_vertex(xyz1, color=color)
 }
 
-immediate_fill_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
+immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
   corners := box_corners(xyz_min, xyz_max)
 
   wish_mode    := Immediate_Mode.TRIANGLES
@@ -273,56 +273,56 @@ immediate_fill_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
 
   immediate_begin(wish_mode, wish_texture, wish_space)
 
-  immediate_vertex(corners[0], rgba)
-  immediate_vertex(corners[1], rgba)
-  immediate_vertex(corners[2], rgba)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[2], color)
 
-  immediate_vertex(corners[3], rgba)
-  immediate_vertex(corners[2], rgba)
-  immediate_vertex(corners[0], rgba)
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[2], color)
+  immediate_vertex(corners[0], color)
 
-  immediate_vertex(corners[0], rgba)
-  immediate_vertex(corners[3], rgba)
-  immediate_vertex(corners[4], rgba)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[4], color)
 
-  immediate_vertex(corners[5], rgba)
-  immediate_vertex(corners[0], rgba)
-  immediate_vertex(corners[4], rgba)
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[4], color)
 
-  immediate_vertex(corners[3], rgba)
-  immediate_vertex(corners[2], rgba)
-  immediate_vertex(corners[7], rgba)
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[2], color)
+  immediate_vertex(corners[7], color)
 
-  immediate_vertex(corners[4], rgba)
-  immediate_vertex(corners[3], rgba)
-  immediate_vertex(corners[7], rgba)
+  immediate_vertex(corners[4], color)
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[7], color)
 
-  immediate_vertex(corners[0], rgba)
-  immediate_vertex(corners[5], rgba)
-  immediate_vertex(corners[6], rgba)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[6], color)
 
-  immediate_vertex(corners[1], rgba)
-  immediate_vertex(corners[0], rgba)
-  immediate_vertex(corners[6], rgba)
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[6], color)
 
-  immediate_vertex(corners[1], rgba)
-  immediate_vertex(corners[6], rgba)
-  immediate_vertex(corners[7], rgba)
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[6], color)
+  immediate_vertex(corners[7], color)
 
-  immediate_vertex(corners[2], rgba)
-  immediate_vertex(corners[1], rgba)
-  immediate_vertex(corners[7], rgba)
+  immediate_vertex(corners[2], color)
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[7], color)
 
-  immediate_vertex(corners[5], rgba)
-  immediate_vertex(corners[4], rgba)
-  immediate_vertex(corners[7], rgba)
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[4], color)
+  immediate_vertex(corners[7], color)
 
-  immediate_vertex(corners[6], rgba)
-  immediate_vertex(corners[5], rgba)
-  immediate_vertex(corners[7], rgba)
+  immediate_vertex(corners[6], color)
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[7], color)
 }
 
-immediate_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
+immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
   corners := box_corners(xyz_min, xyz_max)
 
   wish_mode    := Immediate_Mode.LINES
@@ -331,62 +331,62 @@ immediate_box :: proc(xyz_min, xyz_max: vec3, rgba: vec4 = WHITE) {
   immediate_begin(wish_mode, wish_texture, wish_space)
 
   // Back
-  immediate_line(corners[0], corners[1], rgba)
-  immediate_line(corners[1], corners[2], rgba)
-  immediate_line(corners[2], corners[3], rgba)
-  immediate_line(corners[3], corners[0], rgba)
+  immediate_line(corners[0], corners[1], color)
+  immediate_line(corners[1], corners[2], color)
+  immediate_line(corners[2], corners[3], color)
+  immediate_line(corners[3], corners[0], color)
 
   // Front
-  immediate_line(corners[4], corners[5], rgba)
-  immediate_line(corners[5], corners[6], rgba)
-  immediate_line(corners[6], corners[7], rgba)
-  immediate_line(corners[7], corners[4], rgba)
+  immediate_line(corners[4], corners[5], color)
+  immediate_line(corners[5], corners[6], color)
+  immediate_line(corners[6], corners[7], color)
+  immediate_line(corners[7], corners[4], color)
 
   // Left
-  immediate_line(corners[4], corners[3], rgba)
-  immediate_line(corners[5], corners[0], rgba)
+  immediate_line(corners[4], corners[3], color)
+  immediate_line(corners[5], corners[0], color)
 
   // Right
-  immediate_line(corners[7], corners[2], rgba)
-  immediate_line(corners[6], corners[1], rgba)
+  immediate_line(corners[7], corners[2], color)
+  immediate_line(corners[6], corners[1], color)
 }
 
-immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, rgba: vec4 = WHITE) {
+immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE) {
   wish_mode    := Immediate_Mode.TRIANGLES
   wish_space   := Immediate_Space.WORLD
   wish_texture := immediate.white_texture
   immediate_begin(wish_mode, wish_texture, wish_space)
 
   // Triangle sides
-  immediate_vertex(tip, rgba)
-  immediate_vertex(base0, rgba)
-  immediate_vertex(base1, rgba)
+  immediate_vertex(tip, color)
+  immediate_vertex(base0, color)
+  immediate_vertex(base1, color)
 
-  immediate_vertex(tip, rgba)
-  immediate_vertex(base1, rgba)
-  immediate_vertex(base2, rgba)
+  immediate_vertex(tip, color)
+  immediate_vertex(base1, color)
+  immediate_vertex(base2, color)
 
-  immediate_vertex(tip, rgba)
-  immediate_vertex(base2, rgba)
-  immediate_vertex(base3, rgba)
+  immediate_vertex(tip, color)
+  immediate_vertex(base2, color)
+  immediate_vertex(base3, color)
 
-  immediate_vertex(tip, rgba)
-  immediate_vertex(base3, rgba)
-  immediate_vertex(base0, rgba)
+  immediate_vertex(tip, color)
+  immediate_vertex(base3, color)
+  immediate_vertex(base0, color)
 
   // Base
-  immediate_vertex(base0, rgba)
-  immediate_vertex(base3, rgba)
-  immediate_vertex(base1, rgba)
+  immediate_vertex(base0, color)
+  immediate_vertex(base3, color)
+  immediate_vertex(base1, color)
 
-  immediate_vertex(base2, rgba)
-  immediate_vertex(base0, rgba)
-  immediate_vertex(base3, rgba)
+  immediate_vertex(base2, color)
+  immediate_vertex(base0, color)
+  immediate_vertex(base3, color)
 }
 
 // Only wire frame for now
 // TODO: Filled in option too
-immediate_sphere :: proc(center: vec3, radius: f32, rgba: vec4 = WHITE) {
+immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE) {
   wish_mode    := Immediate_Mode.LINE_STRIPS
   wish_space   := Immediate_Space.WORLD
   wish_texture := immediate.white_texture
@@ -406,7 +406,7 @@ immediate_sphere :: proc(center: vec3, radius: f32, rgba: vec4 = WHITE) {
       // Just a rotation matrix basically based on theta and phi, then translating by the center
       immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
                         (cos(theta) * radius) + center.y,
-                        (sin(phi) * sin(theta) * radius) + center.z}, rgba)
+                        (sin(phi) * sin(theta) * radius) + center.z}, color)
     }
   }
 
@@ -422,7 +422,7 @@ immediate_sphere :: proc(center: vec3, radius: f32, rgba: vec4 = WHITE) {
       // Just a rotation matrix basically based on theta and phi, then translating by the center
       immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
                         (cos(theta) * radius) + center.y,
-                        (sin(phi) * sin(theta) * radius) + center.z}, rgba)
+                        (sin(phi) * sin(theta) * radius) + center.z}, color)
     }
   }
 
@@ -458,6 +458,7 @@ immediate_flush :: proc() {
           gl.DepthFunc(gl.ALWAYS)
           set_shader_uniform("transform", orthographic)
         case .WORLD:
+          gl.DepthFunc(gl.LESS)
           set_shader_uniform("transform", perspective)
         }
 

@@ -55,7 +55,6 @@ make_model :: proc{
   make_model_from_data,
   // make_model_from_default_container,
   make_model_from_default_white_cube,
-  make_model_from_data_one_material_one_mesh,
 }
 
 // Takes in all vertices and all indices.. then a slice of the materials and a slice of the meshes
@@ -461,19 +460,6 @@ make_model_from_default_white_cube :: proc() -> (model: Model, ok: bool) {
   return
 }
 
-make_model_from_data_one_material_one_mesh :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
-                                                   material: Material) -> (model: Model, ok: bool) {
-  mesh := Mesh {
-    index_count    = i32(len(indices)),
-    index_offset   = 0,
-    material_index = 0,
-  }
-  mesh_slice: []Mesh = {mesh}
-  material_slice: []Material = {material}
-  model, ok = make_model_from_data(vertices, indices, material_slice, mesh_slice)
-  return
-}
-
 draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
   assert(state.current_shader.id != 0)
 
@@ -481,7 +467,6 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
   defer unbind_vertex_buffer()
 
   set_shader_uniform("mul_color", mul_color)
-
 
   for mesh in model.meshes {
     set_material(model.materials[mesh.material_index])

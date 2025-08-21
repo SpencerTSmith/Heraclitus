@@ -181,15 +181,15 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
         camera.on_ground = true
         camera.velocity.y = 0
         continue
+      } else {
+        // Take the velocity into the collision away, plus a little for some bounce
+        // This has the added side effect of increasing speed by running into a wall purposefully
+        // Our wish dir is into the wall, but that velocity gets taken away, therefore we can accelerate
+        // very fast because its much easier for wish dir to not match up with the current velocity
+        OVERBOUNCE :: 1.2
+        reproject := dot(camera.velocity, normal) * OVERBOUNCE
+        camera.velocity -= reproject * normal // Only the velocity thats going into the wall gets subtracted away
       }
-
-      // Take the velocity into the collision away, plus a little for some bounce
-      // This has the added side effect of increasing speed by running into a wall purposefully
-      // Our wish dir is into the wall, but that velocity gets taken away, therefore we can accelerate
-      // very fast because its much easier for wish dir to not match up with the current velocity
-      OVERBOUNCE :: 1.2
-      reproject := dot(camera.velocity, normal) * OVERBOUNCE
-      camera.velocity -= reproject * normal // Only the velocity thats going into the wall gets subtracted away
     }
   }
 

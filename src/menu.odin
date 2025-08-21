@@ -122,9 +122,8 @@ update_menu_input :: proc() {
 }
 
 draw_menu :: proc() {
+  clear_framebuffer(color=LEARN_OPENGL_BLUE)
   gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-  gl.ClearColor(LEARN_OPENGL_BLUE.r, LEARN_OPENGL_BLUE.g, LEARN_OPENGL_BLUE.b, 1.0)
-  gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
 
   x_title := f32(state.window.w) * 0.5
   y_title := f32(state.window.h) * 0.2

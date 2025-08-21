@@ -54,6 +54,10 @@ WHITE  :: vec4{1.0, 1.0, 1.0,  1.0}
 LEARN_OPENGL_BLUE   :: vec4{0.2, 0.3, 0.3, 1.0}
 LEARN_OPENGL_ORANGE :: vec4{1.0, 0.5, 0.2, 1.0}
 
+set_alpha :: proc(color: vec4, alpha: f32) -> (tweaked: vec4) {
+  return {color.r, color.g, color.b, alpha}
+}
+
 PATH_SLASH :: filepath.SEPARATOR_STRING
 
 BILLION :: 1_000_000_000

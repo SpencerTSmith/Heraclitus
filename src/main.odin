@@ -31,10 +31,10 @@ State :: struct {
 
   start_time: time.Time,
 
-  hdr_ms_buffer:      Framebuffer,
-  post_buffer:        Framebuffer,
-  ping_pong_buffers:  [2]Framebuffer,
-  point_depth_buffer: Framebuffer,
+  hdr_ms_buffer:      Frame_Buffer,
+  post_buffer:        Frame_Buffer,
+  ping_pong_buffers:  [2]Frame_Buffer,
+  point_depth_buffer: Frame_Buffer,
 
   fps:              f64,
   frame_count:      uint,
@@ -49,7 +49,7 @@ State :: struct {
   z_far:  f32,
 
   sun:              Direction_Light,
-  sun_depth_buffer: Framebuffer,
+  sun_depth_buffer: Frame_Buffer,
 
   flashlight:Spot_Light,
 
@@ -232,10 +232,11 @@ init_state :: proc() -> (ok: bool) {
   SAMPLES :: 4
   state.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
 
-  state.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR, .DEPTH_STENCIL}) or_return
+  state.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
 
-  state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-  state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+  // This will have two attachments so we can collect bright spots
+  state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
+  state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
 
   state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
 
@@ -459,6 +460,7 @@ main :: proc() {
 
     // Frame sync
     begin_drawing()
+    gl.DepthMask(gl.TRUE)
 
     //
     // Update frame uniform
@@ -531,6 +533,9 @@ main :: proc() {
         }
       }
 
+      //
+      // Main Geometry Pass
+      //
       begin_main_pass()
       {
         bind_shader_program(state.shaders["phong"])
@@ -565,8 +570,6 @@ main :: proc() {
         // Transparent models
         bind_shader_program(state.shaders["phong"])
         {
-          gl.Disable(gl.CULL_FACE)
-
           // Sort so that further entities get drawn first
           slice.sort_by(transparent_entities[:], proc(a, b: ^Entity) -> bool {
             da := squared_distance(a.position, state.camera.position)
@@ -597,7 +600,8 @@ main :: proc() {
           draw_grid(color = {1.0, 1.0, 1.0, 0.4})
         }
 
-        // Flush any accumulated draw calls (Right now those are just for debug visuals, and conditional text)
+        // FIXME: This kind of sucks
+        // Flush any accumulated draw calls (Right now those are just for debug visuals, some ui text)
         immediate_flush()
       }
 
@@ -606,40 +610,39 @@ main :: proc() {
       //
       begin_post_pass()
       {
-        // Resolve multi-sampling buffer to ping pong as we will then sample this into the post buffer
-        gl.BlitNamedFramebuffer(state.hdr_ms_buffer.id, state.ping_pong_buffers[0].id,
-          0, 0, cast(i32) state.hdr_ms_buffer.color_targets[0].width, cast(i32) state.hdr_ms_buffer.color_targets[0].height,
-          0, 0, cast(i32) state.ping_pong_buffers[0].color_targets[0].width, cast(i32) state.ping_pong_buffers[0].color_targets[0].height,
-          gl.COLOR_BUFFER_BIT,
-          gl.LINEAR)
+        // Resolve multi-sampling buffer to post_buffer
+        blit_framebuffers(state.hdr_ms_buffer, state.post_buffer)
+        bind_framebuffer(state.post_buffer)
+        // gl.DepthMask(gl.FALSE)
 
         //
         // Bloom
         //
+        BLOOM_GAUSSIAN_COUNT :: 5
         if state.bloom_on {
           // Now collect bright spots
-          bind_framebuffer(state.post_buffer)
-          bind_shader("get_bright")
-          bind_texture("image", state.ping_pong_buffers[0].color_targets[0])
-          gl.BindVertexArray(state.empty_vao)
-          gl.DrawArrays(gl.TRIANGLES, 0, 6)
-
-          // Now do da blur
-          bind_shader("gaussian")
-          bind_texture("image", state.post_buffer.color_targets[1])
           bind_framebuffer(state.ping_pong_buffers[0])
+          bind_shader("get_bright")
+          bind_texture("image", state.post_buffer.color_targets[0])
+          draw_screen_quad()
 
-          BLOOM_GAUSSIAN_COUNT :: 10
-          horizontal := false
+          // Now do the blur
+          bind_shader("gaussian")
+
+          // Begin ping ponging
+          bind_framebuffer(state.ping_pong_buffers[1])
+          bind_texture("image", state.ping_pong_buffers[0].color_targets[1]) // The bright spot texture
+          horizontal := true
 
           for _ in 0..<BLOOM_GAUSSIAN_COUNT {
             set_shader_uniform("horizontal", horizontal)
-            gl.BindVertexArray(state.empty_vao)
-            gl.DrawArrays(gl.TRIANGLES, 0, 6)
+            draw_screen_quad()
 
             horizontal = !horizontal
-            bind_texture("image", state.ping_pong_buffers[int(!horizontal)].color_targets[0])
-            bind_framebuffer(state.ping_pong_buffers[int(horizontal)])
+            read_index  := 0 if horizontal else 1
+            write_index := 1 - read_index
+            bind_texture("image", state.ping_pong_buffers[read_index].color_targets[0])
+            bind_framebuffer(state.ping_pong_buffers[write_index])
           }
         }
 
@@ -650,12 +653,11 @@ main :: proc() {
         bind_shader_program(state.shaders["resolve_hdr"])
         bind_texture("screen_texture", state.post_buffer.color_targets[0])
         bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
-
         set_shader_uniform("exposure", f32(0.5))
+        draw_screen_quad()
 
-        // Hardcoded vertices in post vertex shader, but opengl requires a VAO for draw calls
-        gl.BindVertexArray(state.empty_vao)
-        gl.DrawArrays(gl.TRIANGLES, 0, 6)
+        // gl.DepthMask(gl.TRUE)
+        immediate_quad(vec2{2000,2000}, 400, 400, texture=state.post_buffer.depth_target)
       }
 
       if state.draw_debug {

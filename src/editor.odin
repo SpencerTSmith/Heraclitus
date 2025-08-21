@@ -158,26 +158,28 @@ draw_editor_ui :: proc() {
     // Axes
     //
     {
-      draw_vector(center_aabb, WORLD_RIGHT * 10,   RED)
-      draw_vector(center_aabb, WORLD_UP * 10,      GREEN)
-      draw_vector(center_aabb, WORLD_FORWARD * 10, BLUE)
+      draw_vector(center_aabb, WORLD_RIGHT * 10,   RED,   tip_bounds=0.25)
+      draw_vector(center_aabb, WORLD_UP * 10,      GREEN, tip_bounds=0.25)
+      draw_vector(center_aabb, WORLD_FORWARD * 10, BLUE,  tip_bounds=0.25)
     }
 
     //
     // Move planes
     //
     {
+      OPACITY :: 0.9
+
       x_pos := center_aabb
-      x_pos.x = aabb.max.x + 2.0
-      immediate_quad(x_pos, WORLD_RIGHT, 1, 1, RED)
+      x_pos.x = aabb.min.x - 2.0
+      immediate_quad(x_pos, WORLD_RIGHT, 1, 1, set_alpha(RED, OPACITY))
 
       y_pos := center_aabb
       y_pos.y = aabb.min.y - 2.0
-      immediate_quad(y_pos, WORLD_UP, 1, 1, GREEN)
+      immediate_quad(y_pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY))
 
       z_pos := center_aabb + WORLD_FORWARD * (aabb.max.z + 2.0)
-      z_pos.z = aabb.min.z - 2.0
-      immediate_quad(z_pos, WORLD_FORWARD, 1, 1, BLUE)
+      z_pos.z = aabb.max.z + 2.0
+      immediate_quad(z_pos, WORLD_FORWARD, 1, 1, set_alpha(BLUE, OPACITY))
     }
   }
 }

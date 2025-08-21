@@ -6,15 +6,19 @@ import "core:slice"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
-Framebuffer :: struct {
+Frame_Buffer :: struct {
   id:            u32,
-  attachments:   []Framebuffer_Attachment,
+
+  attachments:   []Frame_Buffer_Attachment,
   color_targets: []Texture,
   depth_target:  Texture,
+
   sample_count:  int,
+  width:  int,
+  height: int,
 }
 
-Framebuffer_Attachment :: enum {
+Frame_Buffer_Attachment :: enum {
   COLOR,
   HDR_COLOR,
   DEPTH,
@@ -23,11 +27,28 @@ Framebuffer_Attachment :: enum {
   DEPTH_CUBE_ARRAY,
 }
 
+Face_Cull_Mode :: enum {
+  DISABLED,
+  FRONT,
+  BACK,
+}
+
+Depth_Test_Mode :: enum {
+  DISABLED,
+  ALWAYS,
+  LESS,
+  LESS_EQUAL,
+}
+
+begin_render_pass :: proc(fb: Frame_Buffer, depth_mode: Depth_Test_Mode, cull_mode: Face_Cull_Mode) {
+
+}
+
 // For now depth target can either be depth only or depth+stencil,
 // also can only have one attachment of each type
 make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
-                         attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL}
-                         ) -> (buffer: Framebuffer, ok: bool) {
+                         attachments: []Frame_Buffer_Attachment = {.COLOR, .DEPTH_STENCIL}
+                         ) -> (buffer: Frame_Buffer, ok: bool) {
   fbo: u32
   gl.CreateFramebuffers(1, &fbo)
 
@@ -96,6 +117,8 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
     color_targets = slice.clone(color_targets[:], state.perm_alloc),
     depth_target  = depth_target,
     sample_count  = samples,
+    width         = width,
+    height        = height,
   }
   if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE {
     log.error("Unable to create complete framebuffer: %v", buffer)
@@ -106,20 +129,77 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
   return buffer, ok
 }
 
-bind_framebuffer :: proc(buffer: Framebuffer) {
-  gl.BindFramebuffer(gl.FRAMEBUFFER, buffer.id)
+// NOTE: If none passed in clear the default framebuffer
+clear_framebuffer :: proc(fb: Frame_Buffer = {}, color := BLACK) {
+  clear_color := color
+
+  // Hmm may want this to be controllable maybe
+  default_depth:   f32 = 1.0
+  default_stencil: i32 = 0
+
+  // This is the default framebuffer
+  if fb.id == 0 {
+    gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, 0, raw_data(&clear_color))
+    gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, default_depth, default_stencil)
+  } else {
+    // This is a created framebuffer
+
+    // Clear ALL the draw buffers
+    for _, idx in fb.color_targets {
+      gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, i32(idx), raw_data(&clear_color))
+    }
+
+    // Clear depth stencil target if it exists
+    if fb.depth_target.format == .DEPTH24_STENCIL8 {
+      gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, default_depth, default_stencil)
+    }
+
+    // Clear depth target if it exists
+    if fb.depth_target.format == .DEPTH32 {
+      gl.ClearNamedFramebufferfv(fb.id, gl.DEPTH, 0, &default_depth)
+    }
+  }
 }
 
-free_framebuffer :: proc(frame_buffer: ^Framebuffer) {
-  for &c in frame_buffer.color_targets {
+bind_framebuffer :: proc(fb: Frame_Buffer) {
+  gl.BindFramebuffer(gl.FRAMEBUFFER, fb.id)
+}
+
+free_framebuffer :: proc(fb: ^Frame_Buffer) {
+  for &c in fb.color_targets {
     free_texture(&c)
   }
-  free_texture(&frame_buffer.depth_target)
-  gl.DeleteFramebuffers(1, &frame_buffer.id)
+  free_texture(&fb.depth_target)
+  gl.DeleteFramebuffers(1, &fb.id)
 }
 
-// Will use the same sample count as the old
-remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (new_buffer: Framebuffer, ok: bool) {
+// NOTE: This blits the entire size of the targets, respectively
+// As well as always blitting color and depth buffer info
+blit_framebuffers :: proc(from, to: Frame_Buffer) {
+  gl_filter: u32 = gl.NEAREST
+
+  // TODO: Is this a good idea? Basically only use filtering if we aren't blitting from a multisample buffer
+  // and they are not the same size
+  if from.sample_count > 1 && (from.width != to.width || from.height != to.height) {
+    log.info("Blitting with linear filtering, check if that was something you wished to do")
+    gl_filter = gl.LINEAR
+  }
+
+  gl.BlitNamedFramebuffer(from.id, to.id,
+    0, 0, cast(i32) from.width, cast(i32) from.height,
+    0, 0, cast(i32) to.width,   cast(i32) to.height,
+    gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT,
+    gl_filter)
+}
+
+// TODO: Find a way to assert that the currently bound shader has the to_screen vertex shader
+draw_screen_quad :: proc() {
+  gl.BindVertexArray(state.empty_vao)
+  gl.DrawArrays(gl.TRIANGLES, 0, 6)
+}
+
+// Will use the same sample count and attachment list as the old
+remake_framebuffer :: proc(frame_buffer: ^Frame_Buffer, width, height: int) -> (new_buffer: Frame_Buffer, ok: bool) {
   old_samples     := frame_buffer.sample_count
   old_attachments := frame_buffer.attachments
   free_framebuffer(frame_buffer)
@@ -138,11 +218,12 @@ begin_drawing :: proc() {
     frame.fence = nil
   }
 
-  clear := WHITE
-  gl.ClearNamedFramebufferfv(0,                             gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
+  clear := BLACK
+  gl.ClearNamedFramebufferfv(0, gl.COLOR, 0, raw_data(&clear))
+  clear_framebuffer(state.hdr_ms_buffer)
+  clear_framebuffer(state.ping_pong_buffers[0])
+  clear_framebuffer(state.ping_pong_buffers[1])
+  clear_framebuffer(state.post_buffer)
 
   state.began_drawing = true
 }
@@ -165,12 +246,7 @@ begin_main_pass :: proc() {
 begin_post_pass :: proc() {
   gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
   gl.Disable(gl.DEPTH_TEST)
-
-  clear := BLACK
-  gl.ClearNamedFramebufferfv(0,                             gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[0].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.ping_pong_buffers[1].id, gl.COLOR, 0, raw_data(&clear))
-  gl.ClearNamedFramebufferfv(state.post_buffer.id,          gl.COLOR, 0, raw_data(&clear))
+  gl.Disable(gl.CULL_FACE)
 }
 
 begin_ui_pass :: proc() {
@@ -188,7 +264,7 @@ begin_ui_pass :: proc() {
 }
 
 // For now excludes transparent objects and the skybox
-begin_shadow_pass :: proc(framebuffer: Framebuffer) {
+begin_shadow_pass :: proc(framebuffer: Frame_Buffer) {
   assert(framebuffer.depth_target.id > 0, "Framebuffer must have depth target for shadow mapping")
   gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer.id)
 

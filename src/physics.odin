@@ -291,7 +291,7 @@ orthonormal_axes :: proc(forward: vec3) -> (right, up: vec3) {
   return right, up
 }
 
-draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
+draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025) {
   end := origin + direction
   immediate_line(origin, end, color)
 
@@ -300,24 +300,23 @@ draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE) {
   forward := normalize(direction)
   right, up := orthonormal_axes(forward)
 
-  BOUNDS :: 0.025
   tip   := end
 
-  base0 := end + right * BOUNDS
-  base0 += up * BOUNDS
-  base0 -= forward * BOUNDS * 4
+  base0 := end + right * tip_bounds
+  base0 += up * tip_bounds
+  base0 -= forward * tip_bounds * 4
 
-  base1 := end + right * BOUNDS
-  base1 -= up * BOUNDS
-  base1 -= forward * BOUNDS * 4
+  base1 := end + right * tip_bounds
+  base1 -= up * tip_bounds
+  base1 -= forward * tip_bounds * 4
 
-  base2 := end - right * BOUNDS
-  base2 += up * BOUNDS
-  base2 -= forward * BOUNDS * 4
+  base2 := end - right * tip_bounds
+  base2 += up * tip_bounds
+  base2 -= forward * tip_bounds * 4
 
-  base3 := end - right * BOUNDS
-  base3 -= up * BOUNDS
-  base3 -= forward * BOUNDS * 4
+  base3 := end - right * tip_bounds
+  base3 -= up * tip_bounds
+  base3 -= forward * tip_bounds * 4
 
   immediate_pyramid(tip, base0, base1, base2, base3, color)
 }

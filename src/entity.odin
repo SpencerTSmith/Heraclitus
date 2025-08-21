@@ -52,6 +52,8 @@ entity_has_transparency :: proc(e: Entity) -> bool {
   return model_has_transparency(model^)
 }
 
+// NOTE: This layer of drawing deals with assets not being present yet
+// the draw_model call is only for if we KNOW the model is loaded
 draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false) {
   if draw_aabbs {
     draw_aabb(entity_world_aabb(e))
@@ -65,8 +67,12 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aab
 
   model := get_model(e.model)
 
-  set_shader_uniform("model", entity_model_mat4(e))
-  draw_model(model^, mul_color=color, instances=instances)
+  if model != nil {
+    set_shader_uniform("model", entity_model_mat4(e))
+    draw_model(model^, mul_color=color, instances=instances)
+  } else {
+    log.warnf("Tried to draw entity with unloaded model")
+  }
 }
 
 // TODO: Cache these and only recomputing if we've moved
