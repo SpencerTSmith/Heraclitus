@@ -218,7 +218,7 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
   return uniforms
 }
 
-hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program) {
+hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator := context.allocator) {
   // TODO: Maybe keep track of includes... any programs that include get recompiled
   for &s, tag in shaders {
     needs_reload := false

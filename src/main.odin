@@ -677,7 +677,7 @@ main :: proc() {
       draw_menu()
     }
 
-    // Frame sync, swap backbuffers
+    // Frame sync, swap backbuffers, reset immediate batches
     flush_drawing()
 
     // Free any temp allocations

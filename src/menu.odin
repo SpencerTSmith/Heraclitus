@@ -151,5 +151,7 @@ draw_menu :: proc() {
     draw_text(text, menu.item_font, info.position.x, info.position.y,
               color, .CENTER)
   }
+
+  immediate_flush(flush_world=false, flush_screen=true)
 }
 
