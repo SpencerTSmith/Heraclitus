@@ -10,8 +10,8 @@ import gl "vendor:OpenGL"
 SHADER_DIR :: "shaders" + PATH_SLASH
 
 Shader_Type :: enum u32 {
-  VERT = gl.VERTEX_SHADER,
-  FRAG = gl.FRAGMENT_SHADER,
+  VERT,
+  FRAG,
 }
 
 Shader :: distinct u32
@@ -20,10 +20,10 @@ Shader_Program :: struct {
   id:       u32,
 
   // NOTE: Does not store the full path, just the name
-  vert_name: string,
-  vert_modify_time: int,
-  frag_name: string,
-  frag_modify_time: int,
+  parts: [Shader_Type]struct {
+    name:        string,
+    modify_time: os.File_Time,
+  },
 
   uniforms:  map[string]Uniform,
 }
@@ -61,6 +61,11 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
   // TODO: For now will not do recursive includes, but maybe won't be nessecary
   lines := strings.split_lines(source, context.temp_allocator)
 
+  to_gl_type := [Shader_Type]u32 {
+    .VERT = gl.VERTEX_SHADER,
+    .FRAG = gl.FRAGMENT_SHADER,
+  }
+
   include_builder := strings.builder_make_none(context.temp_allocator)
   for line in lines {
     trim := strings.trim_space(line)
@@ -92,7 +97,9 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
   c_str     := strings.clone_to_cstring(with_include, allocator = context.temp_allocator)
   c_str_len := i32(len(with_include))
 
-  shader =  Shader(gl.CreateShader(u32(type)))
+  gl_type := to_gl_type[type]
+
+  shader =  Shader(gl.CreateShader(gl_type))
   gl.ShaderSource(u32(shader), 1, &c_str, &c_str_len)
   gl.CompileShader(u32(shader))
 
@@ -148,11 +155,25 @@ make_shader_program :: proc(vert_name, frag_name: string, allocator := context.a
     info: [512]u8
     gl.GetProgramInfoLog(program.id, 512, nil, &info[0])
     log.errorf("Error linking shader program:\n%s", string(info[:]))
-    ok = false
-    return
+    return program, false
   }
 
   program.uniforms = make_shader_uniform_map(program, allocator = allocator)
+
+  err: os.Error
+
+  // NOTE: Since we should not be generating new names, all names should just be static strings, so hopefully this is ok
+  program.parts[.VERT].name = vert_name
+  program.parts[.VERT].modify_time, err = os.last_write_time_by_name(vert_path)
+  if err != nil {
+    log.errorf("Could not collect modify time for vertex shader: %v... error: %v", vert_name, err)
+  }
+
+  program.parts[.FRAG].name = frag_name
+  program.parts[.FRAG].modify_time, err = os.last_write_time_by_name(frag_path)
+  if err != nil {
+    log.errorf("Could not collect modify time for fragment shader: %v... error: %v", frag_name, err)
+  }
 
   ok = true
   return program, ok
@@ -197,11 +218,37 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
   return uniforms
 }
 
-// hot_reload_shaders :: proc(shaders: map[string]Shader_Program) {
-//   // TODO: Maybe keep track of includes... any programs that include get recompiled
-//   for &s in shaders {
-//   }
-// }
+hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program) {
+  // TODO: Maybe keep track of includes... any programs that include get recompiled
+  for &s, tag in shaders {
+    needs_reload := false
+    for &p in s.parts {
+
+      path := filepath.join({SHADER_DIR, p.name}, context.temp_allocator)
+      new_modify_time, err := os.last_write_time_by_name(path)
+      if err != nil {
+        log.errorf("Could not collect modify time for shader file: %v... error: %v", p.name, err)
+        continue
+      }
+
+      if new_modify_time > p.modify_time {
+        needs_reload = true
+      }
+    }
+
+    if needs_reload {
+      hot, ok := make_shader_program(s.parts[.VERT].name, s.parts[.FRAG].name, state.perm_alloc)
+      if !ok {
+        log.errorf("Unable to hot reload shader %v", tag)
+        state.running = false
+      }
+
+      free_shader_program(&s)
+      s = hot
+      log.infof("Hot reloaded shader %v", tag)
+    }
+  }
+}
 
 bind_shader :: proc(tag: Shader_Tag) {
   bind_shader_program(state.shaders[tag])

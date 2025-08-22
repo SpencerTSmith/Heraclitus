@@ -209,6 +209,8 @@ remake_framebuffer :: proc(frame_buffer: ^Frame_Buffer, width, height: int) -> (
 }
 
 begin_drawing :: proc() {
+  hot_reload_shaders(&state.shaders)
+
   // This simple?
   frame := &state.frames[state.curr_frame_index]
   if frame.fence != nil {
