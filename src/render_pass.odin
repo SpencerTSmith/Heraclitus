@@ -47,7 +47,7 @@ begin_render_pass :: proc(fb: Frame_Buffer, depth_mode: Depth_Test_Mode, cull_mo
 // For now depth target can either be depth only or depth+stencil,
 // also can only have one attachment of each type
 make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
-                         attachments: []Frame_Buffer_Attachment = {.COLOR, .DEPTH_STENCIL}
+                         attachments: []Frame_Buffer_Attachment = {.COLOR, .DEPTH_STENCIL},
                          ) -> (buffer: Frame_Buffer, ok: bool) {
   fbo: u32
   gl.CreateFramebuffers(1, &fbo)

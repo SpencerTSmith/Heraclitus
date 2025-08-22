@@ -1,6 +1,5 @@
 package main
 
-import "core:hash"
 import "core:path/filepath"
 import "core:log"
 
@@ -13,17 +12,33 @@ TEXTURE_DIR :: DATA_DIR + "textures" + PATH_SLASH
 Model_Handle   :: distinct u32
 Texture_Handle :: distinct u32
 
+// TODO: If doing streaming, then assets data structure should be pool like
+// As it stands handle is just an index into this array that never changes or shrinks
+Asset_Catalog :: struct($Type, $Handle: typeid) {
+  path_to_handle: map[string]Handle,
+  assets:         [dynamic]Type,
+}
+
 Assets :: struct {
-  model_catalog:   map[Model_Handle]Model,
-  texture_catalog: map[Texture_Handle]Texture,
+  model_catalog:   Asset_Catalog(Model, Model_Handle),
+  texture_catalog: Asset_Catalog(Texture, Texture_Handle),
 }
 
 @(private="file")
 assets: Assets
 
-init_assets :: proc() {
-  assets.model_catalog   = make(map[Model_Handle]Model, state.perm_alloc)
-  assets.texture_catalog = make(map[Texture_Handle]Texture, state.perm_alloc)
+init_assets :: proc(allocator := context.allocator) {
+  MODEL_ASSET_COUNT :: 128 // Expected
+  assets.model_catalog.path_to_handle = make(map[string]Model_Handle, allocator)
+  reserve(&assets.model_catalog.path_to_handle, MODEL_ASSET_COUNT)
+  assets.model_catalog.assets = make([dynamic]Model, allocator)
+  reserve(&assets.model_catalog.assets, MODEL_ASSET_COUNT)
+
+  TEXTURE_ASSET_COUNT :: 256 // Expected
+  assets.texture_catalog.path_to_handle = make(map[string]Texture_Handle, allocator)
+  reserve(&assets.texture_catalog.path_to_handle, TEXTURE_ASSET_COUNT)
+  assets.texture_catalog.assets = make([dynamic]Texture, allocator)
+  reserve(&assets.texture_catalog.assets, TEXTURE_ASSET_COUNT)
 
   // Probably will want these so might as well load them now
   load_texture("white.png")
@@ -32,68 +47,74 @@ init_assets :: proc() {
 }
 
 free_assets :: proc() {
-  for _, &model in assets.model_catalog {
+  for &model in assets.model_catalog.assets {
     free_model(&model)
   }
+  delete(assets.model_catalog.path_to_handle)
+  delete(assets.model_catalog.assets)
 
-  for _, &texture in assets.texture_catalog {
+  for &texture in assets.texture_catalog.assets {
     free_texture(&texture)
   }
+  delete(assets.texture_catalog.path_to_handle)
+  delete(assets.texture_catalog.assets)
 }
-
-hash_name :: proc(name: string) -> u32 {
-  return hash.crc32(transmute([]byte) name)
-}
-
-// NOTE: Could maybe be consolidated? Doing the same thing basically for all...
 
 load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) {
   path := filepath.join({MODEL_DIR, name}, context.temp_allocator)
 
-  // HACK: Should use name or full path?
-  handle = cast(Model_Handle) hash_name(name)
-
   // Already loaded
-  if handle in assets.model_catalog {
-    return handle, true
+  if path in assets.model_catalog.path_to_handle {
+    return assets.model_catalog.path_to_handle[path], true
   }
 
-  assets.model_catalog[handle], ok = make_model(path)
+  handle = cast(Model_Handle) len(assets.model_catalog.assets)
+
+  // NOTE: For now individual assets are always allocated on permanent arena
+  model: Model
+  model, ok = make_model(path, state.perm_alloc)
 
   if !ok {
     log.warnf("Model: %v unable to be loaded", path)
-    assets.model_catalog[handle], ok = make_model()
+    model, ok = make_model(state.perm_alloc)
   }
+
+  append(&assets.model_catalog.assets, model)
+  assets.model_catalog.path_to_handle[path] = handle
 
   return handle, ok
 }
 
 get_model :: proc(handle: Model_Handle) -> ^Model {
-  return &assets.model_catalog[handle] or_else nil
+  return &assets.model_catalog.assets[handle]
 }
 
 load_texture :: proc(name: string, nonlinear_color: bool = false,
                      in_texture_dir: bool = true) -> (handle: Texture_Handle, ok: bool) {
   path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator) if in_texture_dir else name
 
-  // Should use name or full path?
-  handle = cast(Texture_Handle) hash_name(name)
-
   // Already loaded
-  if handle in assets.texture_catalog {
-    return handle, true
+  if path in assets.texture_catalog.path_to_handle {
+    return assets.texture_catalog.path_to_handle[path], true
   }
 
-  assets.texture_catalog[handle], ok = make_texture(path, nonlinear_color)
+  handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
+
+  // NOTE: For now individual assets are always allocated on permanent arena
+  texture: Texture
+  texture, ok = make_texture(path, nonlinear_color)
 
   if !ok {
     log.debugf("Texture: %v unable to be loaded", path)
-    assets.texture_catalog[handle] = make_texture_from_missing()
+    texture = make_texture_from_missing()
   }
+
+  append(&assets.texture_catalog.assets, texture)
+  assets.texture_catalog.path_to_handle[path] = handle
 
   return handle, ok
 }
 
 get_texture :: proc(handle: Texture_Handle) -> ^Texture {
-  return &assets.texture_catalog[handle] or_else nil
+  return &assets.texture_catalog.assets[handle]
 }

@@ -27,7 +27,7 @@ GPU_Buffer :: struct #no_copy {
   mapped:     rawptr,
   total_size: int,
 
-  // Frame range, aligned for you, just for mapped buffers
+  // Frame range, aligned for you, just for tripled up, mapped buffers
   range_size: int,
 
   // Vertex specific stuff

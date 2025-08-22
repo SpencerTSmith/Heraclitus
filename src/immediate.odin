@@ -54,7 +54,7 @@ Immediate_Batch :: struct {
 @(private="file")
 immediate: Immediate_State
 
-init_immediate_renderer :: proc() -> (ok: bool) {
+init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
   assert(state.gl_is_initialized)
 
   vertex_buffer := make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, persistent = true)
@@ -65,8 +65,10 @@ init_immediate_renderer :: proc() -> (ok: bool) {
     vertex_buffer = vertex_buffer,
     vertex_count  = 0,
     shader  = shader,
-    batches = make([dynamic]Immediate_Batch, state.perm_alloc),
+    batches = make([dynamic]Immediate_Batch, allocator),
   }
+  MAX_BATCH_COUNT :: 256
+  reserve(&immediate.batches, MAX_BATCH_COUNT)
 
   // FIXME: AHHHHHHHHH
   white_tex_handle: Texture_Handle
@@ -115,6 +117,7 @@ immediate_begin_force :: proc() {
 free_immediate_renderer :: proc() {
   free_gpu_buffer(&immediate.vertex_buffer)
   free_shader_program(&immediate.shader)
+  delete(immediate.batches)
 }
 
 // NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right

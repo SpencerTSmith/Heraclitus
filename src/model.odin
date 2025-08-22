@@ -54,11 +54,11 @@ make_model :: proc{
   make_model_from_file,
   make_model_from_data,
   // make_model_from_default_container,
-  make_model_from_default_white_cube,
+  make_model_from_missing,
 }
 
 // Takes in all vertices and all indices.. then a slice of the materials and a slice of the meshes
-make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, materials: []Material, meshes: []Mesh) -> (model: Model, ok: bool) {
+make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, materials: []Material, meshes: []Mesh, allocator := context.allocator) -> (model: Model, ok: bool) {
   buffer := make_vertex_buffer(Mesh_Vertex, len(vertices), len(indices), raw_data(vertices), raw_data(indices))
 
   //
@@ -86,8 +86,8 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, mat
     index_count  = i32(len(indices)),
 
     // Copying ugh, but hopefully ok
-    meshes       = slice.clone(meshes, state.perm_alloc),
-    materials    = slice.clone(materials, state.perm_alloc),
+    meshes       = slice.clone(meshes, allocator),
+    materials    = slice.clone(materials, allocator),
 
     aabb = aabb,
   }
@@ -99,7 +99,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, mat
 // NOTE: Big assumptions:
 // 1. This is one model (might not be an issue if just make that make_scene() proc)
 // 2. That the image is always a separate image file (png, jpg, etc.)
-make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
+make_model_from_file :: proc(file_name: string, allocator := context.allocator) -> (model: Model, ok: bool) {
   c_path := strings.clone_to_cstring(file_name, allocator = context.temp_allocator)
 
   dir := filepath.dir(file_name, context.temp_allocator)
@@ -424,7 +424,7 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
     assert(len(model_verts) == cast(int) model_verts_count)
     assert(len(model_index) == cast(int) model_index_count)
 
-    model, ok = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:])
+    model, ok = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:], allocator)
   } else do log.errorf("Unable to parse cgltf file \"%v\"\n", file_name)
 
   model.name = strings.clone(file_name)
@@ -432,31 +432,17 @@ make_model_from_file :: proc(file_name: string) -> (model: Model, ok: bool) {
   return model, ok
 }
 
-make_model_from_default_container :: proc() -> (model: Model, ok: bool) {
-  mesh: Mesh = {
-    material_index = 0,
-    index_offset   = 0,
-    index_count    = 36,
-  }
-  meshes: []Mesh = {mesh}
-  material := make_material("container2.png", "container2_specular.png", shininess = 64.0, in_texture_dir=true) or_return
-  materials: []Material = {material}
-
-  model = make_model_from_data(DEFAULT_CUBE_VERT, DEFAULT_CUBE_INDX, materials, meshes) or_return
-  return
-}
-
-make_model_from_default_white_cube :: proc() -> (model: Model, ok: bool) {
+make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model, ok: bool) {
   mesh := Mesh {
     material_index = 0,
     index_offset   = 0,
     index_count    = 36,
   }
   meshes: []Mesh = {mesh}
-  material := make_material(specular_path="black.png", in_texture_dir=true) or_return
+  material := make_material(diffuse_path="missing.png", specular_path="black.png", in_texture_dir=true) or_return
   materials: []Material = {material}
 
-  model = make_model_from_data(DEFAULT_CUBE_VERT, DEFAULT_CUBE_INDX, materials, meshes) or_return
+  model = make_model_from_data(DEFAULT_CUBE_VERT, DEFAULT_CUBE_INDX, materials, meshes, allocator) or_return
   return
 }
 
@@ -501,9 +487,8 @@ free_model :: proc(model: ^Model) {
   free_gpu_buffer(&model.buffer)
 
   delete(model.name)
-
-  // Zero it out
-  model^ = {}
+  // delete(model.materials)
+  // delete(model.meshes)
 }
 
 // TODO: Make this work with the asset system

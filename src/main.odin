@@ -183,7 +183,7 @@ init_state :: proc() -> (ok: bool) {
   }
   state.perm_alloc = virtual.arena_allocator(&state.perm)
 
-  init_assets()
+  init_assets(state.perm_alloc)
 
   state.camera = {
     sensitivity  = 0.2,
@@ -194,8 +194,12 @@ init_state :: proc() -> (ok: bool) {
     aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},},
   }
 
+  MAX_ENTITY_COUNT :: 10000
   state.entities     = make([dynamic]Entity, state.perm_alloc)
+  reserve(&state.entities, MAX_ENTITY_COUNT)
+
   state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
+  reserve(&state.entities, MAX_POINT_LIGHTS)
 
   state.running = true
 
@@ -266,7 +270,7 @@ init_state :: proc() -> (ok: bool) {
 
   gl.CreateVertexArrays(1, &state.empty_vao)
 
-  init_immediate_renderer() or_return
+  init_immediate_renderer(state.perm_alloc) or_return
 
   init_menu() or_return
 
