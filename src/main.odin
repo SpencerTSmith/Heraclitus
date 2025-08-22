@@ -12,6 +12,16 @@ import "core:log"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
+Shader_Tag :: enum {
+  PHONG,
+  SKYBOX,
+  RESOLVE_HDR,
+  SUN_DEPTH,
+  POINT_DEPTH,
+  GAUSSIAN,
+  GET_BRIGHT,
+}
+
 State :: struct {
   running: bool,
   mode: Program_Mode,
@@ -58,7 +68,7 @@ State :: struct {
   point_lights_on: bool,
 
   // Could maybe replace this but this makes it easier to add them
-  shaders: map[string]Shader_Program,
+  shaders: [Shader_Tag]Shader_Program,
 
   skybox: Skybox,
 
@@ -192,15 +202,13 @@ init_state :: proc() -> (ok: bool) {
   state.z_near = 0.1
   state.z_far  = 1000.0
 
-  state.shaders = make(map[string]Shader_Program, allocator=state.perm_alloc)
-
-  state.shaders["phong"]         = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
-  state.shaders["skybox"]        = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
-  state.shaders["resolve_hdr"]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
-  state.shaders["sun_depth"]     = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
-  state.shaders["point_shadows"] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
-  state.shaders["gaussian"]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
-  state.shaders["get_bright"]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.PHONG]         = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
+  state.shaders[.SKYBOX]        = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.RESOLVE_HDR]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.SUN_DEPTH]     = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.POINT_DEPTH] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.GAUSSIAN]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.GET_BRIGHT]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
 
   state.sun = {
     direction = {0.5, -1.0,  0.7},
@@ -503,7 +511,7 @@ main :: proc() {
       if state.sun_on {
         begin_shadow_pass(sun_depth_buffer)
         {
-          bind_shader_program(state.shaders["sun_depth"])
+          bind_shader(.SUN_DEPTH)
 
           for e in state.entities {
             draw_entity(e)
@@ -514,7 +522,7 @@ main :: proc() {
       if state.point_lights_on {
         begin_shadow_pass(state.point_depth_buffer)
         {
-          bind_shader("point_shadows")
+          bind_shader(.POINT_DEPTH)
 
           for l, idx in state.point_lights {
             set_shader_uniform("light_index", i32(idx))
@@ -538,7 +546,7 @@ main :: proc() {
       //
       begin_main_pass()
       {
-        bind_shader_program(state.shaders["phong"])
+        bind_shader(.PHONG)
 
         if state.sun_on {
           bind_texture("skybox", state.skybox.texture)
@@ -568,7 +576,7 @@ main :: proc() {
         }
 
         // Transparent models
-        bind_shader_program(state.shaders["phong"])
+        bind_shader(.PHONG)
         {
           // Sort so that further entities get drawn first
           slice.sort_by(transparent_entities[:], proc(a, b: ^Entity) -> bool {
@@ -621,12 +629,12 @@ main :: proc() {
         if state.bloom_on {
           // Now collect bright spots
           bind_framebuffer(state.ping_pong_buffers[0])
-          bind_shader("get_bright")
+          bind_shader(.GET_BRIGHT)
           bind_texture("image", state.post_buffer.color_targets[0])
           draw_screen_quad()
 
           // Now do the blur
-          bind_shader("gaussian")
+          bind_shader(.GAUSSIAN)
 
           // Begin ping ponging
           bind_framebuffer(state.ping_pong_buffers[1])
@@ -649,7 +657,7 @@ main :: proc() {
         // Resolve hdr (with bloom) to backbuffer
         //
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-        bind_shader_program(state.shaders["resolve_hdr"])
+        bind_shader(.RESOLVE_HDR)
         bind_texture("screen_texture", state.post_buffer.color_targets[0])
         bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
         set_shader_uniform("exposure", f32(0.5))
@@ -686,7 +694,7 @@ free_state :: proc() {
 
   free_gpu_buffer(&state.frame_uniforms)
 
-  for _, &shader in state.shaders {
+  for &shader in state.shaders {
     free_shader_program(&shader)
   }
 

@@ -523,7 +523,7 @@ make_skybox :: proc(file_paths: [6]string) -> (skybox: Skybox, ok: bool) {
 
 // Remember... binds the skybox shader
 draw_skybox :: proc(skybox: Skybox) {
-  bind_shader_program(state.shaders["skybox"])
+  bind_shader(.SKYBOX)
 
   // Get the depth func before and reset after this call
   // TODO: Do this everywhere, ie push and pop GL state

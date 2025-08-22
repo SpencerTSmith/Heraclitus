@@ -173,7 +173,7 @@ text_draw_height :: proc(text: string, font: Font) -> f32 {
   return h
 }
 
-draw_text :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE, align: Text_Alignment = .LEFT) {
+draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT) {
   assert(font.atlas.id != 0, "Tried to use uninitialized font")
 
   x_start := align_text_start_x(text, font, x, align)
@@ -205,7 +205,7 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE,
 
 DEFAULT_TEXT_BACKGROUND :: vec4{0.0, 0.0, 0.0, 0.7}
 
-draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_color: vec4 = WHITE, align: Text_Alignment = .LEFT,
+draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT,
                                   padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) {
   l, t, b, r := text_draw_rect(text, font, x, y, align)
 

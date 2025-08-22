@@ -18,7 +18,14 @@ Shader :: distinct u32
 
 Shader_Program :: struct {
   id:       u32,
-  uniforms: map[string]Uniform,
+
+  // NOTE: Does not store the full path, just the name
+  vert_name: string,
+  vert_modify_time: int,
+  frag_name: string,
+  frag_modify_time: int,
+
+  uniforms:  map[string]Uniform,
 }
 
 // TODO: Not sure I really like doing this, but I prefer having nice debug info
@@ -46,7 +53,7 @@ Uniform :: struct {
   type:     Uniform_Type,
   location: i32,
   size:     i32,
-  binding:  i32,
+  binding:  i32, // For things that are bindable
 }
 
 make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: Shader, ok: bool) {
@@ -106,11 +113,9 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
 }
 
 make_shader_from_file :: proc(file_name: string, type: Shader_Type, prepend_common: bool = true) -> (shader: Shader, ok: bool) {
-  rel_path := filepath.join({SHADER_DIR, file_name}, context.temp_allocator)
-
-  source, file_ok := os.read_entire_file(rel_path, context.temp_allocator)
+  source, file_ok := os.read_entire_file(file_name, context.temp_allocator)
   if !file_ok {
-    log.errorf("Couldn't read shader file: %s", rel_path)
+    log.errorf("Couldn't read shader file: %s", file_name)
     ok = false
     return
   }
@@ -123,7 +128,10 @@ free_shader :: proc(shader: Shader) {
   gl.DeleteShader(u32(shader))
 }
 
-make_shader_program :: proc(vert_path, frag_path: string, allocator := context.allocator) -> (program: Shader_Program, ok: bool) {
+make_shader_program :: proc(vert_name, frag_name: string, allocator := context.allocator) -> (program: Shader_Program, ok: bool) {
+  vert_path := filepath.join({SHADER_DIR, vert_name}, context.temp_allocator)
+  frag_path := filepath.join({SHADER_DIR, frag_name}, context.temp_allocator)
+
   vert := make_shader_from_file(vert_path, .VERT) or_return
   defer free_shader(vert)
   frag := make_shader_from_file(frag_path, .FRAG) or_return
@@ -189,9 +197,14 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
   return uniforms
 }
 
-bind_shader :: proc(name: string) {
-  assert(name in state.shaders)
-  bind_shader_program(state.shaders[name])
+// hot_reload_shaders :: proc(shaders: map[string]Shader_Program) {
+//   // TODO: Maybe keep track of includes... any programs that include get recompiled
+//   for &s in shaders {
+//   }
+// }
+
+bind_shader :: proc(tag: Shader_Tag) {
+  bind_shader_program(state.shaders[tag])
 }
 
 bind_shader_program :: proc(program: Shader_Program) {

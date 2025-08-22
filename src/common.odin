@@ -124,10 +124,10 @@ point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
 }
 
 Window :: struct {
-  handle:   glfw.WindowHandle,
-  w, h:     int,
-  title:    string,
-  resized:  bool,
+  handle:  glfw.WindowHandle,
+  w, h:    int,
+  title:   string,
+  resized: bool,
 }
 
 resize_window :: proc() {

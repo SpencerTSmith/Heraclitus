@@ -281,7 +281,6 @@ begin_shadow_pass :: proc(framebuffer: Frame_Buffer) {
 
 flush_drawing :: proc() {
 
-  // Remember to flush the remaining portion
   immediate_frame_reset()
 
   // And set up for next frame
