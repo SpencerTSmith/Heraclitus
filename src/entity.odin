@@ -31,9 +31,7 @@ make_entity :: proc(model:    string,
     log.warnf("Entity failed to load model: %v", model)
   }
 
-  if .STATIC in flags {
-    assert(.STATIC in flags, "Static entities must have collsion")
-  }
+  assert(.STATIC not_in flags || .COLLISION in flags, "Static entities must have collsion")
 
   entity := Entity {
     flags    = flags,

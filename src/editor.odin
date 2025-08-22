@@ -144,7 +144,7 @@ draw_editor_ui :: proc() {
   x := f32(state.window.w) * 0.5
   y := f32(state.window.h) - f32(state.window.h) * 0.05
 
-  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 1.5, align=.CENTER, padding=10.0)
+  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 2.0, align=.CENTER, padding=10.0)
 
   //
   // Draw move widgets

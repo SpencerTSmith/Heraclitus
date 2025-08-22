@@ -586,7 +586,7 @@ main :: proc() {
         if state.point_lights_on {
           for l in state.point_lights {
             if state.draw_debug {
-              immediate_sphere(l.position, l.radius, l.color)
+              immediate_sphere(l.position, l.radius, l.color, latitude_rings=8, longitude_rings=8)
             }
 
             w:f32 = 1.0
@@ -600,9 +600,8 @@ main :: proc() {
           draw_grid(color = {1.0, 1.0, 1.0, 0.4})
         }
 
-        // FIXME: This kind of sucks
-        // Flush any accumulated draw calls (Right now those are just for debug visuals, some ui text)
-        immediate_flush()
+        // Flush any accumulated 3D draw calls
+        immediate_flush(flush_world=true, flush_screen=false)
       }
 
       //
@@ -655,9 +654,6 @@ main :: proc() {
         bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
         set_shader_uniform("exposure", f32(0.5))
         draw_screen_quad()
-
-        // gl.DepthMask(gl.TRUE)
-        immediate_quad(vec2{2000,2000}, 400, 400, texture=state.post_buffer.depth_target)
       }
 
       if state.draw_debug {
@@ -665,6 +661,9 @@ main :: proc() {
         begin_ui_pass()
         draw_debug_stats()
       }
+
+      // Flush any accumulated 2D or screen space draws
+      immediate_flush(flush_world=false, flush_screen=true)
     case .MENU:
       update_menu_input()
       draw_menu()

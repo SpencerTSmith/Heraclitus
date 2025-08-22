@@ -246,7 +246,6 @@ begin_main_pass :: proc() {
 begin_post_pass :: proc() {
   gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
   gl.Disable(gl.DEPTH_TEST)
-  gl.Disable(gl.CULL_FACE)
 }
 
 begin_ui_pass :: proc() {
@@ -283,7 +282,7 @@ begin_shadow_pass :: proc(framebuffer: Frame_Buffer) {
 flush_drawing :: proc() {
 
   // Remember to flush the remaining portion
-  immediate_frame_flush()
+  immediate_frame_reset()
 
   // And set up for next frame
   frame := &state.frames[state.curr_frame_index]

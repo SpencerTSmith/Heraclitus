@@ -15,7 +15,7 @@ Immediate_Vertex :: struct {
 // NOTE: When an immediate_* function takes in a vec2 for position it means its in screen coords
 // When taking in a vec3 for position its in world space
 
-Immediate_Mode :: enum {
+Immediate_Primitive :: enum {
   TRIANGLES,
   LINES,
   LINE_STRIPS,
@@ -45,9 +45,9 @@ Immediate_Batch :: struct {
   vertex_base:  int, // First vertex in batch
   vertex_count: int, // How many vertices in batch
 
-  mode:    Immediate_Mode,
-  texture: Texture,
-  space:   Immediate_Space,
+  primitive: Immediate_Primitive,
+  texture:   Texture,
+  space:     Immediate_Space,
 }
 
 // Internal state
@@ -77,18 +77,19 @@ init_immediate_renderer :: proc() -> (ok: bool) {
   return ok
 }
 
-immediate_frame_flush :: proc() {
-  immediate_flush()
+immediate_frame_reset :: proc() {
   immediate.vertex_count = 0
+  clear(&immediate.batches)
+  immediate.curr_batch = nil
 }
 
 // Returns the pointer to the new batch in the batches dynamic array.
 @(private="file")
-start_new_batch :: proc(mode: Immediate_Mode, texture: Texture, space: Immediate_Space) -> (batch_pointer: ^Immediate_Batch) {
+start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture, space: Immediate_Space) -> (batch_pointer: ^Immediate_Batch) {
   append(&immediate.batches, Immediate_Batch{
     vertex_base = immediate.vertex_count, // Always on the end.
 
-    mode = mode,
+    primitive = mode,
     texture = texture,
     space = space,
   })
@@ -97,18 +98,18 @@ start_new_batch :: proc(mode: Immediate_Mode, texture: Texture, space: Immediate
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_mode: Immediate_Mode, wish_texture: Texture, wish_space: Immediate_Space) {
+immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture, wish_space: Immediate_Space) {
   if immediate.curr_batch == nil || // Should short circuit and not do any nil dereferences
-     immediate.curr_batch.mode    != wish_mode  ||
+     immediate.curr_batch.primitive    != wish_primitive  ||
      immediate.curr_batch.space   != wish_space ||
      immediate.curr_batch.texture != wish_texture {
-    immediate.curr_batch = start_new_batch(wish_mode, wish_texture, wish_space)
+    immediate.curr_batch = start_new_batch(wish_primitive, wish_texture, wish_space)
   }
 }
 
 // Forces the creation of a new batch
 immediate_begin_force :: proc() {
-  immediate.curr_batch = start_new_batch(immediate.curr_batch.mode, immediate.curr_batch.texture, immediate.curr_batch.space)
+  immediate.curr_batch = start_new_batch(immediate.curr_batch.primitive, immediate.curr_batch.texture, immediate.curr_batch.space)
 }
 
 free_immediate_renderer :: proc() {
@@ -153,10 +154,10 @@ immediate_quad :: proc {
 immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
                           top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
                           texture: Texture = immediate.white_texture) {
-  wish_mode  := Immediate_Mode.TRIANGLES
-  wish_space := Immediate_Space.SCREEN
+  wish_primitive := Immediate_Primitive.TRIANGLES
+  wish_space     := Immediate_Space.SCREEN
 
-  immediate_begin(wish_mode, texture, wish_space)
+  immediate_begin(wish_primitive, texture, wish_space)
 
   top_left := Immediate_Vertex{
     position = {top_left_position.x, top_left_position.y, -state.z_near},
@@ -194,10 +195,10 @@ immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHIT
 immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
                           uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
                           texture: Texture = immediate.white_texture) {
-  wish_mode  := Immediate_Mode.TRIANGLES
-  wish_space := Immediate_Space.WORLD
+  wish_primitive := Immediate_Primitive.TRIANGLES
+  wish_space     := Immediate_Space.WORLD
 
-  immediate_begin(wish_mode, texture, wish_space)
+  immediate_begin(wish_primitive, texture, wish_space)
 
   norm := normalize(normal) // Just in case
   right, up := orthonormal_axes(norm)
@@ -242,11 +243,11 @@ immediate_line :: proc {
 
 // NOTE: A 2d line so takes in screen coordinates!
 immediate_line_2D :: proc(xy0, xy1: vec2, rgba := WHITE) {
-  wish_mode    := Immediate_Mode.LINES
-  wish_space   := Immediate_Space.SCREEN
-  wish_texture := immediate.white_texture
+  wish_primitive := Immediate_Primitive.LINES
+  wish_space     := Immediate_Space.SCREEN
+  wish_texture   := immediate.white_texture
 
-  immediate_begin(wish_mode, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space)
 
   immediate_vertex({xy0.x, xy0.y, -state.z_near}, color=rgba)
   immediate_vertex({xy1.x, xy1.y, -state.z_near}, color=rgba)
@@ -254,11 +255,11 @@ immediate_line_2D :: proc(xy0, xy1: vec2, rgba := WHITE) {
 
 // NOTE: 3d line
 immediate_line_3D :: proc(xyz0, xyz1: vec3, color := WHITE) {
-  wish_mode    := Immediate_Mode.LINES
-  wish_space   := Immediate_Space.WORLD
-  wish_texture := immediate.white_texture
+  wish_primitive := Immediate_Primitive.LINES
+  wish_space     := Immediate_Space.WORLD
+  wish_texture   := immediate.white_texture
 
-  immediate_begin(wish_mode, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space)
 
   immediate_vertex(xyz0, color=color)
   immediate_vertex(xyz1, color=color)
@@ -267,11 +268,11 @@ immediate_line_3D :: proc(xyz0, xyz1: vec3, color := WHITE) {
 immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
   corners := box_corners(xyz_min, xyz_max)
 
-  wish_mode    := Immediate_Mode.TRIANGLES
-  wish_space   := Immediate_Space.WORLD
-  wish_texture := immediate.white_texture
+  wish_primitive := Immediate_Primitive.TRIANGLES
+  wish_space     := Immediate_Space.WORLD
+  wish_texture   := immediate.white_texture
 
-  immediate_begin(wish_mode, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space)
 
   immediate_vertex(corners[0], color)
   immediate_vertex(corners[1], color)
@@ -325,10 +326,10 @@ immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
 immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
   corners := box_corners(xyz_min, xyz_max)
 
-  wish_mode    := Immediate_Mode.LINES
-  wish_space   := Immediate_Space.WORLD
-  wish_texture := immediate.white_texture
-  immediate_begin(wish_mode, wish_texture, wish_space)
+  wish_primitive := Immediate_Primitive.LINES
+  wish_space     := Immediate_Space.WORLD
+  wish_texture   := immediate.white_texture
+  immediate_begin(wish_primitive, wish_texture, wish_space)
 
   // Back
   immediate_line(corners[0], corners[1], color)
@@ -352,10 +353,10 @@ immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
 }
 
 immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE) {
-  wish_mode    := Immediate_Mode.TRIANGLES
-  wish_space   := Immediate_Space.WORLD
-  wish_texture := immediate.white_texture
-  immediate_begin(wish_mode, wish_texture, wish_space)
+  wish_primitive := Immediate_Primitive.TRIANGLES
+  wish_space     := Immediate_Space.WORLD
+  wish_texture   := immediate.white_texture
+  immediate_begin(wish_primitive, wish_texture, wish_space)
 
   // Triangle sides
   immediate_vertex(tip, color)
@@ -386,22 +387,20 @@ immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE)
 
 // Only wire frame for now
 // TODO: Filled in option too
-immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE) {
-  wish_mode    := Immediate_Mode.LINE_STRIPS
-  wish_space   := Immediate_Space.WORLD
-  wish_texture := immediate.white_texture
-  immediate_begin(wish_mode, wish_texture, wish_space)
+immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE, latitude_rings := 16, longitude_rings := 16) {
+  wish_primitive := Immediate_Primitive.LINE_STRIPS
+  wish_space     := Immediate_Space.WORLD
+  wish_texture   := immediate.white_texture
+  immediate_begin(wish_primitive, wish_texture, wish_space)
 
   // Draw the horizontal rings
-  LAT_RINGS  :: 8 * 2
-  LONG_RINGS :: 8 * 2
-  for r in 1..<LAT_RINGS {
+  for r in 1..<latitude_rings {
     // Which ring are we on, as an angle
-    theta := f32(r) / LAT_RINGS * PI
+    theta := f32(r) / f32(latitude_rings) * PI
 
     // The individual line segemnts that make up the ring
-    for s in 0..=LONG_RINGS {
-      phi := f32(s) / LONG_RINGS * PI * 2.0
+    for s in 0..=longitude_rings {
+      phi := f32(s) / f32(longitude_rings) * PI * 2.0
 
       // Just a rotation matrix basically based on theta and phi, then translating by the center
       immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
@@ -411,13 +410,13 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE) {
   }
 
   // Same for the vertical rings
-  for s in 0..<LONG_RINGS {
+  for s in 0..<longitude_rings {
     // Which ring are we on, as an angle
-    phi := f32(s) / LONG_RINGS * PI * 2.0
+    phi := f32(s) / f32(longitude_rings) * PI * 2.0
 
     // The individual line segemnts that make up the ring
-    for r in 0..=LAT_RINGS {
-      theta := f32(r) / LAT_RINGS * PI
+    for r in 0..=latitude_rings {
+      theta := f32(r) / f32(latitude_rings) * PI
 
       // Just a rotation matrix basically based on theta and phi, then translating by the center
       immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
@@ -431,7 +430,12 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE) {
   immediate_begin_force()
 }
 
-immediate_flush :: proc() {
+// NOTE: Can control if flushing world space immediates, screen space immediates, or both
+// This is used to draw any world space immediates in the main pass, allowing them to recive MSAA and to sample
+// the main scene's depth buffer if they wish
+// TODO: Maybe consider just having two different immediate systems, one for things that should be flushed in the main pass
+// And others that ought to be flushed in the overlay/ui pass
+immediate_flush :: proc(flush_world := true, flush_screen := true) {
   assert(state.began_drawing, "Tried to flush immediate vertex info before we have begun drawing this frame.")
 
   if immediate.vertex_count > 0 {
@@ -444,28 +448,34 @@ immediate_flush :: proc() {
     orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far)
     perspective  := get_camera_perspective(state.camera) * get_camera_view(state.camera)
 
+    gl.Disable(gl.CULL_FACE)
+
     frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
     for batch in immediate.batches {
       if batch.vertex_count > 0 {
-        bind_texture("tex", batch.texture)
-
         // TODO: Again make this a more generalizable thing probably
         depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
         defer gl.DepthFunc(u32(depth_func_before))
 
         switch batch.space {
         case .SCREEN:
+          if !flush_screen { continue } // We shouldn't flush screen immediates
+
           gl.DepthFunc(gl.ALWAYS)
           set_shader_uniform("transform", orthographic)
         case .WORLD:
+          if !flush_world { continue } // We shouldn't flush screen immediates
+
           gl.DepthFunc(gl.LESS)
           set_shader_uniform("transform", perspective)
         }
 
+        bind_texture("tex", batch.texture)
+
         first_vertex := i32(frame_base + batch.vertex_base)
         vertex_count := i32(batch.vertex_count)
 
-        switch batch.mode {
+        switch batch.primitive {
         case .TRIANGLES:
           gl.DrawArrays(gl.TRIANGLES, first_vertex, vertex_count)
         case .LINES:
@@ -475,9 +485,5 @@ immediate_flush :: proc() {
         }
       }
     }
-
-    // And reset
-    clear(&immediate.batches)
-    immediate.curr_batch = nil
   }
 }
