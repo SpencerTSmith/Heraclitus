@@ -1,23 +1,24 @@
 # Fix Soon:
 - Better render pass state tracking... maybe push and pop GL state procs? Since we are caching them we'll be able to check those calls and not do em if not necessary
+- UI layout system, draw call collection
 - Split shadow-casting point lights and non-shadow-casting lights... this can just be a bool... but should be separate arrays in the global frame uniform
-- Improve immediate rendering batching
-    - Look for already started batches that match state and append... or...
-    - Sort batches by state change when flushing
-    - Maybe not... this might be the job of higher level layers
-        - The UI will want its draw commands submitted in a particular order... any batch sorting may override that
-        - So far don't think it matters for 3d debug visuals
-- Sort of just normalizing vectors everywhere, probably redundantly... profile and find out if this is significant enough to fix
 - More AZDO:
     - Multi-draw indirect
         - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
     - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalc
 - Switch fully to PBR lighting model
-- Start working on UI system, right now, getting ui elements (text) flushed with debug visuals, causing ugly bloom on brightly colored text
-    - Probably just gonna go with UI generates draw calls and we can just run through them at the end of frame with current immediate vertex system
+- Add interaction to Editor gizmos
+- Sort of just normalizing vectors everywhere, almost certainly redundantly... profile and find out if this is significant enough to fix
+- Thread pool loading of assets
+    - Need to have a fence before we begin drawing to actually upload gpu data, as that can only be done from the thread with the gl context
+        - But there is still work that can be done in parallel that actually takes a bit of time, namely computing tangents for models that don't have them
 
 # Complete:
+- Shader hot-reloading
+- Asset system basics:
+    - Will only load assets once, keeps hashes of file paths to check
+    - Handle system, no hashing needed once the asset is loaded to retrieve it
 - Cool GLSL metaprogramming
     - Generate GLSL code that needs to match up with host code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
 - AABB basic collision detection and response

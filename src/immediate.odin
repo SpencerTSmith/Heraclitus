@@ -70,13 +70,9 @@ init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
   MAX_BATCH_COUNT :: 256
   reserve(&immediate.batches, MAX_BATCH_COUNT)
 
-  // FIXME: AHHHHHHHHH
-  white_tex_handle: Texture_Handle
-  white_tex_handle, ok = load_texture("white.png")
+  immediate.white_texture = get_texture_by_name("white.png")^
 
-  immediate.white_texture = get_texture(white_tex_handle)^
-
-  return ok
+  return true
 }
 
 immediate_frame_reset :: proc() {

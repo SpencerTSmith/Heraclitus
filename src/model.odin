@@ -47,13 +47,12 @@ Model :: struct {
   meshes:    []Mesh,
   materials: []Material,
 
-  aabb: AABB, // For the model
+  aabb: AABB, // For the model, in model space
 }
 
 make_model :: proc{
   make_model_from_file,
   make_model_from_data,
-  // make_model_from_default_container,
   make_model_from_missing,
 }
 
@@ -425,9 +424,8 @@ make_model_from_file :: proc(file_name: string, allocator := context.allocator) 
     assert(len(model_index) == cast(int) model_index_count)
 
     model, ok = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:], allocator)
+    model.name = strings.clone(file_name)
   } else do log.errorf("Unable to parse cgltf file \"%v\"\n", file_name)
-
-  model.name = strings.clone(file_name)
 
   return model, ok
 }

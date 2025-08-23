@@ -183,8 +183,6 @@ init_state :: proc() -> (ok: bool) {
   }
   state.perm_alloc = virtual.arena_allocator(&state.perm)
 
-  init_assets(state.perm_alloc)
-
   state.camera = {
     sensitivity  = 0.2,
     yaw          = 270.0,
@@ -269,6 +267,8 @@ init_state :: proc() -> (ok: bool) {
   state.skybox = make_skybox(cube_map_sides) or_return
 
   gl.CreateVertexArrays(1, &state.empty_vao)
+
+  init_assets(state.perm_alloc)
 
   init_immediate_renderer(state.perm_alloc) or_return
 
@@ -369,10 +369,6 @@ main :: proc() {
     // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
     // append(&state.entities, chess)
   }
-
-  // NOTE: Just for doing little billboards for the point lights
-  light_texture,_ := make_texture("data/textures/point_light.png", nonlinear_color=true)
-  defer free_texture(&light_texture)
 
   sun_depth_buffer,_ := make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH})
 
@@ -604,7 +600,7 @@ main :: proc() {
             w:f32 = 1.0
             h:f32 = 1.0
             normal := normalize(l.position - state.camera.position) // Billboard it!
-            immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=light_texture)
+            immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=get_texture("point_light.png")^)
           }
         }
 

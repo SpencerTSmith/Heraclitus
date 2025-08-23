@@ -376,6 +376,8 @@ make_texture_bindless :: proc(texture: ^Texture) {
     texture.handle = gl.GetTextureHandleARB(texture.id)
     gl.MakeTextureHandleResidentARB(texture.handle)
 
+    assert(state.texture_handles.mapped != nil)
+
     // Write handle to ssbo
     handles := cast([^]u64) state.texture_handles.mapped
 
