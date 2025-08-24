@@ -81,7 +81,7 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
         if !file_ok {
           log.errorf("Couldn't read shader file: %s, for include", rel_path)
           ok = false
-          return
+          return shader, ok
         }
 
         strings.write_string(&include_builder, string(include_code))
@@ -94,7 +94,7 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
 
   with_include := strings.to_string(include_builder)
 
-  c_str     := strings.clone_to_cstring(with_include, allocator = context.temp_allocator)
+  c_str     := strings.clone_to_cstring(with_include, context.temp_allocator)
   c_str_len := i32(len(with_include))
 
   gl_type := to_gl_type[type]
@@ -111,12 +111,12 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
     log.errorf("Error compiling shader:\n%s\n", string(info[:]))
     log.errorf("%s", with_include)
     ok = false
-    return
+    return shader, ok
   }
 
   // NOTE: What errors could there be?
   ok = true
-  return
+  return shader, ok
 }
 
 make_shader_from_file :: proc(file_name: string, type: Shader_Type, prepend_common: bool = true) -> (shader: Shader, ok: bool) {

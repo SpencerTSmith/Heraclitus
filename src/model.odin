@@ -25,8 +25,7 @@ Mesh_Index :: distinct u32
 // TODO: Seems not too bad to set this up as just 1 multi-draw indirect per model,
 // instead of one regular draw per mesh, As well this may be more akin to a GLTF "primitive"
 Mesh :: struct {
-  vertex_count:   i32,
-  index_offset:   i32,
+  index_offset:   i32, // Into the parent model's index buffer
   index_count:    i32,
   material_index: i32,
 
@@ -36,6 +35,7 @@ Mesh :: struct {
 // NOTE: A model is composed of ONE vertex buffer containing both vertices and indices, vertices first, then indices
 // at the right alignment, with "sub" meshes (conceptually like gltf primitives) that share the same material
 
+// HACK: Might be better to just have a static array with a max number of meshes and materials
 Model :: struct {
   name: string, // Just for debugging, only filled if made from a file
 
@@ -43,7 +43,7 @@ Model :: struct {
   vertex_count: i32,
   index_count:  i32,
 
-  // Triangle meshes, provide an index into a range of the overall buffer
+  // Triangle meshes, provide a view into a range of the overall buffer
   meshes:    []Mesh,
   materials: []Material,
 
@@ -112,7 +112,6 @@ make_model_from_file :: proc(file_name: string, allocator := context.allocator) 
     model_materials := make([dynamic]Material, allocator = context.temp_allocator)
     reserve(&model_materials, len(data.materials))
 
-
     // Collect materials
     for material in data.materials {
       diffuse_path: string
@@ -161,8 +160,8 @@ make_model_from_file :: proc(file_name: string, allocator := context.allocator) 
 
     // Each primitive will be its own mesh
     model_mesh_count: uint
-    model_verts_count:  uint
-    model_index_count:  uint
+    model_verts_count: uint
+    model_index_count: uint
 
     // All nodes get loaded into the same model, we don't care about
     // GLTF's definition of a 'mesh' we care about the primitives which become our 'Mesh's
@@ -408,7 +407,6 @@ make_model_from_file :: proc(file_name: string, allocator := context.allocator) 
 
         // NOTE: Hmm think i like the look of cast(T) better than the other way
         new_mesh := Mesh {
-          vertex_count   = cast(i32)primitive_vertex_count,
           index_count    = cast(i32)primitive_index_count,
           index_offset   = cast(i32)primitive_index_offset,
           material_index = cast(i32)primitive_material_index,

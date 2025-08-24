@@ -188,6 +188,7 @@ draw_editor_ui :: proc() {
 draw_debug_stats :: proc() {
   text := fmt.aprintf(
 `FPS: %0.4v
+Frametime: %0.4v ms
 Mesh Draw Calls: %v
 Entities: %v
 Mode: %v
@@ -202,6 +203,7 @@ Bloom On: %v
 Sun On: %v
 Point Lights: %v`,
   state.fps,
+  (1.0 / state.fps) * 1000,
   state.mesh_draw_calls,
   len(state.entities),
   state.mode,

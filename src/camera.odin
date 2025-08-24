@@ -254,7 +254,7 @@ get_camera_forward :: proc(camera: Camera) -> (forward: vec3) {
 }
 
 get_camera_perspective :: proc(camera: Camera, z_far: f32 = state.z_far) -> (perspective: mat4){
-  return mat4_perspective(radians(camera.curr_fov_y), get_aspect_ratio(state.window), state.z_near, z_far)
+  return mat4_perspective(radians(camera.curr_fov_y), window_aspect_ratio(state.window), state.z_near, z_far)
 }
 
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3) {

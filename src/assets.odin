@@ -10,15 +10,15 @@ TEXTURE_DIR :: DATA_DIR + "textures" + PATH_SLASH
 Model_Handle   :: distinct u32
 Texture_Handle :: distinct u32
 
-
 // TODO: If doing streaming, then assets data structure should be pool like
 // As it stands handle is just an index into this array that never changes or shrinks
 // TODO: Maybe it should just be name to handle? Not the full relative path?
 Asset_Catalog :: struct($Type, $Handle: typeid) {
-  path_to_handle: map[string]Handle,
-  assets:         [dynamic]Type,
+  path_map: map[string]Handle,
+  assets:   [dynamic]Type,
 }
 
+// TODO: Probably should have its own memory arena
 Assets :: struct {
   model_catalog:   Asset_Catalog(Model, Model_Handle),
   texture_catalog: Asset_Catalog(Texture, Texture_Handle),
@@ -27,55 +27,55 @@ Assets :: struct {
 @(private="file")
 assets: Assets
 
-init_assets :: proc(allocator := context.allocator) {
-  MODEL_ASSET_COUNT :: 128 // Expected
-  assets.model_catalog.path_to_handle = make(map[string]Model_Handle, allocator)
-  reserve(&assets.model_catalog.path_to_handle, MODEL_ASSET_COUNT)
+init_assets :: proc(allocator := context.allocator) -> (ok: bool) {
+  EXPECTED_MODEL_ASSET_COUNT :: 128
+  assets.model_catalog.path_map = make(map[string]Model_Handle, allocator)
+  reserve(&assets.model_catalog.path_map, EXPECTED_MODEL_ASSET_COUNT)
   assets.model_catalog.assets = make([dynamic]Model, allocator)
-  reserve(&assets.model_catalog.assets, MODEL_ASSET_COUNT)
+  reserve(&assets.model_catalog.assets, EXPECTED_MODEL_ASSET_COUNT)
 
-  TEXTURE_ASSET_COUNT :: 256 // Expected
-  assets.texture_catalog.path_to_handle = make(map[string]Texture_Handle, allocator)
-  reserve(&assets.texture_catalog.path_to_handle, TEXTURE_ASSET_COUNT)
+  EXPECTED_TEXTURE_ASSET_COUNT :: EXPECTED_MODEL_ASSET_COUNT * 4 // For the 4 textures
+  assets.texture_catalog.path_map = make(map[string]Texture_Handle, allocator)
+  reserve(&assets.texture_catalog.path_map, EXPECTED_TEXTURE_ASSET_COUNT)
   assets.texture_catalog.assets = make([dynamic]Texture, allocator)
-  reserve(&assets.texture_catalog.assets, TEXTURE_ASSET_COUNT)
+  reserve(&assets.texture_catalog.assets, EXPECTED_TEXTURE_ASSET_COUNT)
 
   // Probably will want these so might as well load them now
-  load_texture("white.png")
-  load_texture("black.png")
-  load_texture("flat_normal.png")
+  _, ok = load_texture("white.png")
+  _, ok = load_texture("black.png")
+  _, ok = load_texture("flat_normal.png")
 
   // In case we can't load something have these fallbacks
-  _, ok := load_texture(FALLBACK_TEXTURE)
-  assert(ok, "Big trouble if we can't even load the missing fallback texture!")
+  _, ok = load_texture(FALLBACK_TEXTURE)
   _, ok = load_model(FALLBACK_MODEL)
-  assert(ok, "Big trouble if we can't even load the missing fallback model!")
+
+  return ok
 }
 
 FALLBACK_TEXTURE :: "missing.png"
-FALLBACK_MODEL :: "missing/BoxTextured.gltf"
+FALLBACK_MODEL   :: "missing/BoxTextured.gltf"
 
 get_fallback_texture_handle :: proc() -> Texture_Handle {
-  assert(TEXTURE_DIR + FALLBACK_TEXTURE in assets.texture_catalog.path_to_handle)
-  return assets.texture_catalog.path_to_handle[TEXTURE_DIR + FALLBACK_TEXTURE]
+  assert(TEXTURE_DIR + FALLBACK_TEXTURE in assets.texture_catalog.path_map)
+  return assets.texture_catalog.path_map[TEXTURE_DIR + FALLBACK_TEXTURE]
 }
 
 get_fallback_model_handle :: proc() -> Model_Handle {
-  assert(MODEL_DIR + FALLBACK_MODEL in assets.model_catalog.path_to_handle)
-  return assets.model_catalog.path_to_handle[TEXTURE_DIR + FALLBACK_TEXTURE]
+  assert(MODEL_DIR + FALLBACK_MODEL in assets.model_catalog.path_map)
+  return assets.model_catalog.path_map[TEXTURE_DIR + FALLBACK_TEXTURE]
 }
 
 free_assets :: proc() {
   for &model in assets.model_catalog.assets {
     free_model(&model)
   }
-  delete(assets.model_catalog.path_to_handle)
+  delete(assets.model_catalog.path_map)
   delete(assets.model_catalog.assets)
 
   for &texture in assets.texture_catalog.assets {
     free_texture(&texture)
   }
-  delete(assets.texture_catalog.path_to_handle)
+  delete(assets.texture_catalog.path_map)
   delete(assets.texture_catalog.assets)
 }
 
@@ -83,8 +83,8 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) {
   path := filepath.join({MODEL_DIR, name}, context.temp_allocator)
 
   // Already loaded
-  if path in assets.model_catalog.path_to_handle {
-    return assets.model_catalog.path_to_handle[path], true
+  if path in assets.model_catalog.path_map {
+    return assets.model_catalog.path_map[path], true
   }
 
   // NOTE: For now individual assets are always allocated on permanent arena
@@ -97,7 +97,7 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) {
   } else {
     handle = cast(Model_Handle) len(assets.model_catalog.assets)
     append(&assets.model_catalog.assets, model)
-    assets.model_catalog.path_to_handle[path] = handle
+    assets.model_catalog.path_map[path] = handle
   }
 
   return handle, ok
@@ -112,8 +112,8 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
   path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator) if in_texture_dir else name
 
   // Already loaded
-  if path in assets.texture_catalog.path_to_handle {
-    return assets.texture_catalog.path_to_handle[path], true
+  if path in assets.texture_catalog.path_map {
+    return assets.texture_catalog.path_map[path], true
   }
 
   texture: Texture
@@ -125,9 +125,8 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
   } else {
     handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
     append(&assets.texture_catalog.assets, texture)
-    assets.texture_catalog.path_to_handle[path] = handle
+    assets.texture_catalog.path_map[path] = handle
   }
-
 
   return handle, ok
 }
@@ -146,8 +145,8 @@ get_texture_by_name :: proc(name: string) -> (texture: ^Texture) {
   path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator)
 
   // Already loaded
-  if path in assets.texture_catalog.path_to_handle {
-    texture = get_texture(assets.texture_catalog.path_to_handle[path])
+  if path in assets.texture_catalog.path_map {
+    texture = get_texture(assets.texture_catalog.path_map[path])
   } else {
     // Load it if not already
     handle, ok := load_texture(name)

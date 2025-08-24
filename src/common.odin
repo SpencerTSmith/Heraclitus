@@ -70,6 +70,7 @@ U64_MAX :: max(u64)
 // Purely for convenience because I am lazy and don't want to go to top of file to import a module to do a little print debugging
 print :: fmt.printf
 
+// Hmm, good idea? Just hate having to import and prepend for such common operations
 vec2 :: glsl.vec2
 vec3 :: glsl.vec3
 vec4 :: glsl.vec4
@@ -81,7 +82,6 @@ dvec4 :: glsl.dvec4
 mat3 :: glsl.mat3
 mat4 :: glsl.mat4
 
-// Hmm, good idea? Just hate having to import and prepend for such common operations
 dot        :: glsl.dot
 cross      :: glsl.cross
 normalize  :: glsl.normalize
@@ -107,6 +107,25 @@ mat4_orthographic :: glsl.mat4Ortho3d
 mat4_look_at      :: glsl.mat4LookAt
 
 lerp :: glsl.lerp
+
+//
+// Static array that acts like it is dynamic
+//
+Array :: struct($Type: typeid, $Capacity: int) {
+  data:  [Capacity]Type,
+  count: int,
+}
+
+array_slice :: proc(array: $A/Array($Type, $Capacity)) -> []Type {
+  return array.data[:array.count]
+}
+
+array_add :: proc(array: $A/Array($Type, $Capacity), item: Type) {
+  assert(array.count < Capacity, "Not enough elements in static array!")
+  array[array.count] = item
+
+  array.count += 1
+}
 
 // Adds a 1 to the end
 vec4_from_3 :: proc(vec: vec3) -> vec4 {
@@ -143,6 +162,8 @@ resize_window :: proc() {
   state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], state.window.w, state.window.h)
   state.ping_pong_buffers[1], ok = remake_framebuffer(&state.ping_pong_buffers[1], state.window.w, state.window.h)
 
+  gl.Viewport(0, 0, cast(i32)state.window.w, cast(i32)state.window.h)
+
   if !ok {
     log.fatal("Window has been resized but unable to recreate multisampling framebuffer")
     state.running = false
@@ -151,15 +172,7 @@ resize_window :: proc() {
   log.infof("Window has resized to %vpx, %vpx", state.window.w, state.window.h)
 }
 
-resize_window_callback :: proc "c" (window: glfw.WindowHandle, width, height: i32) {
-  gl.Viewport(0, 0, width, height)
-
-  state.window.w = int(width)
-  state.window.h = int(height)
-  state.window.resized = true
-}
-
-get_aspect_ratio :: proc(window: Window) -> (aspect: f32) {
+window_aspect_ratio :: proc(window: Window) -> (aspect: f32) {
   aspect = f32(window.w) / f32(window.h)
   return aspect
 }

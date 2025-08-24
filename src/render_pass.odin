@@ -213,7 +213,6 @@ begin_drawing :: proc() {
   // only going to be doing hot reloads while developing
   hot_reload_shaders(&state.shaders, state.perm_alloc)
 
-  // This simple?
   frame := &state.frames[state.curr_frame_index]
   if frame.fence != nil {
     gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, U64_MAX)

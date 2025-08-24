@@ -3,7 +3,6 @@ package main
 import "core:math"
 import "core:math/rand"
 import "core:mem"
-import "core:mem/virtual"
 import "core:strings"
 import "core:time"
 import "core:slice"
@@ -30,7 +29,8 @@ State :: struct {
 
   window: Window,
 
-  perm:       virtual.Arena,
+  perm_mem:   []byte,
+  perm:       mem.Arena,
   perm_alloc: mem.Allocator,
 
   camera: Camera,
@@ -41,6 +41,8 @@ State :: struct {
 
   start_time: time.Time,
 
+  // Hmm maybe should be enum array, these must all be the same dimensions as backbuffer
+  // so simple to loop over enum array when resizing window
   hdr_ms_buffer:      Frame_Buffer,
   post_buffer:        Frame_Buffer,
   ping_pong_buffers:  [2]Frame_Buffer,
@@ -133,8 +135,19 @@ init_state :: proc() -> (ok: bool) {
   glfw.MakeContextCurrent(state.window.handle)
   glfw.SwapInterval(1)
 
-  glfw.SetFramebufferSizeCallback(state.window.handle, resize_window_callback)
-  glfw.SetScrollCallback(state.window.handle, mouse_scroll_callback)
+  glfw.SetFramebufferSizeCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32) {
+    state.window.w = int(width)
+    state.window.h = int(height)
+    state.window.resized = true
+  })
+  glfw.SetScrollCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64) {
+    // Just get the direction
+    dir_x := math.sign(x_scroll)
+    dir_y := math.sign(y_scroll)
+
+    state.input.mouse.delta_scroll.x += dir_x
+    state.input.mouse.delta_scroll.y += dir_y
+  })
 
   gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
 
@@ -176,12 +189,9 @@ init_state :: proc() -> (ok: bool) {
 
   state.gl_is_initialized = true
 
-  err := virtual.arena_init_growing(&state.perm)
-  if err != .None {
-    log.fatal("Failed to create permanent arena")
-    return
-  }
-  state.perm_alloc = virtual.arena_allocator(&state.perm)
+  state.perm_mem = make([]byte, mem.Megabyte * 256)
+  mem.arena_init(&state.perm, state.perm_mem)
+  state.perm_alloc = mem.arena_allocator(&state.perm)
 
   state.camera = {
     sensitivity  = 0.2,
@@ -204,13 +214,13 @@ init_state :: proc() -> (ok: bool) {
   state.z_near = 0.1
   state.z_far  = 1000.0
 
-  state.shaders[.PHONG]         = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
-  state.shaders[.SKYBOX]        = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.RESOLVE_HDR]   = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.SUN_DEPTH]     = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.PHONG]       = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
+  state.shaders[.SKYBOX]      = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.RESOLVE_HDR] = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.SUN_DEPTH]   = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
   state.shaders[.POINT_DEPTH] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.GAUSSIAN]      = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.GET_BRIGHT]    = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.GAUSSIAN]    = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
+  state.shaders[.GET_BRIGHT]  = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
 
   state.sun = {
     direction = {0.5, -1.0,  0.7},
@@ -268,7 +278,7 @@ init_state :: proc() -> (ok: bool) {
 
   gl.CreateVertexArrays(1, &state.empty_vao)
 
-  init_assets(state.perm_alloc)
+  init_assets(state.perm_alloc) or_return
 
   init_immediate_renderer(state.perm_alloc) or_return
 
@@ -308,7 +318,10 @@ main :: proc() {
     }
   }
 
-  if !init_state() do return
+  if !init_state() {
+    log.fatalf("Failed to initialize global state")
+    return
+  }
   defer free_state()
 
   for pos in DEFAULT_MODEL_POSITIONS {
@@ -322,52 +335,51 @@ main :: proc() {
   block := make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
   append(&state.entities, block)
 
-  duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
-  append(&state.entities, duck1)
-
-  duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
-  append(&state.entities, duck2)
-
   helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
   append(&state.entities, helmet2)
 
   guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
   append(&state.entities, guitar)
 
-  sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
-  append(&state.entities, sponza)
-
-  // Sponza lights
-  {
-    spacing := 20
-    bounds  := 4
-    y_bounds := bounds/2
-    for x in 0..<bounds {
-      for y in 0..<y_bounds {
-        x0 := (x - bounds/2) * spacing
-        y0 := y * spacing / 2 + 1
-
-        append(&state.point_lights, Point_Light{
-          position  = {sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z},
-          color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
-          intensity = 0.7,
-          ambient   = 0.001,
-          radius    = 10,
-        })
-      }
-    }
-  }
-
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
   // NOTE: Have to gen tangents for these and that takes too long
-  {
-    // helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-    // append(&state.entities, helmet)
+  if true {
+    sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
+    append(&state.entities, sponza)
+    // Sponza lights
+    {
+      spacing := 20
+      bounds  := 4
+      y_bounds := bounds/2
+      for x in 0..<bounds {
+        for y in 0..<y_bounds {
+          x0 := (x - bounds/2) * spacing
+          y0 := y * spacing / 2 + 1
 
-    // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-    // append(&state.entities, chess)
+          append(&state.point_lights, Point_Light{
+            position  = {sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z},
+            color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
+            intensity = 0.7,
+            ambient   = 0.001,
+            radius    = 10,
+          })
+        }
+      }
+    }
+
+    helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+    append(&state.entities, helmet)
+
+    chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+    append(&state.entities, chess)
+
+    duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
+    append(&state.entities, duck1)
+
+    duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
+    append(&state.entities, duck2)
   }
 
   sun_depth_buffer,_ := make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH})
@@ -700,7 +712,8 @@ free_state :: proc() {
 
   glfw.DestroyWindow(state.window.handle)
   // glfw.Terminate() // Causing crashes?
-  virtual.arena_destroy(&state.perm)
+  log.infof("Arena Size at closedown: %v", state.perm.peak_used)
+  delete(state.perm_mem)
 }
 
 seconds_since_start :: proc() -> (seconds: f64) {

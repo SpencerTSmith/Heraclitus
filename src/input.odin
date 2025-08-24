@@ -1,9 +1,6 @@
 package main
 
 import "vendor:glfw"
-import "core:math"
-
-KEY_COUNT :: glfw.KEY_LAST + 1
 
 Key :: enum {
   NONE,
@@ -147,15 +144,6 @@ Mouse_Info :: struct {
 Input_State :: struct {
   keys:  [Key]Input_Info,
   mouse: Mouse_Info,
-}
-
-mouse_scroll_callback :: proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64) {
-  // Just get the direction
-  dir_x := math.sign(x_scroll)
-  dir_y := math.sign(y_scroll)
-
-  state.input.mouse.delta_scroll.x += dir_x
-  state.input.mouse.delta_scroll.y += dir_y
 }
 
 poll_input_state :: proc(dt_s: f64) {
@@ -322,7 +310,7 @@ mouse_position :: proc() -> (x, y: f32) {
 // NOTE: Do not look behind this curtain, ugly ugly ugly,
 // Mostly just want to not have a bunch of glfw related code everywhere
 // So translation table
-@private
+@(private="file")
 glfw_key_map := [glfw.KEY_LAST + 1]Key {
   glfw.KEY_SPACE         = .SPACE,
   glfw.KEY_APOSTROPHE    = .APOSTROPHE,
@@ -418,11 +406,12 @@ glfw_key_map := [glfw.KEY_LAST + 1]Key {
   glfw.KEY_RIGHT_SUPER   = .RIGHT_SUPER,
 }
 
-@private
+@(private="file")
 glfw_key_to_internal :: proc(glfw_code: int) -> Key {
   return glfw_key_map[glfw_code]
 }
 
+@(private="file")
 glfw_mouse_map := [glfw.MOUSE_BUTTON_LAST + 1]Mouse_Button {
   glfw.MOUSE_BUTTON_LEFT   = .LEFT,
   glfw.MOUSE_BUTTON_RIGHT  = .RIGHT,
@@ -434,8 +423,7 @@ glfw_mouse_map := [glfw.MOUSE_BUTTON_LAST + 1]Mouse_Button {
   glfw.MOUSE_BUTTON_8      = .M8,
 }
 
-
-
+@(private="file")
 glfw_mouse_to_internal :: proc(glfw_code: int) -> Mouse_Button {
   return glfw_mouse_map[glfw_code]
 }
