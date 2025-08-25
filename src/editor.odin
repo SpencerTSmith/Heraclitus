@@ -64,6 +64,8 @@ pick_gizmo :: proc(screen_x, screen_y: f32, camera: Camera) -> (gizmo: Editor_Gi
 
   ray := make_ray(camera.position, world_coord - camera.position)
 
+  gizmo = .NONE
+
   closest_t := F32_MAX
   for info, g in editor.gizmos {
 
@@ -116,18 +118,19 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
-  // Pick entity
+  // Pick entity or gizmo
   if mouse_pressed(.LEFT) {
     x, y := mouse_position()
+
+    // Preferentiall pick gizmo first
     editor.selected_gizmo  = pick_gizmo(x, y, camera^)
-    if editor.selected_gizmo != .NONE {
-      log.infof("%v", editor.selected_gizmo)
-    } else {
+
+    if editor.selected_gizmo == .NONE {
       editor.selected_entity = pick_entity(x, y, camera^)
     }
   }
 
-  if editor.selected_gizmo != nil && mouse_down(.LEFT) {
+  if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
     mouse_delta := mouse_position_delta()
 
     GIZMO_SENSITIVITY :: 0.2
@@ -135,6 +138,10 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     #partial switch editor.selected_gizmo {
     case .X_AXIS:
       editor.selected_entity.position.x += mouse_delta.x * GIZMO_SENSITIVITY
+    case .Y_AXIS:
+      editor.selected_entity.position.y -= mouse_delta.y * GIZMO_SENSITIVITY
+    case .Z_AXIS:
+      editor.selected_entity.position.z += mouse_delta.x * GIZMO_SENSITIVITY
     }
 
   }
@@ -200,12 +207,13 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
       editor.gizmos[.Y_AXIS].hitbox = create_axis_hitbox(1, entity_center)
       editor.gizmos[.Z_AXIS].hitbox = create_axis_hitbox(2, entity_center)
 
-      draw_aabb(editor.gizmos[.X_AXIS].hitbox, RED)
-      draw_aabb(editor.gizmos[.Y_AXIS].hitbox, GREEN)
-      draw_aabb(editor.gizmos[.Z_AXIS].hitbox, BLUE)
+      // draw_aabb(editor.gizmos[.X_AXIS].hitbox, RED)
+      // draw_aabb(editor.gizmos[.Y_AXIS].hitbox, GREEN)
+      // draw_aabb(editor.gizmos[.Z_AXIS].hitbox, BLUE)
     }
   } else {
     // No active entity then clear out the gizmos
+    editor.selected_gizmo = .NONE
     editor.gizmos[.X_AXIS].hitbox = {}
     editor.gizmos[.Y_AXIS].hitbox = {}
     editor.gizmos[.Z_AXIS].hitbox = {}
