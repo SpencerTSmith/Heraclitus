@@ -35,6 +35,13 @@ make_ray :: proc(origin: vec3, direction: vec3) -> (ray: Ray) {
   return ray
 }
 
+// Useless? Eh just to make sure I don't make ez, stupid mistakes
+aabb_center:: proc(aabb: AABB) -> (center: vec3) {
+  center = (aabb.min + aabb.max) / 2.0
+
+  return center
+}
+
 // An 3D AABB is an intersection of 3 'Slabs' really, so we just test if the ray overlaps
 // ALL 3 'Slabs'
 ray_intersects_aabb :: proc(ray: Ray, box: AABB) -> (intersects: bool, t_min: f32, point: vec3) {

@@ -307,6 +307,16 @@ mouse_position :: proc() -> (x, y: f32) {
   return cast(f32) state.input.mouse.curr_pos.x, cast(f32) state.input.mouse.curr_pos.y
 }
 
+// NOTE: Between this and the last frame
+// TODO: Stop collecting input in f64s never use the accuracy anyways and always convert down
+mouse_position_delta :: proc() -> (delta: vec2) {
+  delta64 := (state.input.mouse.curr_pos - state.input.mouse.prev_pos)
+
+  delta = {f32(delta64.x), f32(delta64.y)}
+
+  return delta
+}
+
 // NOTE: Do not look behind this curtain, ugly ugly ugly,
 // Mostly just want to not have a bunch of glfw related code everywhere
 // So translation table

@@ -1,41 +1,44 @@
 package main
 
 import "core:fmt"
+import "core:log"
 
 import "vendor:glfw"
 
+AXIS_GIZMO_LENGTH :: 10.0
+
+Editor_Gizmo :: enum {
+  NONE,
+  X_AXIS,
+  Y_AXIS,
+  Z_AXIS,
+  XY_PLANE,
+  XZ_PLANE,
+  YZ_PLANE,
+}
+
+Editor_Gizmo_Info :: struct {
+  hitbox: AABB,
+}
+
 Editor_State :: struct {
   selected_entity: ^Entity,
+  selected_gizmo:  Editor_Gizmo,
+
+  gizmos: [Editor_Gizmo]Editor_Gizmo_Info,
 }
 
 @(private="file")
 editor: Editor_State
 
+// TODO: Maybe these pick_* should just take in the unprojected point so don't have to recalc twice...
 pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity) {
-  //
-  // Convert screen position to world position
-  //
-
   w := cast (f32) state.window.w
   h := cast (f32) state.window.h
 
-  // From screen coords to ndc [-1, 1]
-  ndc_x := 2 * (screen_x / w) - 1
-  ndc_y := 1 - 2 * (screen_y / h) // flip y... as screen coords grow down
-  ndc_z := cast(f32) -1.0 // Because screen is on the near plane
+  world_coord := unproject_screen_coord(screen_x, screen_y, w, h, get_camera_view(camera), get_camera_perspective(camera))
 
-  ndc_coord := vec4{ndc_x, ndc_y, ndc_z, 1}
-
-  // Where is this coord in the camera's view space, meaning we need to unproject
-  inv_proj := inverse(get_camera_perspective(camera))
-  view_coord := inv_proj * ndc_coord
-  view_coord /= view_coord.w // And do perspective divide
-
-  // Now undo the camera transform, put it into world space
-  inv_view := inverse(get_camera_view(camera))
-  world_coord := inv_view * view_coord
-
-  ray := make_ray(camera.position, world_coord.xyz - camera.position)
+  ray := make_ray(camera.position, world_coord - camera.position)
 
   closest_t := F32_MAX
   for &e in state.entities {
@@ -53,8 +56,31 @@ pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity
   return entity
 }
 
+pick_gizmo :: proc(screen_x, screen_y: f32, camera: Camera) -> (gizmo: Editor_Gizmo) {
+  w := cast (f32) state.window.w
+  h := cast (f32) state.window.h
+
+  world_coord := unproject_screen_coord(screen_x, screen_y, w, h, get_camera_view(camera), get_camera_perspective(camera))
+
+  ray := make_ray(camera.position, world_coord - camera.position)
+
+  closest_t := F32_MAX
+  for info, g in editor.gizmos {
+
+    if yes, t_min, _ := ray_intersects_aabb(ray, info.hitbox); yes {
+      // Get the closest entity
+      if t_min < closest_t {
+        closest_t = t_min
+        gizmo = g
+      }
+    }
+  }
+
+  return gizmo
+}
+
 move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
-  if mouse_down(.MIDDLE) {
+  if mouse_down(.MIDDLE) || key_down(.Q) {
     update_camera_look(camera, dt_s)
   } else {
     glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
@@ -93,7 +119,24 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   // Pick entity
   if mouse_pressed(.LEFT) {
     x, y := mouse_position()
-    editor.selected_entity = pick_entity(x, y, camera^)
+    editor.selected_gizmo  = pick_gizmo(x, y, camera^)
+    if editor.selected_gizmo != .NONE {
+      log.infof("%v", editor.selected_gizmo)
+    } else {
+      editor.selected_entity = pick_entity(x, y, camera^)
+    }
+  }
+
+  if editor.selected_gizmo != nil && mouse_down(.LEFT) {
+    mouse_delta := mouse_position_delta()
+
+    GIZMO_SENSITIVITY :: 0.2
+
+    #partial switch editor.selected_gizmo {
+    case .X_AXIS:
+      editor.selected_entity.position.x += mouse_delta.x * GIZMO_SENSITIVITY
+    }
+
   }
 
   if mouse_pressed(.RIGHT) {
@@ -128,8 +171,44 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
       if key_down(.DOWN) {
         editor.selected_entity.position.y -= EDITOR_PICKED_MOVE_SPEED * dt_s
       }
-
     }
+
+    // Create gizmos
+    {
+      e := editor.selected_entity^
+      entity_aabb := entity_world_aabb(e)
+      entity_center := aabb_center(entity_aabb)
+
+      create_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB) {
+        BOUNDING_RANGE :: 0.25
+
+        // Since not all world directions in my coordinate space are in the positive direction
+        world_axes := WORLD_AXES
+        axis_add   := AXIS_GIZMO_LENGTH * world_axes[axis_index]
+
+        hitbox = {
+          min = entity_center - BOUNDING_RANGE,
+          max = entity_center + BOUNDING_RANGE,
+        }
+
+        hitbox.max += axis_add
+
+        return hitbox
+      }
+
+      editor.gizmos[.X_AXIS].hitbox = create_axis_hitbox(0, entity_center)
+      editor.gizmos[.Y_AXIS].hitbox = create_axis_hitbox(1, entity_center)
+      editor.gizmos[.Z_AXIS].hitbox = create_axis_hitbox(2, entity_center)
+
+      draw_aabb(editor.gizmos[.X_AXIS].hitbox, RED)
+      draw_aabb(editor.gizmos[.Y_AXIS].hitbox, GREEN)
+      draw_aabb(editor.gizmos[.Z_AXIS].hitbox, BLUE)
+    }
+  } else {
+    // No active entity then clear out the gizmos
+    editor.gizmos[.X_AXIS].hitbox = {}
+    editor.gizmos[.Y_AXIS].hitbox = {}
+    editor.gizmos[.Z_AXIS].hitbox = {}
   }
 
   FREECAM_SPEED :: 35.0
@@ -158,9 +237,9 @@ draw_editor_ui :: proc() {
     // Axes
     //
     {
-      draw_vector(center_aabb, WORLD_RIGHT * 10,   RED,   tip_bounds=0.25)
-      draw_vector(center_aabb, WORLD_UP * 10,      GREEN, tip_bounds=0.25)
-      draw_vector(center_aabb, WORLD_FORWARD * 10, BLUE,  tip_bounds=0.25)
+      draw_vector(center_aabb, WORLD_RIGHT * AXIS_GIZMO_LENGTH,   RED,   tip_bounds=0.25)
+      draw_vector(center_aabb, WORLD_UP * AXIS_GIZMO_LENGTH,      GREEN, tip_bounds=0.25)
+      draw_vector(center_aabb, WORLD_FORWARD * AXIS_GIZMO_LENGTH, BLUE,  tip_bounds=0.25)
     }
 
     //

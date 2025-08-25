@@ -13,8 +13,8 @@ import "vendor:glfw"
 // NOTE: For everything that doesn't have a home yet
 
 WINDOW_DEFAULT_TITLE :: "Heraclitus"
-WINDOW_DEFAULT_W :: 1280 * 2
-WINDOW_DEFAULT_H :: 720  * 2
+WINDOW_DEFAULT_W :: 1280
+WINDOW_DEFAULT_H :: 720
 
 FRAMES_IN_FLIGHT :: 3
 TARGET_FPS :: 240
@@ -42,6 +42,8 @@ MODEL_FORWARD :: vec3{0.0, 0.0, 1.0}
 WORLD_UP      :: vec3{0.0, 1.0,  0.0}
 WORLD_RIGHT   :: vec3{1.0, 0.0,  0.0}
 WORLD_FORWARD :: vec3{0.0, 0.0, -1.0}
+
+WORLD_AXES :: [3]vec3{WORLD_RIGHT, WORLD_UP, WORLD_FORWARD}
 
 RED    :: vec4{1.0, 0.0, 0.0,  1.0}
 GREEN  :: vec4{0.0, 1.0, 0.0,  1.0}
@@ -130,6 +132,28 @@ array_add :: proc(array: $A/Array($Type, $Capacity), item: Type) {
 // Adds a 1 to the end
 vec4_from_3 :: proc(vec: vec3) -> vec4 {
   return {vec.x, vec.y, vec.z, 1.0}
+}
+
+// NOTE: Unprojects the the near plane
+// TODO: Maybe think about caching inverse if we are doing this operation a lot
+unproject_screen_coord :: proc(screen_x, screen_y, screen_width, screen_height: f32, view, proj: mat4) -> (world_coord: vec3){
+  // From screen coords to ndc [-1, 1]
+  ndc_x := 2 * (screen_x / screen_width) - 1
+  ndc_y := 1 - 2 * (screen_y / screen_height) // flip y... as screen coords grow down
+  ndc_z := cast(f32) -1.0 // Because screen is on the near plane
+
+  ndc_coord := vec4{ndc_x, ndc_y, ndc_z, 1}
+
+  // Where is this coord in the camera's view space, meaning we need to unproject
+  inv_proj := inverse(proj)
+  view_coord := inv_proj * ndc_coord
+  view_coord /= view_coord.w // And do perspective divide
+
+  // Now undo the camera transform, put it into world space
+  inv_view := inverse(view)
+  world_coord = (inv_view * view_coord).xyz
+
+  return world_coord
 }
 
 squared_distance :: proc(a_pos: vec3, b_pos: vec3) -> f32 {
