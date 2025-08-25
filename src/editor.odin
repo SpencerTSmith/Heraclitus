@@ -36,7 +36,7 @@ pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity
   w := cast (f32) state.window.w
   h := cast (f32) state.window.h
 
-  world_coord := unproject_screen_coord(screen_x, screen_y, w, h, get_camera_view(camera), get_camera_perspective(camera))
+  world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera), get_camera_perspective(camera))
 
   ray := make_ray(camera.position, world_coord - camera.position)
 
@@ -57,10 +57,7 @@ pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity
 }
 
 pick_gizmo :: proc(screen_x, screen_y: f32, camera: Camera) -> (gizmo: Editor_Gizmo) {
-  w := cast (f32) state.window.w
-  h := cast (f32) state.window.h
-
-  world_coord := unproject_screen_coord(screen_x, screen_y, w, h, get_camera_view(camera), get_camera_perspective(camera))
+  world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera), get_camera_perspective(camera))
 
   ray := make_ray(camera.position, world_coord - camera.position)
 
@@ -131,17 +128,27 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
-    mouse_delta := mouse_position_delta()
+    prev_x, prev_y := mouse_position_prev()
+    curr_x, curr_y := mouse_position()
 
-    GIZMO_SENSITIVITY :: 0.2
+    prev_world := unproject_screen_coord(prev_x, prev_y, get_camera_view(camera^), get_camera_perspective(camera^))
+
+    curr_world := unproject_screen_coord(curr_x, curr_y, get_camera_view(camera^), get_camera_perspective(camera^))
+
+    delta_world := curr_world - prev_world
+
+    GIZMO_SENSITIVITY :: 100.0
 
     #partial switch editor.selected_gizmo {
     case .X_AXIS:
-      editor.selected_entity.position.x += mouse_delta.x * GIZMO_SENSITIVITY
+      delta_in_axis := dot(delta_world, WORLD_RIGHT)
+      editor.selected_entity.position.x += delta_in_axis * GIZMO_SENSITIVITY
     case .Y_AXIS:
-      editor.selected_entity.position.y -= mouse_delta.y * GIZMO_SENSITIVITY
+      delta_in_axis := dot(delta_world, WORLD_UP)
+      editor.selected_entity.position.y += delta_in_axis * GIZMO_SENSITIVITY
     case .Z_AXIS:
-      editor.selected_entity.position.z += mouse_delta.x * GIZMO_SENSITIVITY
+      delta_in_axis := dot(delta_world, WORLD_FORWARD)
+      editor.selected_entity.position.z -= delta_in_axis * GIZMO_SENSITIVITY
     }
 
   }
@@ -206,10 +213,6 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
       editor.gizmos[.X_AXIS].hitbox = create_axis_hitbox(0, entity_center)
       editor.gizmos[.Y_AXIS].hitbox = create_axis_hitbox(1, entity_center)
       editor.gizmos[.Z_AXIS].hitbox = create_axis_hitbox(2, entity_center)
-
-      // draw_aabb(editor.gizmos[.X_AXIS].hitbox, RED)
-      // draw_aabb(editor.gizmos[.Y_AXIS].hitbox, GREEN)
-      // draw_aabb(editor.gizmos[.Z_AXIS].hitbox, BLUE)
     }
   } else {
     // No active entity then clear out the gizmos

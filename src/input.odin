@@ -307,6 +307,10 @@ mouse_position :: proc() -> (x, y: f32) {
   return cast(f32) state.input.mouse.curr_pos.x, cast(f32) state.input.mouse.curr_pos.y
 }
 
+mouse_position_prev :: proc() -> (x, y: f32) {
+  return cast(f32) state.input.mouse.prev_pos.x, cast(f32) state.input.mouse.prev_pos.y
+}
+
 // NOTE: Between this and the last frame
 // TODO: Stop collecting input in f64s never use the accuracy anyways and always convert down
 mouse_position_delta :: proc() -> (delta: vec2) {

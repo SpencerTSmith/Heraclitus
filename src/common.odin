@@ -136,7 +136,10 @@ vec4_from_3 :: proc(vec: vec3) -> vec4 {
 
 // NOTE: Unprojects the the near plane
 // TODO: Maybe think about caching inverse if we are doing this operation a lot
-unproject_screen_coord :: proc(screen_x, screen_y, screen_width, screen_height: f32, view, proj: mat4) -> (world_coord: vec3){
+unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (world_coord: vec3){
+  screen_width  := cast (f32) state.window.w
+  screen_height := cast (f32) state.window.h
+
   // From screen coords to ndc [-1, 1]
   ndc_x := 2 * (screen_x / screen_width) - 1
   ndc_y := 1 - 2 * (screen_y / screen_height) // flip y... as screen coords grow down
