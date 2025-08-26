@@ -557,7 +557,7 @@ main :: proc() {
       //
       // Main Geometry Pass
       //
-      begin_main_pass()
+      begin_render_pass(MAIN_PASS, state.hdr_ms_buffer)
       {
         bind_shader(.PHONG)
 

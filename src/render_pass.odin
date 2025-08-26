@@ -40,18 +40,117 @@ Depth_Test_Mode :: enum {
   LESS_EQUAL,
 }
 
+// NOTE: Read left to right as src factor and dst factor
 Blend_Mode :: enum {
   DISABLED,
   ALPHA_ONE_MINUS_ALPHA,
 }
 
-// For now the viewport for a render pass is always
-// the framebuffer's full target size
+Viewport :: struct {
+  x: i32,
+  y: i32,
+  w: i32,
+  h: i32,
+}
+
+Render_Pass_Flags :: enum {
+  CLEAR_FRAMEBUFFER,
+  USE_ALL_FRAMEBUFFER_VIEWPORT,
+}
+
 Render_Pass :: struct {
-  framebuffer: Framebuffer,
-  depth_test:  Depth_Test_Mode,
-  face_cull:   Face_Cull_Mode,
-  blend:       Blend_Mode,
+  flags:      bit_set[Render_Pass_Flags],
+
+  depth_test: Depth_Test_Mode,
+  face_cull:  Face_Cull_Mode,
+  blend:      Blend_Mode,
+
+  // Optionally filled out if don't want to use the full
+  // Framebuffer size in a render pass
+  viewport: Viewport,
+}
+
+MAIN_PASS :: Render_Pass {
+  flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
+  depth_test = .LESS,
+  face_cull  = .BACK,
+  blend      = .ALPHA_ONE_MINUS_ALPHA,
+  viewport   = {},
+}
+
+// TODO: Save state as it was before this pass, perhaps as an optional return
+begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
+  bind_framebuffer(fb)
+  if .CLEAR_FRAMEBUFFER in pass.flags {
+    clear_framebuffer(fb)
+  }
+
+  /////////
+  // GL State Changes
+  ////////
+
+  DISABLED_SENTINEL :: 0
+
+  // Depth Testing
+  gl_depth_map: [Depth_Test_Mode]u32 = {
+    .DISABLED   = DISABLED_SENTINEL,
+
+    .ALWAYS     = gl.ALWAYS,
+    .LESS       = gl.LESS,
+    .LESS_EQUAL = gl.LESS,
+  }
+  gl_depth := gl_depth_map[pass.depth_test]
+
+  if gl_depth == DISABLED_SENTINEL {
+    gl.Disable(gl_depth)
+  } else {
+    gl.Enable(gl.DEPTH_TEST)
+    gl.DepthFunc(gl_depth)
+  }
+
+  // Face Culling
+  gl_cull_map: [Face_Cull_Mode]u32 = {
+    .DISABLED = DISABLED_SENTINEL,
+
+    .FRONT    = gl.FRONT,
+    .BACK     = gl.BACK,
+  }
+  gl_cull := gl_cull_map[pass.face_cull]
+
+  if gl_cull == DISABLED_SENTINEL {
+    gl.Disable(gl.CULL_FACE)
+  } else {
+    gl.Enable(gl.CULL_FACE)
+    gl.CullFace(gl_cull)
+  }
+
+  // Blending
+  gl_blend_map: [Blend_Mode][2]u32 = {
+    .DISABLED = {DISABLED_SENTINEL, DISABLED_SENTINEL},
+
+    .ALPHA_ONE_MINUS_ALPHA = {gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA},
+  }
+  gl_blend := gl_blend_map[pass.blend]
+
+  if gl_blend == DISABLED_SENTINEL {
+    gl.Disable(gl.BLEND)
+  } else {
+    gl.Enable(gl.BLEND)
+    gl.BlendFunc(gl_blend[0], gl_blend[1])
+  }
+
+  // Viewport
+  viewport: Viewport
+  if .USE_ALL_FRAMEBUFFER_VIEWPORT in pass.flags {
+    viewport.x = 0
+    viewport.y = 0
+    viewport.w = cast(i32) fb.width
+    viewport.h = cast(i32) fb.height
+  } else {
+    viewport = pass.viewport
+  }
+
+  gl.Viewport(viewport.x, viewport.y, viewport.w, viewport.h)
 }
 
 // For now depth target can either be depth only or depth+stencil,
@@ -144,13 +243,13 @@ clear_framebuffer :: proc(fb: Framebuffer = {}, color := BLACK) {
   clear_color := color
 
   // Hmm may want this to be controllable maybe
-  default_depth:   f32 = 1.0
-  default_stencil: i32 = 0
+  DEFAULT_DEPTH   :: 1.0
+  DEFAULT_STENCIL :: 0.0
 
   // This is the default framebuffer
   if fb.id == 0 {
     gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, 0, raw_data(&clear_color))
-    gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, default_depth, default_stencil)
+    gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, DEFAULT_DEPTH, DEFAULT_STENCIL)
   } else {
     // This is a created framebuffer
 
@@ -161,17 +260,19 @@ clear_framebuffer :: proc(fb: Framebuffer = {}, color := BLACK) {
 
     // Clear depth stencil target if it exists
     if fb.depth_target.format == .DEPTH24_STENCIL8 {
-      gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, default_depth, default_stencil)
+      gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, DEFAULT_DEPTH, DEFAULT_STENCIL)
     }
 
     // Clear depth target if it exists
     if fb.depth_target.format == .DEPTH32 {
+      default_depth: f32 = DEFAULT_DEPTH // Since we need a pointer, can't use constant
       gl.ClearNamedFramebufferfv(fb.id, gl.DEPTH, 0, &default_depth)
     }
   }
 }
 
 bind_framebuffer :: proc(fb: Framebuffer) {
+  // Should be fine for binding default if pass in empty struct
   gl.BindFramebuffer(gl.FRAMEBUFFER, fb.id)
 }
 
@@ -245,7 +346,6 @@ begin_main_pass :: proc() {
   bind_framebuffer(state.hdr_ms_buffer)
 
   gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-  gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT)
 
   gl.Enable(gl.DEPTH_TEST)
 

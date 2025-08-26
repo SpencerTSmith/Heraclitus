@@ -196,6 +196,9 @@ resize_window :: proc() {
     state.running = false
   }
 
+  assert(state.window.w == state.hdr_ms_buffer.width &&
+         state.window.h == state.hdr_ms_buffer.height)
+
   log.infof("Window has resized to %vpx, %vpx", state.window.w, state.window.h)
 }
 
