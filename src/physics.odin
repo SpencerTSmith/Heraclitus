@@ -298,9 +298,9 @@ orthonormal_axes :: proc(forward: vec3) -> (right, up: vec3) {
   return right, up
 }
 
-draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025) {
+draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025, depth_test: Depth_Test_Mode = .LESS) {
   end := origin + direction
-  immediate_line(origin, end, color)
+  immediate_line(origin, end, color, depth_test=depth_test)
 
   // Need the space relative to the direction of the vector
   // To draw the pyramid tip
@@ -325,7 +325,8 @@ draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32
   base3 -= up * tip_bounds
   base3 -= forward * tip_bounds * 4
 
-  immediate_pyramid(tip, base0, base1, base2, base3, color)
+  immediate_pyramid(tip, base0, base1, base2, base3, color,
+                    depth_test=depth_test)
 }
 
 draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN) {

@@ -6,10 +6,10 @@ import "core:slice"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
-Frame_Buffer :: struct {
+Framebuffer :: struct {
   id:            u32,
 
-  attachments:   []Frame_Buffer_Attachment,
+  attachments:   []Framebuffer_Attachment,
   color_targets: []Texture,
   depth_target:  Texture,
 
@@ -18,7 +18,7 @@ Frame_Buffer :: struct {
   height: int,
 }
 
-Frame_Buffer_Attachment :: enum {
+Framebuffer_Attachment :: enum {
   COLOR,
   HDR_COLOR,
   DEPTH,
@@ -40,15 +40,25 @@ Depth_Test_Mode :: enum {
   LESS_EQUAL,
 }
 
-begin_render_pass :: proc(fb: Frame_Buffer, depth_mode: Depth_Test_Mode, cull_mode: Face_Cull_Mode) {
+Blend_Mode :: enum {
+  DISABLED,
+  ALPHA_ONE_MINUS_ALPHA,
+}
 
+// For now the viewport for a render pass is always
+// the framebuffer's full target size
+Render_Pass :: struct {
+  framebuffer: Framebuffer,
+  depth_test:  Depth_Test_Mode,
+  face_cull:   Face_Cull_Mode,
+  blend:       Blend_Mode,
 }
 
 // For now depth target can either be depth only or depth+stencil,
 // also can only have one attachment of each type
 make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
-                         attachments: []Frame_Buffer_Attachment = {.COLOR, .DEPTH_STENCIL},
-                         ) -> (buffer: Frame_Buffer, ok: bool) {
+                         attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL},
+                         ) -> (buffer: Framebuffer, ok: bool) {
   fbo: u32
   gl.CreateFramebuffers(1, &fbo)
 
@@ -130,7 +140,7 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
 }
 
 // NOTE: If none passed in clear the default framebuffer
-clear_framebuffer :: proc(fb: Frame_Buffer = {}, color := BLACK) {
+clear_framebuffer :: proc(fb: Framebuffer = {}, color := BLACK) {
   clear_color := color
 
   // Hmm may want this to be controllable maybe
@@ -161,11 +171,11 @@ clear_framebuffer :: proc(fb: Frame_Buffer = {}, color := BLACK) {
   }
 }
 
-bind_framebuffer :: proc(fb: Frame_Buffer) {
+bind_framebuffer :: proc(fb: Framebuffer) {
   gl.BindFramebuffer(gl.FRAMEBUFFER, fb.id)
 }
 
-free_framebuffer :: proc(fb: ^Frame_Buffer) {
+free_framebuffer :: proc(fb: ^Framebuffer) {
   for &c in fb.color_targets {
     free_texture(&c)
   }
@@ -175,7 +185,7 @@ free_framebuffer :: proc(fb: ^Frame_Buffer) {
 
 // NOTE: This blits the entire size of the targets, respectively
 // As well as always blitting color and depth buffer info
-blit_framebuffers :: proc(from, to: Frame_Buffer) {
+blit_framebuffers :: proc(from, to: Framebuffer) {
   gl_filter: u32 = gl.NEAREST
 
   // TODO: Is this a good idea? Basically only use filtering if we aren't blitting from a multisample buffer
@@ -199,7 +209,7 @@ draw_screen_quad :: proc() {
 }
 
 // Will use the same sample count and attachment list as the old
-remake_framebuffer :: proc(frame_buffer: ^Frame_Buffer, width, height: int) -> (new_buffer: Frame_Buffer, ok: bool) {
+remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (new_buffer: Framebuffer, ok: bool) {
   old_samples     := frame_buffer.sample_count
   old_attachments := frame_buffer.attachments
   free_framebuffer(frame_buffer)
@@ -266,7 +276,7 @@ begin_ui_pass :: proc() {
 }
 
 // For now excludes transparent objects and the skybox
-begin_shadow_pass :: proc(framebuffer: Frame_Buffer) {
+begin_shadow_pass :: proc(framebuffer: Framebuffer) {
   assert(framebuffer.depth_target.id > 0, "Framebuffer must have depth target for shadow mapping")
   gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer.id)
 

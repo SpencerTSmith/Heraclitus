@@ -43,10 +43,12 @@ State :: struct {
 
   // Hmm maybe should be enum array, these must all be the same dimensions as backbuffer
   // so simple to loop over enum array when resizing window
-  hdr_ms_buffer:      Frame_Buffer,
-  post_buffer:        Frame_Buffer,
-  ping_pong_buffers:  [2]Frame_Buffer,
-  point_depth_buffer: Frame_Buffer,
+  hdr_ms_buffer:      Framebuffer,
+  post_buffer:        Framebuffer,
+  ping_pong_buffers:  [2]Framebuffer,
+
+  point_depth_buffer: Framebuffer,
+  sun_depth_buffer:   Framebuffer,
 
   fps:              f64,
   frame_count:      uint,
@@ -61,7 +63,6 @@ State :: struct {
   z_far:  f32,
 
   sun:              Direction_Light,
-  sun_depth_buffer: Frame_Buffer,
 
   flashlight:Spot_Light,
 
@@ -286,7 +287,7 @@ init_state :: proc() -> (ok: bool) {
 
   state.draw_debug = true
 
-  state.default_font = make_font("Diablo_Light.ttf", 30.0) or_return
+  state.default_font = make_font("Diablo_Light.ttf", 20.0) or_return
 
   return true
 }

@@ -27,6 +27,10 @@ Immediate_Space :: enum {
 }
 
 // NOTE: This is not integrated with the general asset system and deals with actual textures and such...
+// FIXME: We use a pointer and not an index into the batch list for the
+// current batch
+// TODO: Finish up render pass system and integrate with batching system...
+// batches would probably include a renderpass, the immediate space, and the primitive
 Immediate_State :: struct {
   vertex_buffer: GPU_Buffer,
   vertex_count:  int, // ALL vertices for current frame
@@ -48,6 +52,7 @@ Immediate_Batch :: struct {
   primitive: Immediate_Primitive,
   texture:   Texture,
   space:     Immediate_Space,
+  depth:     Depth_Test_Mode,
 }
 
 // Internal state
@@ -83,31 +88,36 @@ immediate_frame_reset :: proc() {
 
 // Returns the pointer to the new batch in the batches dynamic array.
 @(private="file")
-start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture, space: Immediate_Space) -> (batch_pointer: ^Immediate_Batch) {
+start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
+                        space: Immediate_Space,
+                        depth: Depth_Test_Mode
+                        ) -> (batch_pointer: ^Immediate_Batch) {
   append(&immediate.batches, Immediate_Batch{
     vertex_base = immediate.vertex_count, // Always on the end.
 
     primitive = mode,
     texture = texture,
     space = space,
+    depth = depth,
   })
 
   return &immediate.batches[len(immediate.batches) - 1]
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture, wish_space: Immediate_Space) {
+immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode = .LESS) {
   if immediate.curr_batch == nil || // Should short circuit and not do any nil dereferences
-     immediate.curr_batch.primitive    != wish_primitive  ||
-     immediate.curr_batch.space   != wish_space ||
-     immediate.curr_batch.texture != wish_texture {
-    immediate.curr_batch = start_new_batch(wish_primitive, wish_texture, wish_space)
+     immediate.curr_batch.primitive != wish_primitive ||
+     immediate.curr_batch.space     != wish_space     ||
+     immediate.curr_batch.texture   != wish_texture   ||
+     immediate.curr_batch.depth     != wish_depth {
+    immediate.curr_batch = start_new_batch(wish_primitive, wish_texture, wish_space, wish_depth)
   }
 }
 
 // Forces the creation of a new batch
 immediate_begin_force :: proc() {
-  immediate.curr_batch = start_new_batch(immediate.curr_batch.primitive, immediate.curr_batch.texture, immediate.curr_batch.space)
+  immediate.curr_batch = start_new_batch(immediate.curr_batch.primitive, immediate.curr_batch.texture, immediate.curr_batch.space, immediate.curr_batch.depth)
 }
 
 free_immediate_renderer :: proc() {
@@ -152,11 +162,12 @@ immediate_quad :: proc {
 
 immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
                           top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
-                          texture: Texture = immediate.white_texture) {
+                          texture:    Texture = immediate.white_texture,
+                          depth_test: Depth_Test_Mode = .ALWAYS) {
   wish_primitive := Immediate_Primitive.TRIANGLES
   wish_space     := Immediate_Space.SCREEN
 
-  immediate_begin(wish_primitive, texture, wish_space)
+  immediate_begin(wish_primitive, texture, wish_space, depth_test)
 
   top_left := Immediate_Vertex{
     position = {top_left_position.x, top_left_position.y, -state.z_near},
@@ -188,16 +199,14 @@ immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHIT
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
 }
 
-// NOTE: Hardcoded to billboard towards the camera for now
-// TODO: Kind of repeated code with immediate_quad... should maybe just take in a normal
-// And unify the two
 immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
                           uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
-                          texture: Texture = immediate.white_texture) {
+                          texture:    Texture = immediate.white_texture,
+                          depth_test: Depth_Test_Mode = .LESS) {
   wish_primitive := Immediate_Primitive.TRIANGLES
   wish_space     := Immediate_Space.WORLD
 
-  immediate_begin(wish_primitive, texture, wish_space)
+  immediate_begin(wish_primitive, texture, wish_space, depth_test)
 
   norm := normalize(normal) // Just in case
   right, up := orthonormal_axes(norm)
@@ -241,37 +250,40 @@ immediate_line :: proc {
 }
 
 // NOTE: A 2d line so takes in screen coordinates!
-immediate_line_2D :: proc(xy0, xy1: vec2, rgba := WHITE) {
+immediate_line_2D :: proc(xy0, xy1: vec2, rgba := WHITE,
+                          depth_test: Depth_Test_Mode = .ALWAYS) {
   wish_primitive := Immediate_Primitive.LINES
   wish_space     := Immediate_Space.SCREEN
   wish_texture   := immediate.white_texture
 
-  immediate_begin(wish_primitive, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
 
   immediate_vertex({xy0.x, xy0.y, -state.z_near}, color=rgba)
   immediate_vertex({xy1.x, xy1.y, -state.z_near}, color=rgba)
 }
 
 // NOTE: 3d line
-immediate_line_3D :: proc(xyz0, xyz1: vec3, color := WHITE) {
+immediate_line_3D :: proc(xyz0, xyz1: vec3, color := WHITE,
+                          depth_test: Depth_Test_Mode = .LESS) {
   wish_primitive := Immediate_Primitive.LINES
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
 
-  immediate_begin(wish_primitive, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
 
   immediate_vertex(xyz0, color=color)
   immediate_vertex(xyz1, color=color)
 }
 
-immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
+immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
+                           depth_test: Depth_Test_Mode = .LESS) {
   corners := box_corners(xyz_min, xyz_max)
 
   wish_primitive := Immediate_Primitive.TRIANGLES
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
 
-  immediate_begin(wish_primitive, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
 
   immediate_vertex(corners[0], color)
   immediate_vertex(corners[1], color)
@@ -322,13 +334,14 @@ immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
   immediate_vertex(corners[7], color)
 }
 
-immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
+immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
+                      depth_test: Depth_Test_Mode = .LESS) {
   corners := box_corners(xyz_min, xyz_max)
 
   wish_primitive := Immediate_Primitive.LINES
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
-  immediate_begin(wish_primitive, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
 
   // Back
   immediate_line(corners[0], corners[1], color)
@@ -351,11 +364,12 @@ immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE) {
   immediate_line(corners[6], corners[1], color)
 }
 
-immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE) {
+immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
+                          depth_test: Depth_Test_Mode = .LESS) {
   wish_primitive := Immediate_Primitive.TRIANGLES
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
-  immediate_begin(wish_primitive, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
 
   // Triangle sides
   immediate_vertex(tip, color)
@@ -386,11 +400,14 @@ immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE)
 
 // Only wire frame for now
 // TODO: Filled in option too
-immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE, latitude_rings := 16, longitude_rings := 16) {
+immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
+                         latitude_rings := 16,
+                         longitude_rings := 16,
+                         depth_test: Depth_Test_Mode = .LESS) {
   wish_primitive := Immediate_Primitive.LINE_STRIPS
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
-  immediate_begin(wish_primitive, wish_texture, wish_space)
+  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
 
   // Draw the horizontal rings
   for r in 1..<latitude_rings {
@@ -456,16 +473,23 @@ immediate_flush :: proc(flush_world := true, flush_screen := true) {
         depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
         defer gl.DepthFunc(u32(depth_func_before))
 
+        gl_depth_map := [Depth_Test_Mode]u32 {
+          .DISABLED   = 0,
+          .ALWAYS     = gl.ALWAYS,
+          .LESS       = gl.LESS,
+          .LESS_EQUAL = gl.LEQUAL,
+        }
+
+        gl.DepthFunc(gl_depth_map[batch.depth])
+
         switch batch.space {
         case .SCREEN:
           if !flush_screen { continue } // We shouldn't flush screen immediates
 
-          gl.DepthFunc(gl.ALWAYS)
           set_shader_uniform("transform", orthographic)
         case .WORLD:
           if !flush_world { continue } // We shouldn't flush screen immediates
 
-          gl.DepthFunc(gl.LESS)
           set_shader_uniform("transform", perspective)
         }
 

@@ -127,6 +127,10 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
+
+  // FIXME: While neat this method works, its not the best way to do it...
+  // Blender does a different thing with ray intersecting a plane on the axis and taking the diff
+  // Of the prev and current intersection points
   if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
     prev_x, prev_y := mouse_position_prev()
     curr_x, curr_y := mouse_position()
@@ -138,8 +142,9 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     delta_world := curr_world - prev_world
 
     GIZMO_SENSITIVITY :: 100.0
-
-    #partial switch editor.selected_gizmo {
+    switch editor.selected_gizmo {
+    case .NONE:
+      assert(false, "What da")
     case .X_AXIS:
       delta_in_axis := dot(delta_world, WORLD_RIGHT)
       editor.selected_entity.position.x += delta_in_axis * GIZMO_SENSITIVITY
@@ -149,8 +154,10 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     case .Z_AXIS:
       delta_in_axis := dot(delta_world, WORLD_FORWARD)
       editor.selected_entity.position.z -= delta_in_axis * GIZMO_SENSITIVITY
+    case .XY_PLANE:
+    case .XZ_PLANE:
+    case .YZ_PLANE:
     }
-
   }
 
   if mouse_pressed(.RIGHT) {
@@ -244,32 +251,41 @@ draw_editor_ui :: proc() {
     aabb := entity_world_aabb(e)
 
     center_aabb := (aabb.min + aabb.max) * 0.5
+
+    OPACITY :: 0.9
+
     //
     // Axes
     //
     {
-      draw_vector(center_aabb, WORLD_RIGHT * AXIS_GIZMO_LENGTH,   RED,   tip_bounds=0.25)
-      draw_vector(center_aabb, WORLD_UP * AXIS_GIZMO_LENGTH,      GREEN, tip_bounds=0.25)
-      draw_vector(center_aabb, WORLD_FORWARD * AXIS_GIZMO_LENGTH, BLUE,  tip_bounds=0.25)
+      draw_vector(center_aabb, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
+                  set_alpha(RED, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+      draw_vector(center_aabb, WORLD_UP * AXIS_GIZMO_LENGTH,
+                  set_alpha(GREEN, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+      draw_vector(center_aabb, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
+                  set_alpha(BLUE, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+
     }
 
     //
     // Move planes
     //
     {
-      OPACITY :: 0.9
 
       x_pos := center_aabb
       x_pos.x = aabb.min.x - 2.0
-      immediate_quad(x_pos, WORLD_RIGHT, 1, 1, set_alpha(RED, OPACITY))
+      immediate_quad(x_pos, WORLD_RIGHT, 1, 1, set_alpha(RED, OPACITY),
+                     depth_test = Depth_Test_Mode.ALWAYS)
 
       y_pos := center_aabb
       y_pos.y = aabb.min.y - 2.0
-      immediate_quad(y_pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY))
+      immediate_quad(y_pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY),
+                     depth_test = Depth_Test_Mode.ALWAYS)
 
       z_pos := center_aabb + WORLD_FORWARD * (aabb.max.z + 2.0)
       z_pos.z = aabb.max.z + 2.0
-      immediate_quad(z_pos, WORLD_FORWARD, 1, 1, set_alpha(BLUE, OPACITY))
+      immediate_quad(z_pos, WORLD_FORWARD, 1, 1, set_alpha(BLUE, OPACITY),
+                     depth_test = Depth_Test_Mode.ALWAYS)
     }
   }
 }
