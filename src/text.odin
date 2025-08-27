@@ -206,14 +206,26 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, alig
 DEFAULT_TEXT_BACKGROUND :: vec4{0.0, 0.0, 0.0, 0.7}
 
 draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT,
-                                  padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) {
+                                  padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) -> (left, top, bottom, right: f32) {
   l, t, b, r := text_draw_rect(text, font, x, y, align)
 
   w := r - l
   h := b - t
 
-  immediate_quad(vec2{l - padding, t - padding}, w + padding * 2, h + padding * 2, background_color)
+  l = l - padding
+  t = t - padding
+  w = w + padding * 2
+  h = h + padding * 2
+
+  immediate_quad(vec2{l, t}, w, h, background_color)
   draw_text(text, font, x, y, text_color, align)
+
+  left   = l
+  top    = t
+  bottom = b + padding * 2
+  right  = r + padding * 2
+
+  return left, top, bottom, right
 }
 
 free_font :: proc(font: ^Font) {

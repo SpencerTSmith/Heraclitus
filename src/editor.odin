@@ -113,17 +113,22 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
-  // Pick entity or gizmo
-  if mouse_pressed(.LEFT) {
-    x, y := mouse_position()
+  if ui_button("Clear Entity", {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}) {
+    editor.selected_entity = nil
+  } else {
+    // Pick entity or gizmo only if not doing ui
+    if mouse_pressed(.LEFT) {
+      x, y := mouse_position()
 
-    // Preferentiall pick gizmo first
-    editor.selected_gizmo  = pick_gizmo(x, y, camera^)
+      // Preferentially pick gizmo first
+      editor.selected_gizmo  = pick_gizmo(x, y, camera^)
 
-    if editor.selected_gizmo == .NONE {
-      editor.selected_entity = pick_entity(x, y, camera^)
+      if editor.selected_gizmo == .NONE {
+        editor.selected_entity = pick_entity(x, y, camera^)
+      }
     }
   }
+
 
 
   // FIXME: While neat this method works, its not the best way to do it...
