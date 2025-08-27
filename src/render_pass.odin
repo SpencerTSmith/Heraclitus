@@ -18,6 +18,8 @@ Framebuffer :: struct {
   height: int,
 }
 
+DEFAULT_FRAMEBUFFER :: Framebuffer{}
+
 Framebuffer_Attachment :: enum {
   COLOR,
   HDR_COLOR,
@@ -56,6 +58,7 @@ Viewport :: struct {
 Render_Pass_Flags :: enum {
   CLEAR_FRAMEBUFFER,
   USE_ALL_FRAMEBUFFER_VIEWPORT,
+  USE_WINDOW_VIEWPORT,
 }
 
 Render_Pass :: struct {
@@ -66,7 +69,7 @@ Render_Pass :: struct {
   blend:      Blend_Mode,
 
   // Optionally filled out if don't want to use the full
-  // Framebuffer size in a render pass
+  // Framebuffer size in a render pass, set by flag
   viewport: Viewport,
 }
 
@@ -75,7 +78,27 @@ MAIN_PASS :: Render_Pass {
   depth_test = .LESS,
   face_cull  = .BACK,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
-  viewport   = {},
+}
+
+POST_PASS :: Render_Pass {
+  flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
+  depth_test = .DISABLED,
+  face_cull  = .BACK,
+  blend      = .ALPHA_ONE_MINUS_ALPHA,
+}
+
+SHADOW_PASS :: Render_Pass {
+  flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
+  depth_test = .LESS,
+  face_cull  = .FRONT,
+  blend      = .ALPHA_ONE_MINUS_ALPHA,
+}
+
+UI_PASS :: Render_Pass {
+  flags      = {.CLEAR_FRAMEBUFFER, .USE_WINDOW_VIEWPORT},
+  depth_test = .LESS,
+  face_cull  = .DISABLED,
+  blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 // TODO: Save state as it was before this pass, perhaps as an optional return
@@ -102,7 +125,7 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
   gl_depth := gl_depth_map[pass.depth_test]
 
   if gl_depth == DISABLED_SENTINEL {
-    gl.Disable(gl_depth)
+    gl.Disable(gl.DEPTH_TEST)
   } else {
     gl.Enable(gl.DEPTH_TEST)
     gl.DepthFunc(gl_depth)
@@ -140,17 +163,22 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
   }
 
   // Viewport
-  viewport: Viewport
+  vp: Viewport
   if .USE_ALL_FRAMEBUFFER_VIEWPORT in pass.flags {
-    viewport.x = 0
-    viewport.y = 0
-    viewport.w = cast(i32) fb.width
-    viewport.h = cast(i32) fb.height
+    vp.x = 0
+    vp.y = 0
+    vp.w = cast(i32) fb.width
+    vp.h = cast(i32) fb.height
+  } else if .USE_WINDOW_VIEWPORT in pass.flags {
+    vp.x = 0
+    vp.y = 0
+    vp.w = cast(i32) state.window.w
+    vp.h = cast(i32) state.window.h
   } else {
-    viewport = pass.viewport
+    vp = pass.viewport
   }
 
-  gl.Viewport(viewport.x, viewport.y, viewport.w, viewport.h)
+  gl.Viewport(vp.x, vp.y, vp.w, vp.h)
 }
 
 // For now depth target can either be depth only or depth+stencil,
@@ -239,7 +267,7 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
 }
 
 // NOTE: If none passed in clear the default framebuffer
-clear_framebuffer :: proc(fb: Framebuffer = {}, color := BLACK) {
+clear_framebuffer :: proc(fb: Framebuffer, color := BLACK) {
   clear_color := color
 
   // Hmm may want this to be controllable maybe
@@ -342,58 +370,7 @@ begin_drawing :: proc() {
   state.began_drawing = true
 }
 
-begin_main_pass :: proc() {
-  bind_framebuffer(state.hdr_ms_buffer)
-
-  gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-
-  gl.Enable(gl.DEPTH_TEST)
-
-  gl.Enable(gl.CULL_FACE)
-  gl.CullFace(gl.BACK)
-
-  gl.Enable(gl.BLEND)
-  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-}
-
-begin_post_pass :: proc() {
-  gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-  gl.Disable(gl.DEPTH_TEST)
-}
-
-begin_ui_pass :: proc() {
-  // We draw straight to the screen in this case... maybe we want to do other stuff later
-  gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
-
-  gl.Viewport(0, 0, i32(state.window.w), i32(state.window.h))
-
-  gl.Disable(gl.DEPTH_TEST)
-
-  gl.Enable(gl.BLEND)
-  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-  gl.Disable(gl.CULL_FACE)
-}
-
-// For now excludes transparent objects and the skybox
-begin_shadow_pass :: proc(framebuffer: Framebuffer) {
-  assert(framebuffer.depth_target.id > 0, "Framebuffer must have depth target for shadow mapping")
-  gl.BindFramebuffer(gl.FRAMEBUFFER, framebuffer.id)
-
-  x := 0
-  y := 0
-  width  := framebuffer.depth_target.width
-  height := framebuffer.depth_target.height
-
-  gl.Viewport(i32(x), i32(y), i32(width), i32(height))
-  gl.Clear(gl.DEPTH_BUFFER_BIT)
-  gl.Enable(gl.DEPTH_TEST)
-  gl.Enable(gl.CULL_FACE)
-  gl.CullFace(gl.FRONT) // Peter-panning fix for shadow bias
-}
-
 flush_drawing :: proc() {
-
   immediate_frame_reset()
 
   // And set up for next frame

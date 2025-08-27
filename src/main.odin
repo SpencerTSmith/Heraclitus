@@ -260,6 +260,7 @@ init_state :: proc() -> (ok: bool) {
   state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
 
   state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
+  state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
   state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), persistent=true)
 
@@ -383,8 +384,6 @@ main :: proc() {
     append(&state.entities, duck2)
   }
 
-  sun_depth_buffer,_ := make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH})
-
   // Clean up temp allocator from initialization... fresh for per-frame allocations
   free_all(context.temp_allocator)
 
@@ -481,12 +480,10 @@ main :: proc() {
 
     // Frame sync
     begin_drawing()
-    gl.DepthMask(gl.TRUE)
 
     //
     // Update frame uniform
     //
-
     projection := get_camera_perspective(state.camera)
     view       := get_camera_view(state.camera)
     frame_ubo: Frame_Uniform = {
@@ -521,8 +518,12 @@ main :: proc() {
       draw_editor_ui()
       fallthrough
     case .GAME:
+
+      //
+      // Shadow passes
+      //
       if state.sun_on {
-        begin_shadow_pass(sun_depth_buffer)
+        begin_render_pass(SHADOW_PASS, state.sun_depth_buffer)
         {
           bind_shader(.SUN_DEPTH)
 
@@ -531,24 +532,21 @@ main :: proc() {
           }
         }
       }
-
       if state.point_lights_on {
-        begin_shadow_pass(state.point_depth_buffer)
-        {
-          bind_shader(.POINT_DEPTH)
+        begin_render_pass(SHADOW_PASS, state.point_depth_buffer)
+        bind_shader(.POINT_DEPTH)
 
-          for l, idx in state.point_lights {
-            set_shader_uniform("light_index", i32(idx))
+        for l, idx in state.point_lights {
+          set_shader_uniform("light_index", i32(idx))
 
-            // Cull models not in light's radius
-            light_sphere: Sphere = {
-              center = l.position,
-              radius = l.radius,
-            }
-            for e in state.entities {
-              if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
-                draw_entity(e, instances=6)
-              }
+          // Cull models not in light's radius
+          light_sphere: Sphere = {
+            center = l.position,
+            radius = l.radius,
+          }
+          for e in state.entities {
+            if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
+              draw_entity(e, instances=6)
             }
           }
         }
@@ -567,7 +565,7 @@ main :: proc() {
           bind_texture("skybox", {})
         }
 
-        bind_texture("sun_shadow_map", sun_depth_buffer.depth_target)
+        bind_texture("sun_shadow_map", state.sun_depth_buffer.depth_target)
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
         // Go through and draw opque entities, collect transparent entities
@@ -628,13 +626,10 @@ main :: proc() {
       //
       // Post-Processing Pass
       //
-      begin_post_pass()
+      begin_render_pass(POST_PASS, state.post_buffer)
       {
         // Resolve multi-sampling buffer to post_buffer
         blit_framebuffers(state.hdr_ms_buffer, state.post_buffer)
-        bind_framebuffer(state.post_buffer)
-        // gl.DepthMask(gl.FALSE)
-
         //
         // Bloom
         //
@@ -666,25 +661,26 @@ main :: proc() {
           }
         }
 
-        //
+      }
+
+      begin_render_pass(UI_PASS, {})
+      {
         // Resolve hdr (with bloom) to backbuffer
-        //
-        gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
         bind_shader(.RESOLVE_HDR)
         bind_texture("screen_texture", state.post_buffer.color_targets[0])
         bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
         set_shader_uniform("exposure", f32(0.5))
         draw_screen_quad()
+
+
+        if state.draw_debug {
+          draw_debug_stats()
+        }
+
+        // Flush any accumulated 2D or screen space draws
+        immediate_flush(flush_world=false, flush_screen=true)
       }
 
-      if state.draw_debug {
-        // Gets draw to backbuffer
-        begin_ui_pass()
-        draw_debug_stats()
-      }
-
-      // Flush any accumulated 2D or screen space draws
-      immediate_flush(flush_world=false, flush_screen=true)
     case .MENU:
       update_menu_input()
       draw_menu()

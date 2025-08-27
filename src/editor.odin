@@ -43,7 +43,6 @@ pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity
   closest_t := F32_MAX
   for &e in state.entities {
     entity_aabb := entity_world_aabb(e)
-
     if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes {
       // Get the closest entity
       if t_min < closest_t {
@@ -65,9 +64,8 @@ pick_gizmo :: proc(screen_x, screen_y: f32, camera: Camera) -> (gizmo: Editor_Gi
 
   closest_t := F32_MAX
   for info, g in editor.gizmos {
-
     if yes, t_min, _ := ray_intersects_aabb(ray, info.hitbox); yes {
-      // Get the closest entity
+      // Get the closest gizmo
       if t_min < closest_t {
         closest_t = t_min
         gizmo = g
