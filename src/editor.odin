@@ -113,8 +113,11 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
-  if ui_button("Clear Entity", {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}) {
+  results := ui_button("Clear Entity", {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1})
+  if .CLICKED in results {
     editor.selected_entity = nil
+  } else if .HOVERED in results {
+
   } else {
     // Pick entity or gizmo only if not doing ui
     if mouse_pressed(.LEFT) {

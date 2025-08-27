@@ -25,8 +25,25 @@ package main
 //   children: Array(^UI_Widget, UI_WIDGET_MAX_CHILDREN),
 // }
 
-ui_button :: proc(text: string, pos: vec2) -> (clicked: bool) {
+// TODO: need to generate draw commands, not calling into the immediate rendering system directly
+// That way can rearrange draw order, and run through them all in order
+
+UI_Results :: enum {
+  HOVERED,
+  CLICKED,
+}
+
+ui_button :: proc(text: string, pos: vec2) -> (results: bit_set[UI_Results]) {
   l, t, b, r := draw_text_with_background(text, state.default_font, pos.x, pos.y, padding=5.0)
 
-  return mouse_in_rect(l, t, b, r) && mouse_pressed(.LEFT)
+  if mouse_in_rect(l, t, b, r) {
+    results |= {.HOVERED}
+    draw_text_with_background(text, state.default_font, pos.x, pos.y, text_color=RED, padding=5.0)
+  }
+
+  if .HOVERED in results && mouse_pressed(.LEFT) {
+    results |= {.CLICKED}
+  }
+
+  return results
 }
