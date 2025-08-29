@@ -118,20 +118,20 @@ Array :: struct($Type: typeid, $Capacity: int) {
   count: int,
 }
 
-array_slice :: proc(array: $A/Array($Type, $Capacity)) -> []Type {
+array_slice :: proc(array: ^$A/Array($Type, $Capacity)) -> []Type {
   return array.data[:array.count]
 }
 
-array_add :: proc(array: $A/Array($Type, $Capacity), item: Type) {
+array_add :: proc(array: ^$A/Array($Type, $Capacity), item: Type) {
   assert(array.count < Capacity, "Not enough elements in static array!")
-  array[array.count] = item
+  array.data[array.count] = item
 
   array.count += 1
 }
 
-// Adds a 1 to the end
-vec4_from_3 :: proc(vec: vec3) -> vec4 {
-  return {vec.x, vec.y, vec.z, 1.0}
+// Adds a 1 to the end by default
+vec4_from_3 :: proc(vec: vec3, w: f32 = 1.0) -> vec4 {
+  return {vec.x, vec.y, vec.z, w}
 }
 
 // NOTE: Unprojects the the near plane
@@ -162,7 +162,13 @@ unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (wo
 squared_distance :: proc(a_pos: vec3, b_pos: vec3) -> f32 {
   delta := a_pos - b_pos
 
-  return glsl.dot(delta, delta)
+  return dot(delta, delta)
+}
+
+Quad :: struct {
+  top_left: vec2,
+  width:    f32,
+  height:   f32,
 }
 
 point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
