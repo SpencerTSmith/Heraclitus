@@ -672,10 +672,11 @@ main :: proc() {
         set_shader_uniform("exposure", f32(0.5))
         draw_screen_quad()
 
-
         if state.draw_debug {
           draw_debug_stats()
         }
+
+        draw_ui()
 
         // Flush any accumulated 2D or screen space draws
         immediate_flush(flush_world=false, flush_screen=true)
