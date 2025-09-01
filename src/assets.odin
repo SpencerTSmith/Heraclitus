@@ -12,6 +12,7 @@ Texture_Handle :: distinct u32
 
 // TODO: If doing streaming, then assets data structure should be pool like
 // As it stands handle is just an index into this array that never changes or shrinks
+
 // TODO: Maybe it should just be name to handle? Not the full relative path?
 Asset_Catalog :: struct($Type, $Handle: typeid) {
   path_map: map[string]Handle,
@@ -28,7 +29,7 @@ Assets :: struct {
 assets: Assets
 
 init_assets :: proc(allocator := context.allocator) -> (ok: bool) {
-  EXPECTED_MODEL_ASSET_COUNT :: 128
+  EXPECTED_MODEL_ASSET_COUNT :: 32
   assets.model_catalog.path_map = make(map[string]Model_Handle, allocator)
   reserve(&assets.model_catalog.path_map, EXPECTED_MODEL_ASSET_COUNT)
   assets.model_catalog.assets = make([dynamic]Model, allocator)
@@ -47,7 +48,7 @@ init_assets :: proc(allocator := context.allocator) -> (ok: bool) {
 
   // In case we can't load something have these fallbacks
   _, ok = load_texture(FALLBACK_TEXTURE)
-  _, ok = load_model(FALLBACK_MODEL)
+  _, ok = load_model(FALLBACK_MODEL) // Index 0 will always be loaded and is a 1x1 cube
 
   return ok
 }
@@ -62,7 +63,7 @@ get_fallback_texture_handle :: proc() -> Texture_Handle {
 
 get_fallback_model_handle :: proc() -> Model_Handle {
   assert(MODEL_DIR + FALLBACK_MODEL in assets.model_catalog.path_map)
-  return assets.model_catalog.path_map[TEXTURE_DIR + FALLBACK_TEXTURE]
+  return assets.model_catalog.path_map[MODEL_DIR + FALLBACK_MODEL]
 }
 
 free_assets :: proc() {
@@ -80,7 +81,7 @@ free_assets :: proc() {
 }
 
 load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) {
-  path := filepath.join({MODEL_DIR, name}, context.temp_allocator)
+  path := filepath.join({MODEL_DIR, name}, state.perm_alloc)
 
   // Already loaded
   if path in assets.model_catalog.path_map {
@@ -109,7 +110,7 @@ get_model :: proc(handle: Model_Handle) -> ^Model {
 
 load_texture :: proc(name: string, nonlinear_color: bool = false,
                      in_texture_dir: bool = true) -> (handle: Texture_Handle, ok: bool) {
-  path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator) if in_texture_dir else name
+  path := filepath.join({TEXTURE_DIR, name}, state.perm_alloc) if in_texture_dir else name
 
   // Already loaded
   if path in assets.texture_catalog.path_map {
@@ -142,12 +143,14 @@ get_texture_by_handle :: proc(handle: Texture_Handle) -> ^Texture {
 
 get_texture_by_name :: proc(name: string) -> (texture: ^Texture) {
   // HACK: Maybe handle hashing should just hash the name, not the path, so don't have to do this business
-  path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator)
+  path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator) // Temp for checking, if we really need to load it... permanent alloc in load_texture
 
   // Already loaded
   if path in assets.texture_catalog.path_map {
     texture = get_texture(assets.texture_catalog.path_map[path])
+
   } else {
+    log.infof("Loading Texture %v", name)
     // Load it if not already
     handle, ok := load_texture(name)
     if ok {

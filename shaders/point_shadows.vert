@@ -21,7 +21,7 @@ uniform mat4 model;
 void main() {
   int face_index = gl_InstanceID;
 
-  Point_Light_Uniform light = frame.point_lights[light_index];
+  Shadow_Point_Light_Uniform light = frame.shadow_point_lights[light_index];
 
   mat4 proj_view = light.proj_views[face_index];
 

@@ -11,10 +11,11 @@ import gl "vendor:OpenGL"
 import "vendor:glfw"
 
 // NOTE: For everything that doesn't have a home yet
-
 WINDOW_DEFAULT_TITLE :: "Heraclitus"
-WINDOW_DEFAULT_W :: 1280
-WINDOW_DEFAULT_H :: 720
+WINDOW_DEFAULT_W :: 1280 * 1.5
+WINDOW_DEFAULT_H :: 720  * 1.5
+
+DEFAULT_FONT_SIZE :: 25.0
 
 FRAMES_IN_FLIGHT :: 3
 TARGET_FPS :: 240

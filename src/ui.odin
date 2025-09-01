@@ -9,12 +9,15 @@ UI_WIDGET_MAX_CHILDREN :: 8
 UI_State :: struct {
   widgets: Array(UI_Widget, UI_MAX_WIDGETS), // Probably want a pool or fridge array generic eventually
   draws:   Array(UI_Draw, UI_MAX_DRAWS),
+
+  current_parent: ^UI_Widget,
 }
 
 UI_Widget_Flags :: enum {
   DRAW_TEXT,
   DRAW_BACKGROUND,
   CLICKABLE,
+  DRAGGABLE,
 }
 
 // Units for size and position are screen coords in pixels
@@ -59,7 +62,6 @@ ui: UI_State
 // TODO: Should text be a default arg?
 make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], pos: vec2,
                        text: string) -> (the_widget: ^UI_Widget, results: UI_Results) {
-  PADDING :: 5.0
 
   // TODO: Robustness, this won't work correctly if not drawing text
   l, t, b, r, w, h: f32
@@ -68,18 +70,24 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], pos: vec2,
   }
 
   if .DRAW_BACKGROUND in flags {
+    PADDING :: 5.0
+
     l = l - PADDING
     t = t - PADDING
-    w = r - l + PADDING * 2
-    h = b - t + PADDING * 2
+    w = r - l + PADDING
+    h = b - t + PADDING
   }
 
   the_widget = array_add(&ui.widgets, UI_Widget {
     flags        = flags,
-    rel_position = {l, t},
+    rel_position = {l, t}, // Hmmmm
     width        = w,
     height       = h,
   })
+
+  if .DRAGGABLE in flags {
+
+  }
 
   // See the results first before we decide how to draw it... might not be good... need to think
   results = ui_widget_results(the_widget^)
@@ -102,8 +110,16 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], pos: vec2,
 
 ui_widget_results :: proc(widget: UI_Widget) -> (results: UI_Results) {
   // FIXME: Once add in parents need to traverse up parents to calc real rect position
-  l := widget.rel_position.x
-  t := widget.rel_position.y
+  ancestor := widget.parent
+  l: f32
+  t: f32
+  for ancestor != nil {
+    l += ancestor.rel_position.x
+    t += ancestor.rel_position.y
+  }
+
+  l += widget.rel_position.x
+  t += widget.rel_position.y
   b := t + widget.height
   r := l + widget.width
 
@@ -120,6 +136,7 @@ ui_widget_results :: proc(widget: UI_Widget) -> (results: UI_Results) {
   return results
 }
 
+// Flushes all UI draw records to the immediate rendering system
 draw_ui :: proc() {
   for d in array_slice(&ui.draws) {
     immediate_quad(d.quad.top_left, d.quad.width, d.quad.height, d.quad_color)
@@ -133,17 +150,5 @@ draw_ui :: proc() {
 ui_button :: proc(text: string, pos: vec2) -> (results: UI_Results) {
   _, results = make_ui_widget({.DRAW_TEXT, .DRAW_BACKGROUND, .CLICKABLE}, pos, text)
 
-  // l, t, b, r := draw_text_with_background(text, state.default_font, pos.x, pos.y, padding=5.0)
-  //
-  // // If hovered change text color
-  // if mouse_in_rect(l, t, b, r) {
-  //   results.hovered = true
-  //   draw_text_with_background(text, state.default_font, pos.x, pos.y, text_color=RED, padding=5.0)
-  // }
-  //
-  // if results.hovered && mouse_pressed(.LEFT) {
-  //   results.clicked = true
-  // }
-
-  return results
+   return results
 }

@@ -11,21 +11,12 @@ import "core:log"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
-Shader_Tag :: enum {
-  PHONG,
-  SKYBOX,
-  RESOLVE_HDR,
-  SUN_DEPTH,
-  POINT_DEPTH,
-  GAUSSIAN,
-  GET_BRIGHT,
-}
-
+// TODO: Probably split game specific things from rendering specific things
 State :: struct {
   running: bool,
   mode: Program_Mode,
 
-  gl_is_initialized:  bool,
+  gl_initialized:  bool,
 
   window: Window,
 
@@ -62,7 +53,7 @@ State :: struct {
   z_near: f32,
   z_far:  f32,
 
-  sun:              Direction_Light,
+  sun: Direction_Light,
 
   flashlight:Spot_Light,
 
@@ -106,7 +97,7 @@ init_state :: proc() -> (ok: bool) {
     return
   }
 
-  state.mode = .GAME
+  state.mode = .EDIT // Edit by default
 
   glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
   glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
@@ -172,25 +163,14 @@ init_state :: proc() -> (ok: bool) {
     }
   }
 
+  state.gl_initialized = true
+
   gl.Enable(gl.MULTISAMPLE)
-
-  gl.Enable(gl.DEPTH_TEST)
-
-  gl.Enable(gl.CULL_FACE)
-  gl.Enable(gl.TEXTURE_CUBE_MAP_SEAMLESS)
-
-  gl.Enable(gl.BLEND)
-  gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
-  gl.Enable(gl.STENCIL_TEST)
-  gl.StencilOp(gl.KEEP, gl.KEEP, gl.REPLACE)
 
   // Make the meta shader
   gen_glsl_code()
 
-  state.gl_is_initialized = true
-
-  state.perm_mem = make([]byte, mem.Megabyte * 256)
+  state.perm_mem = make([]byte, mem.Megabyte * 4)
   mem.arena_init(&state.perm, state.perm_mem)
   state.perm_alloc = mem.arena_allocator(&state.perm)
 
@@ -208,7 +188,7 @@ init_state :: proc() -> (ok: bool) {
   reserve(&state.entities, MAX_ENTITY_COUNT)
 
   state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
-  reserve(&state.entities, MAX_POINT_LIGHTS)
+  reserve(&state.point_lights, MAX_SHADOW_POINT_LIGHTS * 2)
 
   state.running = true
 
@@ -225,7 +205,7 @@ init_state :: proc() -> (ok: bool) {
 
   state.sun = {
     direction = {0.5, -1.0,  0.7},
-    color     = { 0.8,  0.7,  0.6, 1.0},
+    color     = {0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
     ambient   = 0.05,
   }
@@ -245,8 +225,8 @@ init_state :: proc() -> (ok: bool) {
     intensity = 1.0,
     ambient   = 0.001,
 
-    inner_cutoff = math.cos(math.to_radians_f32(12.5)),
-    outer_cutoff = math.cos(math.to_radians_f32(17.5)),
+    inner_cutoff = cos(radians(cast(f32)12.5)),
+    outer_cutoff = cos(radians(cast(f32)17.5)),
   }
   state.flashlight_on = false
 
@@ -259,7 +239,7 @@ init_state :: proc() -> (ok: bool) {
   state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
   state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
 
-  state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
+  state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
   state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
   state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), persistent=true)
@@ -288,7 +268,7 @@ init_state :: proc() -> (ok: bool) {
 
   state.draw_debug = true
 
-  state.default_font = make_font("Diablo_Light.ttf", 20.0) or_return
+  state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
 
   return true
 }
@@ -346,10 +326,20 @@ main :: proc() {
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
+  pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
+  append(&state.entities, pl)
+
+  pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=false)
+  append(&state.entities, pl)
+
+  pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
+  append(&state.entities, pl)
+
   // NOTE: Have to gen tangents for these and that takes too long
   if true {
-    sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={60, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
+    sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
     append(&state.entities, sponza)
+
     // Sponza lights
     {
       spacing := 20
@@ -360,13 +350,11 @@ main :: proc() {
           x0 := (x - bounds/2) * spacing
           y0 := y * spacing / 2 + 1
 
-          append(&state.point_lights, Point_Light{
-            position  = {sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z},
-            color     = {rand.float32() * 15.0, rand.float32() * 15.0, rand.float32() * 15.0, 1.0},
-            intensity = 0.7,
-            ambient   = 0.001,
-            radius    = 10,
-          })
+          position := vec3{sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z}
+          color    := vec4{rand.float32() * 10.0, rand.float32() * 10.0, rand.float32() * 10.0, 1.0}
+
+          p := make_point_light_entity(position, color, 10, 1.0, cast_shadows=(x % 2 != 0))
+          append(&state.entities, p)
         }
       }
     }
@@ -382,6 +370,7 @@ main :: proc() {
 
     duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
     append(&state.entities, duck2)
+
   }
 
   // Clean up temp allocator from initialization... fresh for per-frame allocations
@@ -464,53 +453,23 @@ main :: proc() {
         }
       }
 
-      // Move da point lights around
-      seconds := seconds_since_start()
-      if state.point_lights_on {
-        for &pl in state.point_lights {
-          pl.position.x += 2.0 * f32(dt_s) * f32(math.sin(.5 * math.PI * seconds))
-          pl.position.y += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-          pl.position.z += 2.0 * f32(dt_s) * f32(math.cos(.5 * math.PI * seconds))
-        }
-      }
     }
+
     if state.mode == .EDIT {
-      move_camera_edit(&state.camera, dt_s)
+      do_editor(&state.camera, dt_s)
     }
 
-    // Frame sync
-    begin_drawing()
-
     //
-    // Update frame uniform
+    // Update entities with point lights, AFTER we do everything else
     //
-    projection := get_camera_perspective(state.camera)
-    view       := get_camera_view(state.camera)
-    frame_ubo: Frame_Uniform = {
-      projection      = projection,
-      view            = view,
-      proj_view       = projection * view,
-      orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far),
-      camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
-      z_near          = state.z_near,
-      z_far           = state.z_far,
-
-      // And the lights
-      sun_light   = direction_light_uniform(state.sun) if state.sun_on else {},
-      flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
-    }
-    if state.point_lights_on {
-      for pl, idx in state.point_lights {
-        if idx >= MAX_POINT_LIGHTS {
-          log.error("TOO MANY POINT LIGHTS!")
-        } else {
-          frame_ubo.point_lights[idx] = point_light_uniform(pl)
-          frame_ubo.points_count += 1
-        }
+    for e in state.entities {
+      if e.point_light != nil {
+        e.point_light.position = e.position
       }
     }
-    write_gpu_buffer_frame(state.frame_uniforms, 0, size_of(frame_ubo), &frame_ubo)
-    bind_gpu_buffer_frame_range(state.frame_uniforms, .FRAME)
+
+    // Frame sync and send all per frame uniform info
+    begin_drawing()
 
     // What to draw based on mode
     switch state.mode {
@@ -518,7 +477,6 @@ main :: proc() {
       draw_editor_ui()
       fallthrough
     case .GAME:
-
       //
       // Shadow passes
       //
@@ -532,22 +490,30 @@ main :: proc() {
           }
         }
       }
+
       if state.point_lights_on {
         begin_render_pass(SHADOW_PASS, state.point_depth_buffer)
         bind_shader(.POINT_DEPTH)
 
-        for l, idx in state.point_lights {
-          set_shader_uniform("light_index", i32(idx))
+        idx := 0
+        for l in state.point_lights {
+          // TODO: Maybe consider storing shadow and non shadow casting in a different structure
+          // even on CPU, already do that on gpu, but could avoid branch here too... probably not too bad though
+          if l.cast_shadows {
+            set_shader_uniform("light_index", i32(idx))
 
-          // Cull models not in light's radius
-          light_sphere: Sphere = {
-            center = l.position,
-            radius = l.radius,
-          }
-          for e in state.entities {
-            if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
-              draw_entity(e, instances=6)
+            // Cull models not in light's radius
+            light_sphere: Sphere = {
+              center = l.position,
+              radius = l.radius,
             }
+            for e in state.entities {
+              if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
+                draw_entity(e, instances=6)
+              }
+            }
+
+            idx += 1
           }
         }
       }
@@ -601,22 +567,18 @@ main :: proc() {
           }
         }
 
-        // Draw point light billboards, and radius spheres if debug vis on
+        // Draw point light billboards
         if state.point_lights_on {
           for l in state.point_lights {
-            if state.draw_debug {
-              immediate_sphere(l.position, l.radius, l.color, latitude_rings=8, longitude_rings=8)
-            }
-
-            w:f32 = 1.0
-            h:f32 = 1.0
+            w: f32 = 1.0
+            h: f32 = 1.0
             normal := normalize(l.position - state.camera.position) // Billboard it!
             immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=get_texture("point_light.png")^)
           }
         }
 
         if state.draw_debug {
-          draw_grid(color = {1.0, 1.0, 1.0, 0.4})
+          draw_grid(color = {1.0, 1.0, 1.0, 0.2})
         }
 
         // Flush any accumulated 3D draw calls

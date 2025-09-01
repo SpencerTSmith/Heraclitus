@@ -37,8 +37,6 @@ Mesh :: struct {
 
 // HACK: Might be better to just have a static array with a max number of meshes and materials
 Model :: struct {
-  name: string, // Just for debugging, only filled if made from a file
-
   buffer:       GPU_Buffer,
   vertex_count: i32,
   index_count:  i32,
@@ -422,7 +420,6 @@ make_model_from_file :: proc(file_name: string, allocator := context.allocator) 
     assert(len(model_index) == cast(int) model_index_count)
 
     model, ok = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:], allocator)
-    model.name = strings.clone(file_name)
   } else do log.errorf("Unable to parse cgltf file \"%v\"\n", file_name)
 
   return model, ok
@@ -482,7 +479,6 @@ free_model :: proc(model: ^Model) {
 
   free_gpu_buffer(&model.buffer)
 
-  delete(model.name)
   // delete(model.materials)
   // delete(model.meshes)
 }

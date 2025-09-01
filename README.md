@@ -1,12 +1,12 @@
 # Fix Soon:
-- Better render pass state tracking... maybe push and pop GL state procs? Since we are caching them we'll be able to check those calls and not do em if not necessary
+- Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely nessecary...
+    - Will simplify internals, and make it easier to add functionality without changing every single immediate call
 - UI layout system, draw call collection
-- Split shadow-casting point lights and non-shadow-casting lights... this can just be a bool... but should be separate arrays in the global frame uniform
 - More AZDO:
     - Multi-draw indirect
         - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
     - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
-- Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalc
+- Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
 - Switch fully to PBR lighting model
 - Add interaction to Editor gizmos
 - Sort of just normalizing vectors everywhere, almost certainly redundantly... profile and find out if this is significant enough to fix
@@ -32,6 +32,8 @@
 - Point light shadow mapping
     - Cube map array render target... pretty efficient storage, and can minimize draw calls with instanced rendering (6 instances for each map side)
     - Culls entities if not intersecting light radius sphere
+    - Configurable, can have cheaper non shadow casting point lights
+        - These are stored together on CPU in the same array (just a bool to distinguish) but are uploaded separately to GPU... Little less branchy in shader.
 - Sun shadow mapping
 - Full blinn-phong shading model
 - Menu (press ESC)

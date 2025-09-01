@@ -1,7 +1,7 @@
 package main
 
 import "core:fmt"
-import "core:log"
+import "core:mem"
 
 import "vendor:glfw"
 
@@ -33,9 +33,6 @@ editor: Editor_State
 
 // TODO: Maybe these pick_* should just take in the unprojected point so don't have to recalc twice...
 pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity) {
-  w := cast (f32) state.window.w
-  h := cast (f32) state.window.h
-
   world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera), get_camera_perspective(camera))
 
   ray := make_ray(camera.position, world_coord - camera.position)
@@ -76,7 +73,7 @@ pick_gizmo :: proc(screen_x, screen_y: f32, camera: Camera) -> (gizmo: Editor_Gi
   return gizmo
 }
 
-move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
+do_editor :: proc(camera: ^Camera, dt_s: f64) {
   if mouse_down(.MIDDLE) || key_down(.Q) {
     update_camera_look(camera, dt_s)
   } else {
@@ -143,9 +140,11 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
 
     curr_world := unproject_screen_coord(curr_x, curr_y, get_camera_view(camera^), get_camera_perspective(camera^))
 
-    delta_world := curr_world - prev_world
+    // FIXME: JAAAAAANNNNNNKK!
+    delta_world := (curr_world - prev_world) * 100.0
+    delta_world = normalize0(delta_world)
 
-    GIZMO_SENSITIVITY :: 100.0
+    GIZMO_SENSITIVITY :: 0.2
     switch editor.selected_gizmo {
     case .NONE:
       assert(false, "What da")
@@ -205,7 +204,7 @@ move_camera_edit :: proc(camera: ^Camera, dt_s: f64) {
       entity_center := aabb_center(entity_aabb)
 
       create_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB) {
-        BOUNDING_RANGE :: 0.25
+        BOUNDING_RANGE :: 0.5
 
         // Since not all world directions in my coordinate space are in the positive direction
         world_axes := WORLD_AXES
@@ -299,7 +298,8 @@ draw_debug_stats :: proc() {
   text := fmt.aprintf(
 `FPS: %0.4v
 Frametime: %0.4v ms
-Mesh Draw Calls: %v
+Mesh Draw Calls: %v KB
+Perm Arena: %v
 Entities: %v
 Mode: %v
 Velocity: %0.4v
@@ -315,6 +315,7 @@ Point Lights: %v`,
   state.fps,
   (1.0 / state.fps) * 1000,
   state.mesh_draw_calls,
+  state.perm.offset / mem.Kilobyte,
   len(state.entities),
   state.mode,
   state.camera.velocity,

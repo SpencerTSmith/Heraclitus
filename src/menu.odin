@@ -1,6 +1,5 @@
 package main
 
-import gl "vendor:OpenGL"
 import "vendor:glfw"
 
 @(private="file")

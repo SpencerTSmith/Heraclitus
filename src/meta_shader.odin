@@ -14,11 +14,22 @@ UBO_Bind :: enum u32 {
   TEXTURES = 1,
 }
 
+MAX_SHADOW_POINT_LIGHTS :: 8
 MAX_POINT_LIGHTS :: 128
 
-Point_Light_Uniform :: struct #align(16) {
+Shadow_Point_Light_Uniform :: struct #align(16) {
   proj_views:    [6]mat4,
 
+  position:  vec4,
+
+  color:     vec4,
+
+  radius:    f32,
+  intensity: f32,
+  ambient:   f32,
+}
+
+Point_Light_Uniform :: struct #align(16) {
   position:  vec4,
 
   color:     vec4,
@@ -39,22 +50,6 @@ Direction_Light_Uniform :: struct #align(16) {
   ambient:   f32,
 }
 
-Frame_Uniform :: struct {
-  projection:      mat4,
-  orthographic:    mat4,
-  view:            mat4,
-  proj_view:       mat4,
-  camera_position: vec4,
-  z_near:          f32,
-  z_far:           f32,
-  scene_extents:   vec4,
-
-  sun_light:    Direction_Light_Uniform,
-  point_lights: [MAX_POINT_LIGHTS]Point_Light_Uniform,
-  points_count: u32,
-  flash_light:  Spot_Light_Uniform,
-}
-
 Spot_Light_Uniform :: struct #align(16) {
   position:     vec4,
   direction:    vec4,
@@ -66,6 +61,24 @@ Spot_Light_Uniform :: struct #align(16) {
 
   inner_cutoff: f32,
   outer_cutoff: f32,
+}
+
+Frame_Uniform :: struct {
+  projection:      mat4,
+  orthographic:    mat4,
+  view:            mat4,
+  proj_view:       mat4,
+  camera_position: vec4,
+  z_near:          f32,
+  z_far:           f32,
+  scene_extents:   vec4,
+
+  shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
+  shadow_points_count: u32,
+  point_lights: [MAX_POINT_LIGHTS]Point_Light_Uniform,
+  points_count: u32,
+  sun_light:    Direction_Light_Uniform,
+  flash_light:  Spot_Light_Uniform,
 }
 
 gen_glsl_code :: proc() {
@@ -150,6 +163,7 @@ gen_glsl_code :: proc() {
   // That way, don't need to remember to add it here and can instead
   to_glsl_struct(&b, Direction_Light_Uniform)
   to_glsl_struct(&b, Spot_Light_Uniform)
+  to_glsl_struct(&b, Shadow_Point_Light_Uniform)
   to_glsl_struct(&b, Point_Light_Uniform)
   to_glsl_struct(&b, Frame_Uniform)
 
@@ -205,9 +219,23 @@ spot_light_uniform :: proc(light: Spot_Light) -> (uniform: Spot_Light_Uniform) {
   return uniform
 }
 
+shadow_point_light_uniform :: proc(light: Point_Light) -> (uniform: Shadow_Point_Light_Uniform) {
+  uniform = Shadow_Point_Light_Uniform{
+    proj_views = point_light_projviews(light),
+    position   = vec4_from_3(light.position),
+
+    color     = light.color,
+
+    radius    = light.radius,
+    intensity = light.intensity,
+    ambient   = light.ambient,
+  }
+
+  return uniform
+}
+
 point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform) {
   uniform = Point_Light_Uniform{
-    proj_views = point_light_projviews(light),
     position   = vec4_from_3(light.position),
 
     color     = light.color,

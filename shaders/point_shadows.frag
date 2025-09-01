@@ -17,7 +17,7 @@ void main() {
     discard;
   }
 
-  Point_Light_Uniform light = frame.point_lights[fs_in.light_index];
+  Shadow_Point_Light_Uniform light = frame.shadow_point_lights[fs_in.light_index];
 
   // get distance between fragment and light source
   float light_dist = length(fs_in.world_position.xyz - light.position.xyz);

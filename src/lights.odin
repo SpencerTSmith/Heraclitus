@@ -12,7 +12,7 @@ Point_Light :: struct {
   intensity:   f32,
   ambient:     f32,
 
-  // shadows: bool,
+  cast_shadows: bool,
 }
 
 Direction_Light :: struct {

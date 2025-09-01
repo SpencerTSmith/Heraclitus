@@ -49,7 +49,7 @@ Text_Alignment :: enum {
   RIGHT,
 }
 
-make_font :: proc(file_name: string, pixel_height: f32, allocator := context.allocator) -> (font: Font, ok: bool) {
+make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool) {
   rel_path := filepath.join({FONT_DIR, file_name}, context.temp_allocator)
 
   font_data: []byte
@@ -74,8 +74,7 @@ make_font :: proc(file_name: string, pixel_height: f32, allocator := context.all
 
   font.line_height = font.scale * f32(font.ascent - font.descent + font.line_gap)
 
-  bitmap := make([]byte, FONT_ATLAS_WIDTH * FONT_ATLAS_HEIGHT, allocator)
-  defer delete(bitmap)
+  bitmap := make([]byte, FONT_ATLAS_WIDTH * FONT_ATLAS_HEIGHT, context.temp_allocator)
 
   packed_chars: [FONT_CHAR_COUNT]stbtt.packedchar
   pack_context: stbtt.pack_context

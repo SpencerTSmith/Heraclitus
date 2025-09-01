@@ -4,10 +4,21 @@ import "core:os"
 import "core:log"
 import "core:strings"
 import "core:path/filepath"
+import "core:fmt"
 
 import gl "vendor:OpenGL"
 
 SHADER_DIR :: "shaders" + PATH_SLASH
+
+Shader_Tag :: enum {
+  PHONG,
+  SKYBOX,
+  RESOLVE_HDR,
+  SUN_DEPTH,
+  POINT_DEPTH,
+  GAUSSIAN,
+  GET_BRIGHT,
+}
 
 Shader_Type :: enum u32 {
   VERT,
@@ -105,11 +116,22 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
 
   success: i32
   gl.GetShaderiv(u32(shader), gl.COMPILE_STATUS, &success)
+
   if success == 0 {
     info: [512]u8
-    gl.GetShaderInfoLog(u32(shader), 512, nil, &info[0])
-    log.errorf("Error compiling shader:\n%s\n", string(info[:]))
-    log.errorf("%s", with_include)
+    length: i32
+    gl.GetShaderInfoLog(u32(shader), 512, &length, &info[0])
+    log.errorf("Error compiling shader:\n%s\n", string(info[:length]))
+
+    numbered_build := strings.builder_make_none(context.temp_allocator)
+    lines := strings.split_lines(with_include, context.temp_allocator)
+    for l, number in lines {
+      fmt.sbprintln(&numbered_build, number, l)
+    }
+
+    numbered_code := strings.to_string(numbered_build)
+    log.errorf("%s", numbered_code)
+
     ok = false
     return shader, ok
   }
@@ -184,6 +206,7 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
   gl.GetProgramiv(program.id, gl.ACTIVE_UNIFORMS, &uniform_count)
 
   uniforms = make(map[string]Uniform, allocator = allocator)
+  // reserve(&uniforms, uniform_count) Way overestimated considering this also collects ubo uniforms
 
   for i in 0..<uniform_count {
     uniform: Uniform
@@ -193,12 +216,12 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
     type: u32
     gl.GetActiveUniform(program.id, u32(i), 256, &len, &uniform.size, &type, &name_buf[0])
 
-    uniform.type = Uniform_Type(type)
+    uniform.type = cast(Uniform_Type)type
 
     // Only collect uniforms not in blocks
     uniform.location = gl.GetUniformLocation(program.id, cstring(&name_buf[0]))
     if uniform.location != -1 {
-      uniform.name = strings.clone(string(name_buf[:len])) // May just want to do fixed size
+      uniform.name = strings.clone(string(name_buf[:len]), allocator=allocator)
 
       // Check the initial binding point
       // NOTE: will be junk if not actually set in shader
@@ -265,9 +288,9 @@ bind_shader_program :: proc(program: Shader_Program) {
 free_shader_program :: proc(program: ^Shader_Program) {
   gl.DeleteProgram(program.id)
 
-  for _, uniform in program.uniforms {
-    delete(uniform.name)
-  }
+  // for _, uniform in program.uniforms {
+  //   delete(uniform.name)
+  // }
   delete(program.uniforms)
 }
 

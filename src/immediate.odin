@@ -60,7 +60,7 @@ Immediate_Batch :: struct {
 immediate: Immediate_State
 
 init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
-  assert(state.gl_is_initialized)
+  assert(state.gl_initialized)
 
   vertex_buffer := make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, persistent = true)
 
@@ -90,7 +90,7 @@ immediate_frame_reset :: proc() {
 @(private="file")
 start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
                         space: Immediate_Space,
-                        depth: Depth_Test_Mode
+                        depth: Depth_Test_Mode,
                         ) -> (batch_pointer: ^Immediate_Batch) {
   append(&immediate.batches, Immediate_Batch{
     vertex_base = immediate.vertex_count, // Always on the end.
@@ -128,7 +128,7 @@ free_immediate_renderer :: proc() {
 
 // NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right
 immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0.0}) {
-  assert(state.gl_is_initialized)
+  assert(state.gl_initialized)
   assert(gpu_buffer_is_mapped(immediate.vertex_buffer), "Uninitialized Immediate State")
 
   if immediate.vertex_count + 1 >= MAX_IMMEDIATE_VERTEX_COUNT {

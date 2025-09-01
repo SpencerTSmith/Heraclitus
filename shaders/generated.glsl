@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 29-08-2025 (06:43:22 pm)
+// NOTE: This code was generated on 01-09-2025 (09:26:41 pm)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -21,8 +21,16 @@ struct Spot_Light_Uniform {
   float outer_cutoff;
 };
 
-struct Point_Light_Uniform {
+struct Shadow_Point_Light_Uniform {
   mat4 proj_views[6];
+  vec4 position;
+  vec4 color;
+  float radius;
+  float intensity;
+  float ambient;
+};
+
+struct Point_Light_Uniform {
   vec4 position;
   vec4 color;
   float radius;
@@ -39,9 +47,11 @@ struct Frame_Uniform {
   float z_near;
   float z_far;
   vec4 scene_extents;
-  Direction_Light_Uniform sun_light;
+  Shadow_Point_Light_Uniform shadow_point_lights[8];
+  int shadow_points_count;
   Point_Light_Uniform point_lights[128];
   int points_count;
+  Direction_Light_Uniform sun_light;
   Spot_Light_Uniform flash_light;
 };
 

@@ -368,6 +368,53 @@ begin_drawing :: proc() {
   clear_framebuffer(state.post_buffer)
 
   state.began_drawing = true
+
+  //
+  // Update frame uniform
+  //
+  projection := get_camera_perspective(state.camera)
+  view       := get_camera_view(state.camera)
+  frame_ubo: Frame_Uniform = {
+    projection      = projection,
+    view            = view,
+    proj_view       = projection * view,
+    orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far),
+    camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
+    z_near          = state.z_near,
+    z_far           = state.z_far,
+
+    // And the lights
+    sun_light   = direction_light_uniform(state.sun) if state.sun_on else {},
+    flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
+  }
+
+  if state.point_lights_on {
+    for pl in state.point_lights {
+      if pl.cast_shadows {
+        if frame_ubo.shadow_points_count >= MAX_SHADOW_POINT_LIGHTS {
+          log.errorf("Too many shadow casting point lights! Adding to non shadow casting lights.")
+
+          idx := frame_ubo.points_count
+          frame_ubo.point_lights[idx] = point_light_uniform(pl)
+          frame_ubo.points_count += 1
+        } else {
+          idx := frame_ubo.shadow_points_count
+          frame_ubo.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
+          frame_ubo.shadow_points_count += 1
+        }
+      } else {
+        if frame_ubo.shadow_points_count >= MAX_POINT_LIGHTS {
+          log.errorf("Too many shadow casting point lights! Ignoring.")
+        } else {
+          idx := frame_ubo.points_count
+          frame_ubo.point_lights[idx] = point_light_uniform(pl)
+          frame_ubo.points_count += 1
+        }
+      }
+    }
+  }
+  write_gpu_buffer_frame(state.frame_uniforms, 0, size_of(frame_ubo), &frame_ubo)
+  bind_gpu_buffer_frame_range(state.frame_uniforms, .FRAME)
 }
 
 flush_drawing :: proc() {

@@ -27,8 +27,6 @@ Sampler_Config :: enum {
 }
 
 Texture :: struct {
-  name: string, // Just for debugging, only filled if made from a file
-
   id:     u32,
   handle: u64,
   index:  int, // Into the texture_handles gpu_buffer
@@ -209,7 +207,6 @@ free_texture :: proc(texture: ^Texture) {
       gl.MakeTextureHandleNonResidentARB(texture.handle)
     }
 
-    delete(texture.name)
     gl.DeleteTextures(1, &texture.id)
 
     // Zero it out
@@ -350,7 +347,7 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
     gl_format := gl_pixel_format_table[format][1]
     switch type {
     case .NONE:
-      log.error("Texture type cannot be none\n")
+      assert(false, "Texture type cannot be none")
     case ._2D:
       assert(len(datas) == 1)
       gl.TextureSubImage2D(texture.id, 0, 0, 0, i32(width), i32(height), gl_format, gl.UNSIGNED_BYTE, datas[0])
@@ -418,10 +415,14 @@ get_image_data :: proc(file_path: string) -> (data: rawptr, width, height, chann
     return nil, 0, 0, 0
   }
 
-  width    = int(w)
-  height   = int(h)
-  channels = int(c)
+  width    = cast(int)w
+  height   = cast(int)h
+  channels = cast(int)c
   return data, width, height, channels
+}
+
+free_image_data :: proc(data: rawptr) {
+  stbi.image_free(data)
 }
 
 // Right, left, top, bottom, back, front... or
@@ -439,6 +440,8 @@ make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true
     }
 
     // NOTE: these should all be the same
+    assert(!(width != 0) || (width == w && height == h && channels == c))
+
     width  = w
     height = h
     channels = c
@@ -446,13 +449,13 @@ make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true
     datas[idx] = data
   }
 
-  format := format_for_channels(channels, true)
+  format := format_for_channels(channels, nonlinear_color=true)
 
   cube_map = make_texture_from_data(.CUBE, format, .CLAMP_LINEAR, datas[:], width, height)
 
   // Clean up
   for data in datas {
-    stbi.image_free(data)
+    free_image_data(data)
   }
 
   return cube_map, true
@@ -464,14 +467,11 @@ make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false)
     log.errorf("Could not load texture \"%v\"\n", file_name)
     return texture, false
   }
-  defer stbi.image_free(data)
+  defer free_image_data(data)
 
   format := format_for_channels(channels, nonlinear_color)
 
   texture = make_texture_from_data(._2D, format, .REPEAT_TRILINEAR, {data}, w, h)
-
-  // TODO: Probably would be better to pass in the desired allocator, in case we ever want to start streaming in models
-  texture.name = strings.clone(file_name)
 
   return texture, true
 }

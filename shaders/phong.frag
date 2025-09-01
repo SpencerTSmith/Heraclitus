@@ -264,18 +264,42 @@ void main() {
   vec3 ambient = vec3(0.02); // Little bit of global ambient
 
   vec3 all_point_phong = vec3(0.0);
-  for (int i = 0; i < frame.points_count; i++) {
-    Point_Light_Uniform light = frame.point_lights[i];
-    float distance    = length(light.position.xyz - fs_in.world_position);
+  // Shadow casting point lights
+  for (int i = 0; i < frame.shadow_points_count; i++) {
+    Shadow_Point_Light_Uniform light = frame.shadow_point_lights[i];
+    float distance = length(light.position.xyz - fs_in.world_position);
+
 
     if (distance < light.radius) {
       float point_shadow = 1.0 - point_shadow(point_light_shadows, i, fs_in.world_position, normal,
                                               light.position.xyz, light.radius, frame.camera_position.xyz);
 
-      vec3 point_phong = point_phong(light, diffuse_sample, specular_sample, mat_shininess,
-                                      normal, view_direction, fs_in.world_position);
+      Point_Light_Uniform temp = {
+        light.position,
+        light.color,
+        light.radius,
+        light.intensity,
+        light.ambient,
+      };
+
+      vec3 point_phong = point_phong(temp, diffuse_sample, specular_sample, mat_shininess,
+                                     normal, view_direction, fs_in.world_position);
       point_phong *= point_shadow;
 
+      all_point_phong += point_phong;
+
+      ambient += phong_ambient(light.ambient, light.color.xyz);
+    }
+  }
+
+  // Non shadow casting point lights
+  for (int i = 0; i < frame.points_count; i++) {
+    Point_Light_Uniform light = frame.point_lights[i];
+    float distance = length(light.position.xyz - fs_in.world_position);
+
+    if (distance < light.radius) {
+      vec3 point_phong = point_phong(light, diffuse_sample, specular_sample, mat_shininess,
+                                     normal, view_direction, fs_in.world_position);
       all_point_phong += point_phong;
 
       ambient += phong_ambient(light.ambient, light.color.xyz);
