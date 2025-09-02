@@ -33,9 +33,7 @@ UI_Widget :: struct {
   // handle with generations
   parent:   ^UI_Widget,
   children: Array(^UI_Widget, UI_WIDGET_MAX_CHILDREN),
-
-  layout_cursor:  f32, // Relative, only vertical for now
-  layout_spacing: f32,
+  child_padding: f32, // Space between children
 }
 
 // NOTE: It might be better to have these as flags
@@ -105,7 +103,7 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
 
   the_widget = array_add(&ui.widgets, UI_Widget {
     flags    = flags,
-    position = relative_pos, // Temporarily, will add parent position too
+    position = relative_pos, // Temporarily, will add parent layout info too
     parent   = ui.current_parent,
     width    = w,
     height   = h,
@@ -113,10 +111,13 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
 
   // Now within the parent's children where does it need to be?
   if ui.current_parent != nil {
-    layout_pos := ui.current_parent.layout_cursor
-    the_widget.position.y += layout_pos
+    layout_cursor: f32
+    for child in array_slice(&ui.current_parent.children) {
+      layout_cursor += child.height
+      layout_cursor += ui.current_parent.child_padding
+    }
 
-    ui.current_parent.layout_cursor += the_widget.height + ui.current_parent.layout_spacing
+    the_widget.position.y += layout_cursor
 
     array_add(&ui.current_parent.children, the_widget)
   }

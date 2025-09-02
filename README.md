@@ -8,11 +8,14 @@
     - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
 - Switch fully to PBR lighting model
-- Add interaction to Editor gizmos
+- Editor
+    - Rotation and scaling gizmo's
+    - Editable entity fields
 - Sort of just normalizing vectors everywhere, almost certainly redundantly... profile and find out if this is significant enough to fix
 - Thread pool loading of assets
     - Need to have a fence before we begin drawing to actually upload gpu data, as that can only be done from the thread with the gl context
         - But there is still work that can be done in parallel that actually takes a bit of time, namely computing tangents for models that don't have them
+        - Could also look into mapped staging buffers... need pbo for textures, but vertex geometry should be very simple... write into the mapped buffer from threads and issue the copy to gpu memory from main thread at the beginning of frame...
 
 # Complete:
 - Shader hot-reloading
@@ -35,6 +38,8 @@
     - Configurable, can have cheaper non shadow casting point lights
         - These are stored together on CPU in the same array (just a bool to distinguish) but are uploaded separately to GPU... Little less branchy in shader.
 - Sun shadow mapping
+- Editor
+    - Axis and plane move gizmos
 - Full blinn-phong shading model
 - Menu (press ESC)
 - Zoom (scroll wheel)

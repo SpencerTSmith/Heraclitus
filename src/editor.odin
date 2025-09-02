@@ -31,28 +31,30 @@ Editor_Gizmo_Info :: struct {
 
 Editor_State :: struct {
   selected_entity: ^Entity,
-  selected_gizmo:  Editor_Gizmo,
+  selected_entity_idx: int,
 
+  selected_gizmo: Editor_Gizmo,
   gizmos: [Editor_Gizmo]Editor_Gizmo_Info,
 }
 
 @(private="file")
 editor: Editor_State
 
-pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity) {
+pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int) {
   closest_t := F32_MAX
-  for &e in state.entities {
+  for &e, idx in state.entities {
     entity_aabb := entity_world_aabb(e)
     if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes {
       // Get the closest entity
       if t_min < closest_t {
         closest_t = t_min
         entity = &e
+        index = idx
       }
     }
   }
 
-  return entity
+  return entity, index
 }
 
 pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo) {
@@ -109,11 +111,11 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
+  // FIXME: This sucks
   ui_was_interacted := false
 
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
-
-  panel, _ := make_ui_widget({.DRAW_BACKGROUND}, panel_pos, 300, 100, "")
+  panel, _ := make_ui_widget({}, panel_pos, 300, 100, "")
   ui_push_parent(panel)
   {
     defer ui_pop_parent()
@@ -121,16 +123,29 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     if ui_button("Clear Entity").clicked {
       editor.selected_entity = nil
 
+      // FIXME: This sucks
       ui_was_interacted = true
     }
 
-    if ui_button("Duplicate Entity").clicked {
-      dupe := duplicate_entity(editor.selected_entity^)
-      dupe.position += (rand.float32() * 2.0) - 1.0
-      append(&state.entities, dupe)
+    if ui_button("Dupe Entity").clicked {
+      if editor.selected_entity != nil {
+        dupe := duplicate_entity(editor.selected_entity^)
+        dupe.position += (rand.float32() * 2.0) - 1.0
+        append(&state.entities, dupe)
+        // Should it auto select the copy?
+      }
 
-      // Should it auto select the copy?
+      // FIXME: This sucks
+      ui_was_interacted = true
+    }
 
+    if ui_button("Delete Entity").clicked {
+      if editor.selected_entity != nil {
+        unordered_remove(&state.entities, editor.selected_entity_idx)
+        editor.selected_entity = nil
+      }
+
+      // FIXME: This sucks
       ui_was_interacted = true
     }
   }
@@ -171,7 +186,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
       // If we didn't select a gizmo
       if editor.selected_gizmo == .NONE {
-        editor.selected_entity = pick_entity(mouse_ray, camera^)
+        editor.selected_entity, editor.selected_entity_idx = pick_entity(mouse_ray, camera^)
       }
     }
   }
@@ -315,7 +330,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   camera.on_ground = false
 }
 
-draw_editor_ui :: proc() {
+// These can maybe just be draw directly after we make them instad of having this function
+draw_editor_gizmos :: proc() {
   entity_text := fmt.tprintf("%v", editor.selected_entity^)
 
   x := f32(state.window.w) * 0.5

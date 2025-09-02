@@ -473,7 +473,7 @@ main :: proc() {
     // What to draw based on mode
     switch state.mode {
     case .EDIT:
-      draw_editor_ui()
+      draw_editor_gizmos()
       fallthrough
     case .GAME:
       //
