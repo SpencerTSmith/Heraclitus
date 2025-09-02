@@ -457,9 +457,10 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
     } else {
       gl.DrawElements(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT, rawptr(uintptr(true_offset)))
     }
+
+    state.mesh_draw_calls += 1
   }
 
-  state.mesh_draw_calls += instances
 }
 
 model_has_transparency :: proc(model: Model) -> bool {

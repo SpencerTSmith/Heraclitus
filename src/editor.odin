@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "core:mem"
+import "core:math/rand"
 
 import "vendor:glfw"
 
@@ -110,10 +111,35 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
-  btn_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
-  if ui_button("Clear Entity", btn_pos).clicked {
-    editor.selected_entity = nil
-  } else {
+  ui_was_interacted := false
+
+
+  panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
+
+  panel, _ := make_ui_widget({.DRAW_BACKGROUND}, panel_pos, 300, 100, "")
+  ui_push_parent(panel)
+  {
+    defer ui_pop_parent()
+
+    if ui_button("Clear Entity").clicked {
+      editor.selected_entity = nil
+
+      ui_was_interacted = true
+    }
+
+    if ui_button("Duplicate Entity").clicked {
+      dupe := duplicate_entity(editor.selected_entity^)
+      dupe.position += (rand.float32() * 2.0) - 1.0
+      append(&state.entities, dupe)
+
+      // Should it auto select the copy?
+
+      ui_was_interacted = true
+    }
+  }
+
+
+  if !ui_was_interacted {
     // Pick entity or gizmo only if not doing ui
     if mouse_pressed(.LEFT) {
       x, y := mouse_position()
@@ -127,11 +153,9 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
-
-
   // FIXME: While neat this method works, its not the best way to do it...
-  // Blender does a different thing with ray intersecting a plane on the axis and taking the diff
-  // Of the prev and current intersection points
+  // Blender does a different thing with ray intersecting a plane on the axis and taking the delta
+  // Of the initial and current intersection points
   if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
     prev_x, prev_y := mouse_position_prev()
     curr_x, curr_y := mouse_position()
@@ -298,8 +322,8 @@ draw_debug_stats :: proc() {
   text := fmt.aprintf(
 `FPS: %0.4v
 Frametime: %0.4v ms
-Mesh Draw Calls: %v KB
-Perm Arena: %v
+Mesh Draw Calls: %v
+Perm Arena: %v KB
 Entities: %v
 Mode: %v
 Velocity: %0.4v

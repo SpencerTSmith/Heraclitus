@@ -24,7 +24,7 @@ UI_Widget_Flags :: enum {
 UI_Widget :: struct {
   flags: bit_set[UI_Widget_Flags],
 
-  rel_position: vec2, // Relative to the parent
+  position: vec2, // Relative to the parent
 
   width:  f32,
   height: f32,
@@ -33,6 +33,9 @@ UI_Widget :: struct {
   // handle with generations
   parent:   ^UI_Widget,
   children: Array(^UI_Widget, UI_WIDGET_MAX_CHILDREN),
+
+  layout_cursor:  f32, // Relative, only vertical for now
+  layout_spacing: f32,
 }
 
 // NOTE: It might be better to have these as flags
@@ -56,49 +59,98 @@ UI_Draw :: struct {
 @(private="file")
 ui: UI_State
 
-// TODO: need to generate draw commands, not calling into the immediate rendering system directly
-// That way can rearrange draw order, and run through them all in order
+calc_ui_absolute_position :: proc(widget: UI_Widget) -> (absolute: vec2) {
+  ancestor := widget.parent
+  x: f32
+  y: f32
+  for ancestor != nil {
+    x += ancestor.position.x
+    y += ancestor.position.y
 
-// TODO: Should text be a default arg?
-make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], pos: vec2,
-                       text: string) -> (the_widget: ^UI_Widget, results: UI_Results) {
-
-  // TODO: Robustness, this won't work correctly if not drawing text
-  l, t, b, r, w, h: f32
-  if .DRAW_TEXT in flags {
-    l, t, b, r = text_draw_rect(text, state.default_font, pos.x, pos.y)
+    ancestor = ancestor.parent
   }
 
-  if .DRAW_BACKGROUND in flags {
-    PADDING :: 5.0
+  x += widget.position.x
+  y += widget.position.y
 
-    l = l - PADDING
-    t = t - PADDING
-    w = r - l + PADDING
-    h = b - t + PADDING
+  return {x, y}
+}
+
+// TODO: Size should probably have its own flags
+// Fit to text size, fit to parent, fit to children, etc.
+
+make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, width, height: f32,
+                       text: string) -> (the_widget: ^UI_Widget, results: UI_Results) {
+  l, t, b, r: f32
+  if .DRAW_TEXT in flags {
+    l, t, b, r = text_draw_rect(text, state.default_font, relative_pos.x, relative_pos.y)
+  } else {
+    l = relative_pos.x
+    t = relative_pos.y
+    b = t + height
+    r = l + width
+  }
+
+  // No padding if no text
+  TEXT_PADDING :: 5.0
+  padding: f32 = TEXT_PADDING if .DRAW_TEXT in flags else 0.0
+
+  w, h: f32
+  if .DRAW_BACKGROUND in flags {
+    l = l - padding
+    t = t - padding
+    w = r - l + padding
+    h = b - t + padding
   }
 
   the_widget = array_add(&ui.widgets, UI_Widget {
-    flags        = flags,
-    rel_position = {l, t}, // Hmmmm
-    width        = w,
-    height       = h,
+    flags    = flags,
+    position = relative_pos, // Temporarily, will add parent position too
+    parent   = ui.current_parent,
+    width    = w,
+    height   = h,
   })
 
-  if .DRAGGABLE in flags {
+  // Now within the parent's children where does it need to be?
+  if ui.current_parent != nil {
+    layout_pos := ui.current_parent.layout_cursor
+    the_widget.position.y += layout_pos
 
+    ui.current_parent.layout_cursor += the_widget.height + ui.current_parent.layout_spacing
+
+    array_add(&ui.current_parent.children, the_widget)
   }
 
+  abs := calc_ui_absolute_position(the_widget^)
+
   // See the results first before we decide how to draw it... might not be good... need to think
-  results = ui_widget_results(the_widget^)
+  // Also we are calculating
+  abs_l := abs.x
+  abs_t := abs.y
+  abs_b := abs_t + the_widget.height
+  abs_r := abs_l + the_widget.width
+
+  if mouse_in_rect(abs_l, abs_t, abs_b, abs_r) {
+    results.hovered = true
+  }
+
+  if .CLICKABLE in the_widget.flags {
+    if results.hovered && mouse_pressed(.LEFT) {
+      results.clicked = true
+    }
+  }
+
+  // FIXME: I have a feeling the way I am recalculating the text position is both not correct
+  // and unnecessary
 
   // Lots of stuff not configurable right now
+  text_height := text_draw_height(text, state.default_font)
   array_add(&ui.draws, UI_Draw {
     text = text,
-    text_pos = pos,
+    text_pos = vec2{abs_l + padding, abs_t + text_height},
     text_color = RED if results.hovered else WHITE,
     quad = {
-      top_left = {l, t},
+      top_left = abs,
       width    = w,
       height   = h,
     },
@@ -108,30 +160,25 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], pos: vec2,
   return the_widget, results
 }
 
-ui_widget_results :: proc(widget: UI_Widget) -> (results: UI_Results) {
-  // FIXME: Once add in parents need to traverse up parents to calc real rect position
-  ancestor := widget.parent
-  l: f32
-  t: f32
-  for ancestor != nil {
-    l += ancestor.rel_position.x
-    t += ancestor.rel_position.y
-  }
+ui_push_parent :: proc(widget: ^UI_Widget) {
+  ui.current_parent = widget
+}
 
-  l += widget.rel_position.x
-  t += widget.rel_position.y
-  b := t + widget.height
-  r := l + widget.width
+ui_pop_parent :: proc() {
+  ui.current_parent = nil
+}
 
-  if mouse_in_rect(l, t, b, r) {
-    results.hovered = true
-  }
 
-  if .CLICKABLE in widget.flags {
-    if results.hovered && mouse_pressed(.LEFT) {
-      results.clicked = true
-    }
-  }
+
+ui_panel :: proc(text: string) {
+
+}
+
+// Requires a parent
+ui_button :: proc(text: string) -> (results: UI_Results) {
+  assert(ui.current_parent != nil)
+
+  _, results = make_ui_widget({.DRAW_TEXT, .DRAW_BACKGROUND, .CLICKABLE}, {}, 0, 0, text)
 
   return results
 }
@@ -145,10 +192,4 @@ draw_ui :: proc() {
 
   array_clear(&ui.draws)
   array_clear(&ui.widgets)
-}
-
-ui_button :: proc(text: string, pos: vec2) -> (results: UI_Results) {
-  _, results = make_ui_widget({.DRAW_TEXT, .DRAW_BACKGROUND, .CLICKABLE}, pos, text)
-
-   return results
 }

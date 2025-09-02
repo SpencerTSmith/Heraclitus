@@ -25,6 +25,10 @@ Entity :: struct {
   point_light: ^Point_Light, // Optional
 }
 
+// TODO: Maybe these entity creations should just create entities into whatever data structure I decide on instead of creating a single
+// And then copying into data structure... this is fine for now while I don't know what data structure gonna go with... I mean probably pool
+// or fridge thing but...
+
 // NOTE: Automatically sets the aabb of the entity to match the AABB of the model
 make_entity :: proc(model: string,
                     flags: bit_set[Entity_Flags] = {.COLLISION, .RENDERABLE},
@@ -72,6 +76,20 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
   }
 
   return entity
+}
+
+duplicate_entity :: proc(entity: Entity) -> (duplicate: Entity) {
+  duplicate = entity
+
+  // Need to make a new point light, model handle is fine to be copied as that's already handled by asset system
+  if duplicate.point_light != nil {
+    pl_copy := duplicate.point_light^
+
+    append(&state.point_lights, pl_copy)
+    duplicate.point_light = &state.point_lights[len(state.point_lights) - 1]
+  }
+
+  return duplicate
 }
 
 entity_has_transparency :: proc(e: Entity) -> bool {

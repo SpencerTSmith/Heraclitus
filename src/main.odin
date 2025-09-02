@@ -370,7 +370,6 @@ main :: proc() {
 
     duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
     append(&state.entities, duck2)
-
   }
 
   // Clean up temp allocator from initialization... fresh for per-frame allocations
