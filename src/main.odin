@@ -326,7 +326,7 @@ main :: proc() {
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
-  pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
+  pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=false)
   append(&state.entities, pl)
 
   pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=false)

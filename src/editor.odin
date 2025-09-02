@@ -3,6 +3,7 @@ package main
 import "core:fmt"
 import "core:mem"
 import "core:math/rand"
+import "core:log"
 
 import "vendor:glfw"
 
@@ -137,10 +138,14 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   //
   // 3D Editor interactions
   //
-  x, y := mouse_position()
-  world_coord := unproject_screen_coord(x, y, get_camera_view(camera^), get_camera_perspective(camera^))
-
+  screen_x, screen_y := mouse_position()
+  world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera^), get_camera_perspective(camera^))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
+
+  // FIXME: This seems hacky
+  if ui_was_interacted {
+    editor.selected_gizmo = .NONE
+  }
 
   if !ui_was_interacted {
     // Pick entity or gizmo only if not doing ui
@@ -158,7 +163,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         hit_plane := make_plane(normal, editor.selected_entity.position)
         the_gizmo.hit_plane = hit_plane
 
-        _, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
+        intersect, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
+        assert(intersect)
         the_gizmo.anchor_plane_hit = hit_point
         the_gizmo.anchor_entity_pos = editor.selected_entity.position
       }
@@ -173,7 +179,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
     the_gizmo := editor.gizmos[editor.selected_gizmo]
 
-    _, _, hit_now := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
+    intersect, _, hit_now := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
+    assert(intersect)
 
     delta_plane := hit_now - the_gizmo.anchor_plane_hit
 
