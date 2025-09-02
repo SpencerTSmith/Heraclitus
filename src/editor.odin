@@ -18,8 +18,14 @@ Editor_Gizmo :: enum {
   YZ_PLANE,
 }
 
+// Could probably store a 'mask' of what directions this gizmo is allowed to move things in instead of the enum
 Editor_Gizmo_Info :: struct {
   hitbox: AABB,
+
+  // For manipulating entities
+  hit_plane:         Plane,
+  anchor_plane_hit:  vec3,
+  anchor_entity_pos: vec3,
 }
 
 Editor_State :: struct {
@@ -32,12 +38,7 @@ Editor_State :: struct {
 @(private="file")
 editor: Editor_State
 
-// TODO: Maybe these pick_* should just take in the unprojected point so don't have to recalc twice...
-pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity) {
-  world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera), get_camera_perspective(camera))
-
-  ray := make_ray(camera.position, world_coord - camera.position)
-
+pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity) {
   closest_t := F32_MAX
   for &e in state.entities {
     entity_aabb := entity_world_aabb(e)
@@ -53,11 +54,7 @@ pick_entity :: proc(screen_x, screen_y: f32, camera: Camera) -> (entity: ^Entity
   return entity
 }
 
-pick_gizmo :: proc(screen_x, screen_y: f32, camera: Camera) -> (gizmo: Editor_Gizmo) {
-  world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera), get_camera_perspective(camera))
-
-  ray := make_ray(camera.position, world_coord - camera.position)
-
+pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo) {
   gizmo = .NONE
 
   closest_t := F32_MAX
@@ -113,7 +110,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
   ui_was_interacted := false
 
-
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
 
   panel, _ := make_ui_widget({.DRAW_BACKGROUND}, panel_pos, 300, 100, "")
@@ -138,53 +134,76 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
+  //
+  // 3D Editor interactions
+  //
+  x, y := mouse_position()
+  world_coord := unproject_screen_coord(x, y, get_camera_view(camera^), get_camera_perspective(camera^))
+
+  mouse_ray := make_ray(camera.position, world_coord - camera.position)
 
   if !ui_was_interacted {
     // Pick entity or gizmo only if not doing ui
     if mouse_pressed(.LEFT) {
-      x, y := mouse_position()
 
-      // Preferentially pick gizmo first
-      editor.selected_gizmo  = pick_gizmo(x, y, camera^)
+      // If we can select a gizmo
+      if editor.selected_entity != nil {
+        // Preferentially pick gizmo first
+        editor.selected_gizmo  = pick_gizmo(mouse_ray, camera^)
+        the_gizmo := &editor.gizmos[editor.selected_gizmo]
 
+        // Plane should be orthogonal to camera
+        normal := -get_camera_forward(state.camera)
+
+        hit_plane := make_plane(normal, editor.selected_entity.position)
+        the_gizmo.hit_plane = hit_plane
+
+        _, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
+        the_gizmo.anchor_plane_hit = hit_point
+        the_gizmo.anchor_entity_pos = editor.selected_entity.position
+      }
+
+      // If we didn't select a gizmo
       if editor.selected_gizmo == .NONE {
-        editor.selected_entity = pick_entity(x, y, camera^)
+        editor.selected_entity = pick_entity(mouse_ray, camera^)
       }
     }
   }
 
-  // FIXME: While neat this method works, its not the best way to do it...
-  // Blender does a different thing with ray intersecting a plane on the axis and taking the delta
-  // Of the initial and current intersection points
   if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
-    prev_x, prev_y := mouse_position_prev()
-    curr_x, curr_y := mouse_position()
+    the_gizmo := editor.gizmos[editor.selected_gizmo]
 
-    prev_world := unproject_screen_coord(prev_x, prev_y, get_camera_view(camera^), get_camera_perspective(camera^))
+    _, _, hit_now := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
 
-    curr_world := unproject_screen_coord(curr_x, curr_y, get_camera_view(camera^), get_camera_perspective(camera^))
+    delta_plane := hit_now - the_gizmo.anchor_plane_hit
 
-    // FIXME: JAAAAAANNNNNNKK!
-    delta_world := (curr_world - prev_world) * 100.0
-    delta_world = normalize0(delta_world)
-
-    GIZMO_SENSITIVITY :: 0.2
+    basis_0, basis_1: vec3
     switch editor.selected_gizmo {
     case .NONE:
       assert(false, "What da")
     case .X_AXIS:
-      delta_in_axis := dot(delta_world, WORLD_RIGHT)
-      editor.selected_entity.position.x += delta_in_axis * GIZMO_SENSITIVITY
+      basis_0 = WORLD_RIGHT
     case .Y_AXIS:
-      delta_in_axis := dot(delta_world, WORLD_UP)
-      editor.selected_entity.position.y += delta_in_axis * GIZMO_SENSITIVITY
+      basis_0 = WORLD_UP
     case .Z_AXIS:
-      delta_in_axis := dot(delta_world, WORLD_FORWARD)
-      editor.selected_entity.position.z -= delta_in_axis * GIZMO_SENSITIVITY
+      basis_0 = -WORLD_FORWARD
     case .XY_PLANE:
+      basis_0 = WORLD_RIGHT
+      basis_1 = WORLD_UP
     case .XZ_PLANE:
+      basis_0 = WORLD_RIGHT
+      basis_1 = -WORLD_FORWARD
     case .YZ_PLANE:
+      basis_0 = WORLD_UP
+      basis_1 = -WORLD_FORWARD
     }
+
+    // Now project the move in the plane into the world
+    move_0 := dot(delta_plane, basis_0) * basis_0
+    move_1 := dot(delta_plane, basis_1) * basis_1
+    delta_in_world := move_0 + move_1
+
+    editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
   }
 
   if mouse_pressed(.RIGHT) {
@@ -227,7 +246,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       entity_aabb := entity_world_aabb(e)
       entity_center := aabb_center(entity_aabb)
 
-      create_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB) {
+      make_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB) {
         BOUNDING_RANGE :: 0.5
 
         // Since not all world directions in my coordinate space are in the positive direction
@@ -244,16 +263,43 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         return hitbox
       }
 
-      editor.gizmos[.X_AXIS].hitbox = create_axis_hitbox(0, entity_center)
-      editor.gizmos[.Y_AXIS].hitbox = create_axis_hitbox(1, entity_center)
-      editor.gizmos[.Z_AXIS].hitbox = create_axis_hitbox(2, entity_center)
+      make_plane_hitbox :: proc(position: vec3) -> (hitbox: AABB) {
+        BOUNDING_RANGE :: 0.5
+
+        hitbox = {
+          min = position - BOUNDING_RANGE,
+          max = position + BOUNDING_RANGE,
+        }
+
+        return hitbox
+      }
+
+      editor.gizmos[.X_AXIS].hitbox = make_axis_hitbox(0, entity_center)
+      editor.gizmos[.Y_AXIS].hitbox = make_axis_hitbox(1, entity_center)
+      editor.gizmos[.Z_AXIS].hitbox = make_axis_hitbox(2, entity_center)
+
+      xy_pos := entity_center
+      xy_pos.z = entity_aabb.max.z + 2.0
+      editor.gizmos[.XY_PLANE].hitbox = make_plane_hitbox(xy_pos)
+      // draw_aabb(editor.gizmos[.XY_PLANE].hitbox, RED)
+
+      xz_pos := entity_center
+      xz_pos.y = entity_aabb.min.y - 2.0
+      editor.gizmos[.XZ_PLANE].hitbox = make_plane_hitbox(xz_pos)
+      // draw_aabb(editor.gizmos[.XZ_PLANE].hitbox, GREEN)
+
+      yz_pos := entity_center
+      yz_pos.x = entity_aabb.min.x - 2.0
+      editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
+      // draw_aabb(editor.gizmos[.YZ_PLANE].hitbox, BLUE)
     }
   } else {
     // No active entity then clear out the gizmos
     editor.selected_gizmo = .NONE
-    editor.gizmos[.X_AXIS].hitbox = {}
-    editor.gizmos[.Y_AXIS].hitbox = {}
-    editor.gizmos[.Z_AXIS].hitbox = {}
+
+    for &giz in editor.gizmos {
+      giz = {}
+    }
   }
 
   FREECAM_SPEED :: 35.0
@@ -298,20 +344,16 @@ draw_editor_ui :: proc() {
     // Move planes
     //
     {
-
-      x_pos := center_aabb
-      x_pos.x = aabb.min.x - 2.0
-      immediate_quad(x_pos, WORLD_RIGHT, 1, 1, set_alpha(RED, OPACITY),
+      pos := aabb_center(editor.gizmos[.XY_PLANE].hitbox)
+      immediate_quad(pos, WORLD_FORWARD, 1, 1, set_alpha(RED, OPACITY),
                      depth_test = Depth_Test_Mode.ALWAYS)
 
-      y_pos := center_aabb
-      y_pos.y = aabb.min.y - 2.0
-      immediate_quad(y_pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY),
+      pos = aabb_center(editor.gizmos[.XZ_PLANE].hitbox)
+      immediate_quad(pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY),
                      depth_test = Depth_Test_Mode.ALWAYS)
 
-      z_pos := center_aabb + WORLD_FORWARD * (aabb.max.z + 2.0)
-      z_pos.z = aabb.max.z + 2.0
-      immediate_quad(z_pos, WORLD_FORWARD, 1, 1, set_alpha(BLUE, OPACITY),
+      pos = aabb_center(editor.gizmos[.YZ_PLANE].hitbox)
+      immediate_quad(pos, WORLD_RIGHT, 1, 1, set_alpha(BLUE, OPACITY),
                      depth_test = Depth_Test_Mode.ALWAYS)
     }
   }

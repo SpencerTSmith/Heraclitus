@@ -332,7 +332,7 @@ main :: proc() {
   pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=false)
   append(&state.entities, pl)
 
-  pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
+  pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=false)
   append(&state.entities, pl)
 
   // NOTE: Have to gen tangents for these and that takes too long
@@ -353,7 +353,7 @@ main :: proc() {
           position := vec3{sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z}
           color    := vec4{rand.float32() * 10.0, rand.float32() * 10.0, rand.float32() * 10.0, 1.0}
 
-          p := make_point_light_entity(position, color, 10, 1.0, cast_shadows=(x % 2 != 0))
+          p := make_point_light_entity(position, color, 10, 1.0, cast_shadows=false)
           append(&state.entities, p)
         }
       }

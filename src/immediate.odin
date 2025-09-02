@@ -446,6 +446,11 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
   immediate_begin_force()
 }
 
+immediate_plane :: proc(plane: Plane, color := WHITE) {
+  center := plane.normal * plane.d_origin
+  immediate_quad(center, plane.normal, 500, 500, color)
+}
+
 // NOTE: Can control if flushing world space immediates, screen space immediates, or both
 // This is used to draw any world space immediates in the main pass, allowing them to recive MSAA and to sample
 // the main scene's depth buffer if they wish

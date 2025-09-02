@@ -1,5 +1,7 @@
 package main
 
+import "core:log"
+
 // Hmm might go union route for this?
 // Physics_Hull :: union {
 //   AABB,
@@ -25,6 +27,11 @@ Ray :: struct {
   direction: vec3, // Normalized
 }
 
+Plane :: struct {
+  normal:   vec3,
+  d_origin: f32,
+}
+
 // Normalizes direction for you
 make_ray :: proc(origin: vec3, direction: vec3) -> (ray: Ray) {
   ray = {
@@ -33,6 +40,16 @@ make_ray :: proc(origin: vec3, direction: vec3) -> (ray: Ray) {
   }
 
   return ray
+}
+
+make_plane :: proc(normal, point: vec3) -> (plane: Plane) {
+  norm := normalize0(normal)
+  plane = {
+    normal   = norm,
+    d_origin = dot(norm, point),
+  }
+
+  return plane
 }
 
 // Useless? Eh just to make sure I don't make ez, stupid mistakes
@@ -81,6 +98,23 @@ ray_intersects_aabb :: proc(ray: Ray, box: AABB) -> (intersects: bool, t_min: f3
 
   point = ray.origin + ray.direction * t_min
   return true, t_min, point
+}
+
+// Plane = dot(plane.origin - position, normal) = 0
+// ray = R(t) = dir(t) + origin
+// dot(plane.origin - r(t), plane.normal)
+// dot(plane.origin - dir(t) + origin, plane_normal) = 0
+
+// From Real Time Collsion Detection
+ray_intersects_plane :: proc(ray: Ray, plane: Plane) -> (intersects: bool, t: f32, pos: vec3) {
+  t = (plane.d_origin - dot(plane.normal, ray.origin)) / dot(plane.normal, ray.direction)
+
+  if t >= 0.0 {
+    pos = ray.origin + t * ray.direction
+    intersects = true
+  }
+
+  return intersects, t, pos
 }
 
 draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE) {
