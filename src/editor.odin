@@ -115,8 +115,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   ui_was_interacted := false
 
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
-  panel, _ := make_ui_widget({}, panel_pos, 300, 100, "")
-  ui_push_parent(panel)
+  ui_push_parent(ui_panel(panel_pos, 300, 100))
   {
     defer ui_pop_parent()
 
@@ -296,24 +295,33 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         return hitbox
       }
 
+      OPACITY :: 0.9
+
       editor.gizmos[.X_AXIS].hitbox = make_axis_hitbox(0, entity_center)
       editor.gizmos[.Y_AXIS].hitbox = make_axis_hitbox(1, entity_center)
       editor.gizmos[.Z_AXIS].hitbox = make_axis_hitbox(2, entity_center)
+      draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
+                  set_alpha(RED, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+      draw_vector(entity_center, WORLD_UP * AXIS_GIZMO_LENGTH,
+                  set_alpha(GREEN, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+      draw_vector(entity_center, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
+                  set_alpha(BLUE, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
 
+      immediate_begin(.TRIANGLES, {}, .WORLD, .ALWAYS)
       xy_pos := entity_center
       xy_pos.z = entity_aabb.max.z + 2.0
       editor.gizmos[.XY_PLANE].hitbox = make_plane_hitbox(xy_pos)
-      // draw_aabb(editor.gizmos[.XY_PLANE].hitbox, RED)
+      immediate_quad(xy_pos, WORLD_FORWARD, 1, 1, set_alpha(RED, OPACITY))
 
       xz_pos := entity_center
       xz_pos.y = entity_aabb.min.y - 2.0
       editor.gizmos[.XZ_PLANE].hitbox = make_plane_hitbox(xz_pos)
-      // draw_aabb(editor.gizmos[.XZ_PLANE].hitbox, GREEN)
+      immediate_quad(xz_pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY))
 
       yz_pos := entity_center
       yz_pos.x = entity_aabb.min.x - 2.0
       editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
-      // draw_aabb(editor.gizmos[.YZ_PLANE].hitbox, BLUE)
+      immediate_quad(yz_pos, WORLD_RIGHT, 1, 1, set_alpha(BLUE, OPACITY))
     }
   } else {
     // No active entity then clear out the gizmos
@@ -338,48 +346,6 @@ draw_editor_gizmos :: proc() {
   y := f32(state.window.h) - f32(state.window.h) * 0.05
 
   draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 2.0, align=.CENTER, padding=10.0)
-
-  //
-  // Draw move widgets
-  //
-  if editor.selected_entity != nil {
-    e := editor.selected_entity^
-    aabb := entity_world_aabb(e)
-
-    center_aabb := (aabb.min + aabb.max) * 0.5
-
-    OPACITY :: 0.9
-
-    //
-    // Axes
-    //
-    {
-      draw_vector(center_aabb, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
-                  set_alpha(RED, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
-      draw_vector(center_aabb, WORLD_UP * AXIS_GIZMO_LENGTH,
-                  set_alpha(GREEN, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
-      draw_vector(center_aabb, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
-                  set_alpha(BLUE, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
-
-    }
-
-    //
-    // Move planes
-    //
-    {
-      pos := aabb_center(editor.gizmos[.XY_PLANE].hitbox)
-      immediate_quad(pos, WORLD_FORWARD, 1, 1, set_alpha(RED, OPACITY),
-                     depth_test = Depth_Test_Mode.ALWAYS)
-
-      pos = aabb_center(editor.gizmos[.XZ_PLANE].hitbox)
-      immediate_quad(pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY),
-                     depth_test = Depth_Test_Mode.ALWAYS)
-
-      pos = aabb_center(editor.gizmos[.YZ_PLANE].hitbox)
-      immediate_quad(pos, WORLD_RIGHT, 1, 1, set_alpha(BLUE, OPACITY),
-                     depth_test = Depth_Test_Mode.ALWAYS)
-    }
-  }
 }
 
 // Eh, should this go in editor? This is useful even when testing in game mode

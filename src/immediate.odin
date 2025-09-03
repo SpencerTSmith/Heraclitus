@@ -105,7 +105,7 @@ start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode = .LESS) {
+immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode) {
   if immediate.curr_batch == nil || // Should short circuit and not do any nil dereferences
      immediate.curr_batch.primitive != wish_primitive ||
      immediate.curr_batch.space     != wish_space     ||
@@ -162,12 +162,9 @@ immediate_quad :: proc {
 
 immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
                           top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
-                          texture:    Texture = immediate.white_texture,
-                          depth_test: Depth_Test_Mode = .ALWAYS) {
-  wish_primitive := Immediate_Primitive.TRIANGLES
-  wish_space     := Immediate_Space.SCREEN
+                          texture:    Texture = immediate.white_texture) {
 
-  immediate_begin(wish_primitive, texture, wish_space, depth_test)
+  immediate_begin(immediate.curr_batch.primitive, texture, immediate.curr_batch.space, immediate.curr_batch.depth)
 
   top_left := Immediate_Vertex{
     position = {top_left_position.x, top_left_position.y, -state.z_near},
@@ -201,12 +198,9 @@ immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHIT
 
 immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
                           uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
-                          texture:    Texture = immediate.white_texture,
-                          depth_test: Depth_Test_Mode = .LESS) {
-  wish_primitive := Immediate_Primitive.TRIANGLES
-  wish_space     := Immediate_Space.WORLD
-
-  immediate_begin(wish_primitive, texture, wish_space, depth_test)
+                          texture:    Texture = immediate.white_texture) {
+  // NOTE: Only switch texture, other batch parameters should be declared by user before calling
+  immediate_begin(immediate.curr_batch.primitive, texture, immediate.curr_batch.space, immediate.curr_batch.depth)
 
   norm := normalize(normal) // Just in case
   right, up := orthonormal_axes(norm)
@@ -244,6 +238,7 @@ immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
   immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
 }
 
+// TODO: These should not be immediate... should be draw_line
 immediate_line :: proc {
   immediate_line_2D,
   immediate_line_3D,

@@ -180,6 +180,8 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, alig
   x_cursor := x_start
   y_cursor := y
 
+  immediate_begin(.TRIANGLES, font.atlas, .SCREEN, .ALWAYS)
+
   for c in text {
     if c == '\n' {
       y_cursor += font.line_height
@@ -215,6 +217,8 @@ draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_colo
   t = t - padding
   w = w + padding * 2
   h = h + padding * 2
+
+  immediate_begin(.TRIANGLES, {}, .SCREEN, .ALWAYS)
 
   immediate_quad(vec2{l, t}, w, h, background_color)
   draw_text(text, font, x, y, text_color, align)

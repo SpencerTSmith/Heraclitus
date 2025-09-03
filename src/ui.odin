@@ -144,7 +144,7 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
   // FIXME: I have a feeling the way I am recalculating the text position is both not correct
   // and unnecessary
 
-  // Lots of stuff not configurable right now
+  // TODO: Lots of stuff not configurable right now
   text_height := text_draw_height(text, state.default_font)
   array_add(&ui.draws, UI_Draw {
     text = text,
@@ -169,10 +169,10 @@ ui_pop_parent :: proc() {
   ui.current_parent = nil
 }
 
+ui_panel :: proc(pos: vec2, width, height: f32) -> (panel: ^UI_Widget) {
+  panel, _ = make_ui_widget({}, pos, width, height, "")
 
-
-ui_panel :: proc(text: string) {
-
+  return panel
 }
 
 // Requires a parent
@@ -186,6 +186,8 @@ ui_button :: proc(text: string) -> (results: UI_Results) {
 
 // Flushes all UI draw records to the immediate rendering system
 draw_ui :: proc() {
+  immediate_begin(.TRIANGLES, {}, .SCREEN, .ALWAYS)
+
   for d in array_slice(&ui.draws) {
     immediate_quad(d.quad.top_left, d.quad.width, d.quad.height, d.quad_color)
     draw_text(d.text, state.default_font, d.text_pos.x, d.text_pos.y, d.text_color)
