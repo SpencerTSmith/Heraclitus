@@ -182,6 +182,15 @@ point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
   return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom
 }
 
+lerp_colors :: proc(t: f32, color_a, color_b: vec4) -> (lerped: vec4) {
+  // t := f32(cos(seconds_since_start() * 1.4))
+  t := t
+  t *= t
+  lerped = lerp(color_a, color_b, vec4{t, t, t, t})
+
+  return lerped
+}
+
 Window :: struct {
   handle:  glfw.WindowHandle,
   w, h:    int,

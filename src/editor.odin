@@ -40,6 +40,17 @@ Editor_State :: struct {
 @(private="file")
 editor: Editor_State
 
+@(private="file")
+GIZMO_COLORS :: [Editor_Gizmo]vec4 {
+  .NONE     = {0,0,0,0},
+  .X_AXIS   = RED,
+  .Y_AXIS   = GREEN,
+  .Z_AXIS   = BLUE,
+  .XY_PLANE = RED,
+  .XZ_PLANE = GREEN,
+  .YZ_PLANE = BLUE,
+}
+
 pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int) {
   closest_t := F32_MAX
   for &e, idx in state.entities {
@@ -300,28 +311,41 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       editor.gizmos[.X_AXIS].hitbox = make_axis_hitbox(0, entity_center)
       editor.gizmos[.Y_AXIS].hitbox = make_axis_hitbox(1, entity_center)
       editor.gizmos[.Z_AXIS].hitbox = make_axis_hitbox(2, entity_center)
+
+      // Copy of the original colors
+      current_colors := GIZMO_COLORS
+
+      // Set the current gizmo color to white
+      t := cast(f32)cos(seconds_since_start() * 4.0)
+      flashy_color := lerp_colors(t, current_colors[editor.selected_gizmo], set_alpha(WHITE, OPACITY))
+      current_colors[editor.selected_gizmo] = flashy_color
+
       draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
-                  set_alpha(RED, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+                  current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
+
       draw_vector(entity_center, WORLD_UP * AXIS_GIZMO_LENGTH,
-                  set_alpha(GREEN, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+                  current_colors[.Y_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
+
+      z_color := set_alpha(BLUE, OPACITY) if .Z_AXIS != editor.selected_gizmo else set_alpha(WHITE, OPACITY)
       draw_vector(entity_center, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
-                  set_alpha(BLUE, OPACITY), tip_bounds=0.25, depth_test = .ALWAYS)
+                  current_colors[.Z_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
 
       immediate_begin(.TRIANGLES, {}, .WORLD, .ALWAYS)
+
       xy_pos := entity_center
       xy_pos.z = entity_aabb.max.z + 2.0
       editor.gizmos[.XY_PLANE].hitbox = make_plane_hitbox(xy_pos)
-      immediate_quad(xy_pos, WORLD_FORWARD, 1, 1, set_alpha(RED, OPACITY))
+      immediate_quad(xy_pos, WORLD_FORWARD, 1, 1, current_colors[.XY_PLANE])
 
       xz_pos := entity_center
       xz_pos.y = entity_aabb.min.y - 2.0
       editor.gizmos[.XZ_PLANE].hitbox = make_plane_hitbox(xz_pos)
-      immediate_quad(xz_pos, WORLD_UP, 1, 1, set_alpha(GREEN, OPACITY))
+      immediate_quad(xz_pos, WORLD_UP, 1, 1, current_colors[.XZ_PLANE])
 
       yz_pos := entity_center
       yz_pos.x = entity_aabb.min.x - 2.0
       editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
-      immediate_quad(yz_pos, WORLD_RIGHT, 1, 1, set_alpha(BLUE, OPACITY))
+      immediate_quad(yz_pos, WORLD_RIGHT, 1, 1, current_colors[.YZ_PLANE])
     }
   } else {
     // No active entity then clear out the gizmos
