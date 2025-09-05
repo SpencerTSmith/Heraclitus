@@ -142,7 +142,7 @@ vec4_from_3 :: proc(vec: vec3, w: f32 = 1.0) -> vec4 {
 }
 
 // NOTE: Unprojects the the near plane
-// TODO: Maybe think about caching inverse if we are doing this operation a lot
+// TODO: Maybe think about caching ray inverses if we are doing this operation a lot
 unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (world_coord: vec3){
   screen_width  := cast (f32) state.window.w
   screen_height := cast (f32) state.window.h
@@ -183,7 +183,6 @@ point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
 }
 
 lerp_colors :: proc(t: f32, color_a, color_b: vec4) -> (lerped: vec4) {
-  // t := f32(cos(seconds_since_start() * 1.4))
   t := t
   t *= t
   lerped = lerp(color_a, color_b, vec4{t, t, t, t})

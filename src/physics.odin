@@ -1,7 +1,5 @@
 package main
 
-import "core:log"
-
 // Hmm might go union route for this?
 // Physics_Hull :: union {
 //   AABB,
@@ -332,6 +330,7 @@ orthonormal_axes :: proc(forward: vec3) -> (right, up: vec3) {
   return right, up
 }
 
+// TODO: Rewrite immediate line to take in a radius for line, will probably no longer have to have immediate line primitive... just a  line is ugly
 draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025, depth_test: Depth_Test_Mode = .LESS) {
   end := origin + direction
   immediate_line(origin, end, color, depth_test=depth_test)

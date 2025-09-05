@@ -40,15 +40,19 @@ Editor_State :: struct {
 @(private="file")
 editor: Editor_State
 
+EDITOR_GIZMO_OPACITY :: 0.9
+EDITOR_SELECTED_GIZMO_COLOR :: vec4{WHITE.r, WHITE.g, WHITE.b, EDITOR_GIZMO_OPACITY}
+
+// NOTE: UGLY!
 @(private="file")
 GIZMO_COLORS :: [Editor_Gizmo]vec4 {
   .NONE     = {0,0,0,0},
-  .X_AXIS   = RED,
-  .Y_AXIS   = GREEN,
-  .Z_AXIS   = BLUE,
-  .XY_PLANE = RED,
-  .XZ_PLANE = GREEN,
-  .YZ_PLANE = BLUE,
+  .X_AXIS   = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
+  .Y_AXIS   = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
+  .Z_AXIS   = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
+  .XY_PLANE = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
+  .XZ_PLANE = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
+  .YZ_PLANE = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
 }
 
 pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int) {
@@ -83,6 +87,12 @@ pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo) {
   }
 
   return gizmo
+}
+
+@(private="file")
+clear_editor_selected_entity :: proc() {
+  editor.selected_entity = nil
+  editor.selected_entity_idx = -1
 }
 
 do_editor :: proc(camera: ^Camera, dt_s: f64) {
@@ -131,7 +141,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     defer ui_pop_parent()
 
     if ui_button("Clear Entity").clicked {
-      editor.selected_entity = nil
+      clear_editor_selected_entity()
 
       // FIXME: This sucks
       ui_was_interacted = true
@@ -143,6 +153,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         dupe.position += (rand.float32() * 2.0) - 1.0
         append(&state.entities, dupe)
         // Should it auto select the copy?
+
+        log.infof("Copied entity at index %v", editor.selected_entity_idx)
       }
 
       // FIXME: This sucks
@@ -152,7 +164,9 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     if ui_button("Delete Entity").clicked {
       if editor.selected_entity != nil {
         unordered_remove(&state.entities, editor.selected_entity_idx)
-        editor.selected_entity = nil
+        clear_editor_selected_entity()
+
+        log.infof("Removed entity at index %v", editor.selected_entity_idx)
       }
 
       // FIXME: This sucks
@@ -189,7 +203,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         the_gizmo.hit_plane = hit_plane
 
         intersect, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
-        assert(intersect)
+        assert(intersect && t >= 0.0)
+
         the_gizmo.anchor_plane_hit = hit_point
         the_gizmo.anchor_entity_pos = editor.selected_entity.position
       }
@@ -239,7 +254,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   if mouse_pressed(.RIGHT) {
-    editor.selected_entity = nil
+    clear_editor_selected_entity()
   }
 
   // Manipulate picked entity
@@ -306,8 +321,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         return hitbox
       }
 
-      OPACITY :: 0.9
-
       editor.gizmos[.X_AXIS].hitbox = make_axis_hitbox(0, entity_center)
       editor.gizmos[.Y_AXIS].hitbox = make_axis_hitbox(1, entity_center)
       editor.gizmos[.Z_AXIS].hitbox = make_axis_hitbox(2, entity_center)
@@ -315,10 +328,10 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       // Copy of the original colors
       current_colors := GIZMO_COLORS
 
-      // Set the current gizmo color to white
+      // Flash the current gizmos color
       t := cast(f32)cos(seconds_since_start() * 4.0)
-      flashy_color := lerp_colors(t, current_colors[editor.selected_gizmo], set_alpha(WHITE, OPACITY))
-      current_colors[editor.selected_gizmo] = flashy_color
+      flashing_color := lerp_colors(t, current_colors[editor.selected_gizmo], EDITOR_SELECTED_GIZMO_COLOR)
+      current_colors[editor.selected_gizmo] = flashing_color
 
       draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
                   current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
@@ -326,7 +339,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       draw_vector(entity_center, WORLD_UP * AXIS_GIZMO_LENGTH,
                   current_colors[.Y_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
 
-      z_color := set_alpha(BLUE, OPACITY) if .Z_AXIS != editor.selected_gizmo else set_alpha(WHITE, OPACITY)
       draw_vector(entity_center, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
                   current_colors[.Z_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
 

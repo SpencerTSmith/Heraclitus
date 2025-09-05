@@ -1,4 +1,10 @@
-# Fix Soon:
+# Build and Run:
+Need Odin compiler, and that's it
+```bash
+odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
+```
+
+# To Do:
 - Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely nessecary...
     - Will simplify internals, and make it easier to add functionality without changing every single immediate call
 - UI layout system, draw call collection

@@ -87,8 +87,15 @@ POST_PASS :: Render_Pass {
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
-SHADOW_PASS :: Render_Pass {
+SUN_SHADOW_PASS :: Render_Pass {
   flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
+  depth_test = .LESS,
+  face_cull  = .FRONT,
+  blend      = .ALPHA_ONE_MINUS_ALPHA,
+}
+
+POINT_SHADOW_PASS :: Render_Pass {
+  flags      = {.USE_ALL_FRAMEBUFFER_VIEWPORT},
   depth_test = .LESS,
   face_cull  = .FRONT,
   blend      = .ALPHA_ONE_MINUS_ALPHA,

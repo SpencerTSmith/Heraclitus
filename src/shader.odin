@@ -123,9 +123,10 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
     gl.GetShaderInfoLog(u32(shader), 512, &length, &info[0])
     log.errorf("Error compiling shader:\n%s\n", string(info[:length]))
 
+    // Have line numbers on the error report so can trace compilation errors
     numbered_build := strings.builder_make_none(context.temp_allocator)
-    lines := strings.split_lines(with_include, context.temp_allocator)
-    for l, number in lines {
+    source_lines := strings.split_lines(with_include, context.temp_allocator)
+    for l, number in source_lines {
       fmt.sbprintln(&numbered_build, number, l)
     }
 

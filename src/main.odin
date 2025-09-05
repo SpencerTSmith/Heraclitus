@@ -326,7 +326,7 @@ main :: proc() {
   lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
   append(&state.entities, lantern)
 
-  pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=false)
+  pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
   append(&state.entities, pl)
 
   pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=false)
@@ -463,6 +463,7 @@ main :: proc() {
     //
     for e in state.entities {
       if e.point_light != nil {
+        e.point_light.prev_pos = e.point_light.position
         e.point_light.position = e.position
       }
     }
@@ -480,7 +481,7 @@ main :: proc() {
       // Shadow passes
       //
       if state.sun_on {
-        begin_render_pass(SHADOW_PASS, state.sun_depth_buffer)
+        begin_render_pass(SUN_SHADOW_PASS, state.sun_depth_buffer)
         {
           bind_shader(.SUN_DEPTH)
 
@@ -491,28 +492,39 @@ main :: proc() {
       }
 
       if state.point_lights_on {
-        begin_render_pass(SHADOW_PASS, state.point_depth_buffer)
+        begin_render_pass(POINT_SHADOW_PASS, state.point_depth_buffer)
         bind_shader(.POINT_DEPTH)
 
         idx := 0
         for l in state.point_lights {
-          // TODO: Maybe consider storing shadow and non shadow casting in a different structure
-          // even on CPU, already do that on gpu, but could avoid branch here too... probably not too bad though
           if l.cast_shadows {
-            set_shader_uniform("light_index", i32(idx))
 
-            // Cull models not in light's radius
-            light_sphere: Sphere = {
-              center = l.position,
-              radius = l.radius,
-            }
-            for e in state.entities {
-              if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
-                draw_entity(e, instances=6)
+            // We cache shadow maps and only recompute if point light has moved
+
+            // TODO:Robustness, if objects in the lights radius move, need to do recalc
+            if l.prev_pos != l.position {
+
+              // TODO: factor out direct gl call here
+              depth_clear: f32 = 1.0
+              gl.ClearTexSubImage(state.point_depth_buffer.depth_target.id, 0, 0, 0, i32(6 * idx),
+                512, 512, 6,
+                gl.DEPTH_COMPONENT, gl.FLOAT, &depth_clear)
+
+              set_shader_uniform("light_index", i32(idx))
+
+              // Cull models not in light's radius
+              light_sphere: Sphere = {
+                center = l.position,
+                radius = l.radius,
               }
-            }
+              for e in state.entities {
+                if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
+                  draw_entity(e, instances=6)
+                }
+              }
 
-            idx += 1
+              idx += 1
+            }
           }
         }
       }
@@ -572,6 +584,7 @@ main :: proc() {
             w: f32 = 1.0
             h: f32 = 1.0
             normal := normalize(l.position - state.camera.position) // Billboard it!
+            immediate_begin(.TRIANGLES, get_texture("point_light.png")^, .WORLD, .LESS)
             immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=get_texture("point_light.png")^)
           }
         }
