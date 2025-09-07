@@ -463,6 +463,7 @@ main :: proc() {
     //
     for e in state.entities {
       if e.point_light != nil {
+        log.infof("%v %v", e.point_light.prev_pos, e.point_light.position)
         e.point_light.prev_pos = e.point_light.position
         e.point_light.position = e.position
       }
@@ -498,10 +499,11 @@ main :: proc() {
         idx := 0
         for l in state.point_lights {
           if l.cast_shadows {
-
             // We cache shadow maps and only recompute if point light has moved
 
             // TODO:Robustness, if objects in the lights radius move, need to do recalc
+            log.infof("Here! %v %v", l.prev_pos, l.position)
+
             if l.prev_pos != l.position {
 
               // TODO: factor out direct gl call here
