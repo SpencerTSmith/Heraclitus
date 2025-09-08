@@ -7,7 +7,11 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 # To Do:
 - Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely nessecary...
     - Will simplify internals, and make it easier to add functionality without changing every single immediate call
-- UI layout system, draw call collection
+    - Complete for drawing quads
+- More sophisticated UI Layout system
+    - Will probably need to do caching and multiple passes
+    - Probably builder code should only add widgets to list, build the tree links, and perhaps do input
+        - If doing input then it will probably be based on the last frame's cached layout, if doing multiple passes that will probably require one frame of input lag
 - More AZDO:
     - Multi-draw indirect
         - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
@@ -29,7 +33,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
     - Will only load assets once, keeps hashes of file paths to check
     - Handle system, no hashing needed once the asset is loaded to retrieve it
 - Cool GLSL metaprogramming
-    - Generate GLSL code that needs to match up with host code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
+    - Generates GLSL code that needs to match up with host code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
 - AABB basic collision detection and response
 - Quake-like player-movement (Bunny-hopping, wall-running, strafe-jumping)
 - AZDO OpenGL techniques:

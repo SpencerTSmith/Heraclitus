@@ -170,7 +170,7 @@ init_state :: proc() -> (ok: bool) {
   // Make the meta shader
   gen_glsl_code()
 
-  state.perm_mem = make([]byte, mem.Megabyte * 4)
+  state.perm_mem = make([]byte, mem.Megabyte * 1)
   mem.arena_init(&state.perm, state.perm_mem)
   state.perm_alloc = mem.arena_allocator(&state.perm)
 
@@ -188,7 +188,8 @@ init_state :: proc() -> (ok: bool) {
   reserve(&state.entities, MAX_ENTITY_COUNT)
 
   state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
-  reserve(&state.point_lights, MAX_SHADOW_POINT_LIGHTS * 2)
+  reserve(&state.point_lights, MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS)
+  state.point_lights_on = true
 
   state.running = true
 
@@ -463,8 +464,12 @@ main :: proc() {
     //
     for e in state.entities {
       if e.point_light != nil {
-        log.infof("%v %v", e.point_light.prev_pos, e.point_light.position)
-        e.point_light.prev_pos = e.point_light.position
+
+        // Check if the point light has moved
+        if e.point_light.position != e.position {
+          e.point_light.dirty_shadow = true
+        }
+
         e.point_light.position = e.position
       }
     }
@@ -497,14 +502,12 @@ main :: proc() {
         bind_shader(.POINT_DEPTH)
 
         idx := 0
-        for l in state.point_lights {
+        for &l in state.point_lights {
           if l.cast_shadows {
             // We cache shadow maps and only recompute if point light has moved
 
-            // TODO:Robustness, if objects in the lights radius move, need to do recalc
-            log.infof("Here! %v %v", l.prev_pos, l.position)
-
-            if l.prev_pos != l.position {
+            // TODO if objects in the lights radius move, need to do recalc
+            if l.dirty_shadow {
 
               // TODO: factor out direct gl call here
               depth_clear: f32 = 1.0
@@ -524,6 +527,9 @@ main :: proc() {
                   draw_entity(e, instances=6)
                 }
               }
+
+              // Ok we are good, we can set this to false now that we have redone the shadow map
+              l.dirty_shadow = false
 
               idx += 1
             }

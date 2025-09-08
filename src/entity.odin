@@ -66,6 +66,7 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
     intensity = 0.7,
     radius    = radius,
     cast_shadows = cast_shadows,
+    dirty_shadow = true,
   })
 
   entity := Entity {

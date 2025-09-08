@@ -13,7 +13,7 @@ Point_Light :: struct {
   ambient:     f32,
 
   cast_shadows: bool,
-  prev_pos:     vec3, // For caching shadow maps
+  dirty_shadow: bool, // For caching shadow maps
 }
 
 Direction_Light :: struct {

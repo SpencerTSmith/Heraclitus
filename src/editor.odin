@@ -253,6 +253,10 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
   }
 
+  if mouse_released(.LEFT) {
+    editor.selected_gizmo = .NONE
+  }
+
   if mouse_pressed(.RIGHT) {
     clear_editor_selected_entity()
   }
@@ -328,10 +332,17 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       // Copy of the original colors
       current_colors := GIZMO_COLORS
 
-      // Flash the current gizmos color
-      t := cast(f32)cos(seconds_since_start() * 4.0)
-      flashing_color := lerp_colors(t, current_colors[editor.selected_gizmo], EDITOR_SELECTED_GIZMO_COLOR)
-      current_colors[editor.selected_gizmo] = flashing_color
+
+      // Quickly flash the currently selected gizmos color
+      if editor.selected_gizmo != .NONE {
+        t := cast(f32)cos(seconds_since_start() * 8.0)
+        flashing_color := lerp_colors(t, current_colors[editor.selected_gizmo], EDITOR_SELECTED_GIZMO_COLOR)
+        current_colors[editor.selected_gizmo] = flashing_color
+      } else {
+        // Brighten the currently hovered gizmos color if we aren't already selecting one
+        hovered_gizmo := pick_gizmo(mouse_ray, camera^)
+        current_colors[hovered_gizmo].rgb *= 2.0
+      }
 
       draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
                   current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
