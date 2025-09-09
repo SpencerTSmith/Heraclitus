@@ -251,8 +251,15 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     delta_in_world := move_0 + move_1
 
     editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
+    move_direction := editor.selected_entity.position - the_gizmo.anchor_entity_pos
+    move_component_0 := move_direction * basis_0
+    move_component_1 := move_direction * basis_1
+    draw_vector(the_gizmo.anchor_entity_pos, move_direction)
+    draw_vector(the_gizmo.anchor_entity_pos, move_component_0)
+    draw_vector(the_gizmo.anchor_entity_pos + move_component_0, move_component_1)
   }
 
+  // Unselect gizmo when not held down
   if mouse_released(.LEFT) {
     editor.selected_gizmo = .NONE
   }
@@ -344,6 +351,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         current_colors[hovered_gizmo].rgb *= 2.0
       }
 
+      // TODO: Sort draw calls so  that closest to camera gizmos draw first
       draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
                   current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
 
@@ -385,7 +393,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   camera.on_ground = false
 }
 
-// These can maybe just be draw directly after we make them instad of having this function
+// TODO: Remove, consolidate into do_editor or more likely as a ui widget
 draw_editor_gizmos :: proc() {
   entity_text := fmt.tprintf("%v", editor.selected_entity^)
 
