@@ -161,6 +161,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       ui_was_interacted = true
     }
 
+    // TODO: Probably just work on pool strucuture... needs to be done at some point at there are bugs when removing entities right now
+    // specifically when that entity has an attached point light, does not get removed.
     if ui_button("Delete Entity").clicked {
       if editor.selected_entity != nil {
         unordered_remove(&state.entities, editor.selected_entity_idx)
@@ -251,12 +253,14 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     delta_in_world := move_0 + move_1
 
     editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
+
+    // Visualize the movement
     move_direction := editor.selected_entity.position - the_gizmo.anchor_entity_pos
     move_component_0 := move_direction * basis_0
     move_component_1 := move_direction * basis_1
-    draw_vector(the_gizmo.anchor_entity_pos, move_direction)
-    draw_vector(the_gizmo.anchor_entity_pos, move_component_0)
-    draw_vector(the_gizmo.anchor_entity_pos + move_component_0, move_component_1)
+    draw_vector(the_gizmo.anchor_entity_pos, move_direction, YELLOW)
+    draw_vector(the_gizmo.anchor_entity_pos, move_component_0, YELLOW)
+    draw_vector(the_gizmo.anchor_entity_pos + move_component_0, move_component_1, YELLOW)
   }
 
   // Unselect gizmo when not held down
@@ -338,7 +342,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
       // Copy of the original colors
       current_colors := GIZMO_COLORS
-
 
       // Quickly flash the currently selected gizmos color
       if editor.selected_gizmo != .NONE {
