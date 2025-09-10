@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:mem"
 import "core:math/rand"
 import "core:log"
+import "core:slice"
 
 import "vendor:glfw"
 
@@ -340,6 +341,18 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       editor.gizmos[.Y_AXIS].hitbox = make_axis_hitbox(1, entity_center)
       editor.gizmos[.Z_AXIS].hitbox = make_axis_hitbox(2, entity_center)
 
+      xy_pos := entity_center
+      xy_pos.z = entity_aabb.max.z + 2.0
+      editor.gizmos[.XY_PLANE].hitbox = make_plane_hitbox(xy_pos)
+
+      xz_pos := entity_center
+      xz_pos.y = entity_aabb.min.y - 2.0
+      editor.gizmos[.XZ_PLANE].hitbox = make_plane_hitbox(xz_pos)
+
+      yz_pos := entity_center
+      yz_pos.x = entity_aabb.min.x - 2.0
+      editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
+
       // Copy of the original colors
       current_colors := GIZMO_COLORS
 
@@ -354,32 +367,40 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         current_colors[hovered_gizmo].rgb *= 2.0
       }
 
-      // TODO: Sort draw calls so  that closest to camera gizmos draw first
+      // TODO: Sort draw calls so  that closest to camera gizmos draw last
       draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
-                  current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
-
+        current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
       draw_vector(entity_center, WORLD_UP * AXIS_GIZMO_LENGTH,
-                  current_colors[.Y_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
-
+        current_colors[.Y_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
       draw_vector(entity_center, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
-                  current_colors[.Z_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
+        current_colors[.Z_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
 
-      immediate_begin(.TRIANGLES, {}, .WORLD, .ALWAYS)
 
-      xy_pos := entity_center
-      xy_pos.z = entity_aabb.max.z + 2.0
-      editor.gizmos[.XY_PLANE].hitbox = make_plane_hitbox(xy_pos)
-      immediate_quad(xy_pos, WORLD_FORWARD, 1, 1, current_colors[.XY_PLANE])
 
-      xz_pos := entity_center
-      xz_pos.y = entity_aabb.min.y - 2.0
-      editor.gizmos[.XZ_PLANE].hitbox = make_plane_hitbox(xz_pos)
-      immediate_quad(xz_pos, WORLD_UP, 1, 1, current_colors[.XZ_PLANE])
+      // FIXME: The gizmos should store more info about themselves so don't have to hardcode it terribly
+      {
+        Plane_Info :: struct {
+          position: vec3,
+          normal:   vec3,
+          color:    vec4,
+        }
+        sort_info := []Plane_Info {
+          {xy_pos, WORLD_FORWARD, current_colors[.XY_PLANE]},
+          {xz_pos, WORLD_UP,      current_colors[.XZ_PLANE]},
+          {yz_pos, WORLD_RIGHT,   current_colors[.YZ_PLANE]},
+        }
 
-      yz_pos := entity_center
-      yz_pos.x = entity_aabb.min.x - 2.0
-      editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
-      immediate_quad(yz_pos, WORLD_RIGHT, 1, 1, current_colors[.YZ_PLANE])
+        slice.sort_by(sort_info, proc(a, b: Plane_Info) -> bool {
+          da := squared_distance(a.position, state.camera.position)
+          db := squared_distance(b.position, state.camera.position)
+          return da > db
+        })
+
+        immediate_begin(.TRIANGLES, {}, .WORLD, .ALWAYS)
+        for p in sort_info {
+          immediate_quad(p.position, p.normal, 1, 1, p.color)
+        }
+      }
     }
   } else {
     // No active entity then clear out the gizmos

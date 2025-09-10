@@ -330,10 +330,10 @@ main :: proc() {
   pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
   append(&state.entities, pl)
 
-  pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=false)
+  pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=true)
   append(&state.entities, pl)
 
-  pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=false)
+  pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
   append(&state.entities, pl)
 
   // NOTE: Have to gen tangents for these and that takes too long
