@@ -12,6 +12,7 @@ Point_Light :: struct {
   intensity:   f32,
   ambient:     f32,
 
+  // TODO: Maybe flags
   cast_shadows: bool,
   dirty_shadow: bool, // For caching shadow maps
 }

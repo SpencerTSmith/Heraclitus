@@ -46,7 +46,7 @@ EDITOR_SELECTED_GIZMO_COLOR :: vec4{WHITE.r, WHITE.g, WHITE.b, EDITOR_GIZMO_OPAC
 
 // NOTE: UGLY!
 @(private="file")
-GIZMO_COLORS :: [Editor_Gizmo]vec4 {
+DEFAULT_GIZMO_COLORS :: [Editor_Gizmo]vec4 {
   .NONE     = {0,0,0,0},
   .X_AXIS   = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
   .Y_AXIS   = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
@@ -183,11 +183,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   screen_x, screen_y := mouse_position()
   world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera^), get_camera_perspective(camera^))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
-
-  // FIXME: This seems hacky
-  if ui_was_interacted {
-    editor.selected_gizmo = .NONE
-  }
 
   if !ui_was_interacted {
     // Pick entity or gizmo only if not doing ui
@@ -354,7 +349,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
 
       // Copy of the original colors
-      current_colors := GIZMO_COLORS
+      current_colors := DEFAULT_GIZMO_COLORS
 
       // Quickly flash the currently selected gizmos color
       if editor.selected_gizmo != .NONE {
@@ -374,8 +369,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         current_colors[.Y_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
       draw_vector(entity_center, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
         current_colors[.Z_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
-
-
 
       // FIXME: The gizmos should store more info about themselves so don't have to hardcode it terribly
       {

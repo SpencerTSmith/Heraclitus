@@ -30,6 +30,11 @@ Plane :: struct {
   d_origin: f32,
 }
 
+Vector :: struct {
+  origin:    vec3,
+  direction: vec3, // Not necessarily normalized
+}
+
 // Normalizes direction for you
 make_ray :: proc(origin: vec3, direction: vec3) -> (ray: Ray) {
   ray = {
