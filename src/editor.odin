@@ -214,6 +214,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     }
   }
 
+  // Move with the gizmo
   if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
     the_gizmo := editor.gizmos[editor.selected_gizmo]
 
@@ -359,7 +360,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       } else {
         // Brighten the currently hovered gizmos color if we aren't already selecting one
         hovered_gizmo := pick_gizmo(mouse_ray, camera^)
-        current_colors[hovered_gizmo].rgb *= 2.0
+        current_colors[hovered_gizmo].rgb *= 3.0
       }
 
       // TODO: Sort draw calls so  that closest to camera gizmos draw last

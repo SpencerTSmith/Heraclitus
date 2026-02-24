@@ -5,7 +5,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 ```
 
 # To Do:
-- Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely nessecary...
+- Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely necessary...
     - Will simplify internals, and make it easier to add functionality without changing every single immediate call
     - Complete for drawing quads
 - More sophisticated UI Layout system
@@ -16,6 +16,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
     - Multi-draw indirect
         - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
     - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
+    - Vertex pulling
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
 - Switch fully to PBR lighting model
 - Editor
@@ -26,6 +27,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
     - Need to have a fence before we begin drawing to actually upload gpu data, as that can only be done from the thread with the gl context
         - But there is still work that can be done in parallel that actually takes a bit of time, namely computing tangents for models that don't have them
         - Could also look into mapped staging buffers... need pbo for textures, but vertex geometry should be very simple... write into the mapped buffer from threads and issue the copy to gpu memory from main thread at the beginning of frame...
+- Audio in general
 
 # Complete:
 - Shader hot-reloading

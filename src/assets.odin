@@ -2,6 +2,7 @@ package main
 
 import "core:path/filepath"
 import "core:log"
+import "core:strings"
 
 DATA_DIR    :: "data" + PATH_SLASH
 MODEL_DIR   :: DATA_DIR + "models"   + PATH_SLASH
@@ -81,11 +82,15 @@ free_assets :: proc() {
 }
 
 load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) {
-  path := filepath.join({MODEL_DIR, name}, state.perm_alloc)
+  // Start by keeping the string on temp
+  path := filepath.join({MODEL_DIR, name}, context.temp_allocator)
 
   // Already loaded
   if path in assets.model_catalog.path_map {
     return assets.model_catalog.path_map[path], true
+  } else {
+    // Save the path for checking later, but only the first time.
+    path = strings.clone(path, state.perm_alloc)
   }
 
   // NOTE: For now individual assets are always allocated on permanent arena
@@ -110,11 +115,14 @@ get_model :: proc(handle: Model_Handle) -> ^Model {
 
 load_texture :: proc(name: string, nonlinear_color: bool = false,
                      in_texture_dir: bool = true) -> (handle: Texture_Handle, ok: bool) {
-  path := filepath.join({TEXTURE_DIR, name}, state.perm_alloc) if in_texture_dir else name
+  path := filepath.join({TEXTURE_DIR, name}, context.temp_allocator) if in_texture_dir else name
 
   // Already loaded
   if path in assets.texture_catalog.path_map {
     return assets.texture_catalog.path_map[path], true
+  } else {
+    // Save the path for checking later, but only the first time.
+    path = strings.clone(path, state.perm_alloc)
   }
 
   texture: Texture
@@ -147,8 +155,7 @@ get_texture_by_name :: proc(name: string) -> (texture: ^Texture) {
 
   // Already loaded
   if path in assets.texture_catalog.path_map {
-    texture = get_texture(assets.texture_catalog.path_map[path])
-
+    texture = get_texture_by_handle(assets.texture_catalog.path_map[path])
   } else {
     log.infof("Loading Texture %v", name)
     // Load it if not already
