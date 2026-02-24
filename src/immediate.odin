@@ -66,7 +66,8 @@ init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
 
   shader := make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc) or_return
 
-  immediate = {
+  immediate =
+  {
     vertex_buffer = vertex_buffer,
     vertex_count  = 0,
     shader  = shader,

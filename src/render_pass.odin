@@ -97,7 +97,7 @@ SUN_SHADOW_PASS :: Render_Pass {
 POINT_SHADOW_PASS :: Render_Pass {
   flags      = {.USE_ALL_FRAMEBUFFER_VIEWPORT},
   depth_test = .LESS,
-  face_cull  = .FRONT,
+  face_cull  = .DISABLED,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 

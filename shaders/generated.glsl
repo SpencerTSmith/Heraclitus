@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 25-09-2025 (05:11:44 pm)
+// NOTE: This code was generated on 24-02-2026 (02:01:37 am)
 
 #extension GL_ARB_bindless_texture : require
 

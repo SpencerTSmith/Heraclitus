@@ -104,7 +104,7 @@ make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count:
 
   total_size := vertex_length_align + index_length_align
 
-  buffer = make_gpu_buffer(.VERTEX, total_size, vertex_data, persistent)
+  buffer = make_gpu_buffer(.VERTEX, total_size, nil, persistent)
 
   buffer.vao = u32(vao)
 

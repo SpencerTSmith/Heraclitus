@@ -291,9 +291,11 @@ main :: proc() {
           log.errorf("- %v bytes @ %v\n", entry.size, entry.location)
         }
       }
-      if len(track.bad_free_array) > 0 {
+      if len(track.bad_free_array) > 0
+      {
         log.errorf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
-        for entry in track.bad_free_array {
+        for entry in track.bad_free_array
+        {
           log.errorf("- %p @ %v\n", entry.memory, entry.location)
         }
       }
@@ -561,7 +563,8 @@ main :: proc() {
               continue
           }
 
-          // We're good we can just draw opqque entities
+          gl.Disable(gl.CULL_FACE)
+          // We're good we can just draw opaque entities
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
 
