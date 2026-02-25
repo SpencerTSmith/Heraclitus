@@ -427,6 +427,7 @@ draw_debug_stats :: proc() {
 `FPS: %0.4v
 Frametime: %0.4v ms
 Mesh Draw Calls: %v
+Vertices: %v
 Perm Arena: %v KB
 Entities: %v
 Mode: %v
@@ -443,6 +444,7 @@ Point Lights: %v`,
   state.fps,
   (1.0 / state.fps) * 1000,
   state.mesh_draw_calls,
+  state.vertex_count,
   state.perm.offset / mem.Kilobyte,
   len(state.entities),
   state.mode,

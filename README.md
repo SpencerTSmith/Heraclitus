@@ -14,8 +14,6 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
         - If doing input then it will probably be based on the last frame's cached layout, if doing multiple passes that will probably require one frame of input lag
 - More AZDO:
     - Multi-draw indirect
-        - Try with just doing so for models with multiple mesh primitives... looks simple to do before doing next step
-    - Put all normal geometry into one vertex buffer, both for locality reasons and to allow for big multi-draw-indirect
     - Vertex pulling
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
 - Switch fully to PBR lighting model

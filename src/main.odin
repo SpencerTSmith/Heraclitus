@@ -72,8 +72,8 @@ State :: struct {
   texture_handles_count: int,
 
   vertex_buffer: GPU_Buffer,
-  vertex_count: i32,
-  index_count:  i32,
+  vertex_count:  int,
+  index_count:   int,
 
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
@@ -90,21 +90,35 @@ State :: struct {
   bloom_on: bool,
 }
 
+
+MAX_VERTICES :: 4  * mem.Megabyte
+MAX_INDICES  :: 16 * mem.Megabyte
+
 // NOTE: Global
 state: State
 
 push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
 {
-  vertex_offset = state.vertex_count
-  vertex_byte_offset: int = size_of(Mesh_Vertex) * cast(int) state.vertex_count
-  write_gpu_buffer(state.vertex_buffer,
-    vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
-  state.vertex_count += cast(i32) len(vertices)
+  if state.vertex_count + len(vertices) < MAX_VERTICES &&
+     state.index_count + len(indices)   < MAX_INDICES
+  {
+    vertex_offset = cast(i32) state.vertex_count
 
-  index_offset = state.index_count
-  index_byte_offset: int = state.vertex_buffer.index_offset + size_of(Mesh_Index) * cast(int) state.index_count
-  write_gpu_buffer(state.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
-  state.index_count += cast(i32) len(indices)
+    vertex_byte_offset := size_of(Mesh_Vertex) * state.vertex_count
+    write_gpu_buffer(state.vertex_buffer,
+      vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
+
+    state.vertex_count += len(vertices)
+
+    index_offset = cast(i32) state.index_count
+    index_byte_offset := state.vertex_buffer.index_offset + size_of(Mesh_Index) * state.index_count
+    write_gpu_buffer(state.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
+    state.index_count += len(indices)
+  }
+  else
+  {
+    log.errorf("Cannot push any more vertices to mega buffer");
+  }
 
   return vertex_offset, index_offset
 }
@@ -281,7 +295,7 @@ init_state :: proc() -> (ok: bool) {
 
   gl.CreateVertexArrays(1, &state.empty_vao)
 
-  state.vertex_buffer = make_vertex_buffer(Mesh_Vertex, 4 * mem.Megabyte, 16 * mem.Megabyte)
+  state.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
 
   init_assets(state.perm_alloc) or_return
 

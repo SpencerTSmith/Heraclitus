@@ -55,7 +55,7 @@ make_model :: proc{
 make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
   materials: []Material, meshes: []Mesh,
   allocator := context.allocator) -> (model: Model, ok: bool) {
-  vertex_offset, index_offset := push_vertices(vertices, indices)
+  vertex_offset, index_offset := allocate_model(vertices, indices)
 
   //
   // Compute AABB
@@ -463,7 +463,6 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
 
     state.mesh_draw_calls += 1
   }
-
 }
 
 model_has_transparency :: proc(model: Model) -> bool {
