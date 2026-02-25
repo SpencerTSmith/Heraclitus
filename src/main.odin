@@ -100,8 +100,7 @@ state: State
 push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
 {
   if state.vertex_count + len(vertices) < MAX_VERTICES &&
-     state.index_count + len(indices)   < MAX_INDICES
-  {
+     state.index_count + len(indices)   < MAX_INDICES {
     vertex_offset = cast(i32) state.vertex_count
 
     vertex_byte_offset := size_of(Mesh_Vertex) * state.vertex_count
@@ -114,19 +113,19 @@ push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex
     index_byte_offset := state.vertex_buffer.index_offset + size_of(Mesh_Index) * state.index_count
     write_gpu_buffer(state.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
     state.index_count += len(indices)
-  }
-  else
-  {
+  } else {
     log.errorf("Cannot push any more vertices to mega buffer");
   }
 
   return vertex_offset, index_offset
 }
 
-init_state :: proc() -> (ok: bool) {
+init_state :: proc() -> (ok: bool)
+{
   state.start_time = time.now()
 
-  if glfw.Init() != glfw.TRUE {
+  if glfw.Init() != glfw.TRUE
+  {
     log.fatal("Failed to initialize GLFW")
     return
   }
@@ -140,7 +139,8 @@ init_state :: proc() -> (ok: bool) {
   glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
 
   state.window.handle = glfw.CreateWindow(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H, WINDOW_DEFAULT_TITLE, nil, nil)
-  if state.window.handle == nil {
+  if state.window.handle == nil
+  {
     log.fatal("Failed to create GLFW window")
     return
   }
