@@ -71,6 +71,10 @@ State :: struct {
   texture_handles:       GPU_Buffer,
   texture_handles_count: int,
 
+  vertex_buffer: GPU_Buffer,
+  vertex_count: i32,
+  index_count:  i32,
+
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
   bound_textures:   [16]Texture,
@@ -88,6 +92,22 @@ State :: struct {
 
 // NOTE: Global
 state: State
+
+push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
+{
+  vertex_offset = state.vertex_count
+  vertex_byte_offset: int = size_of(Mesh_Vertex) * cast(int) state.vertex_count
+  write_gpu_buffer(state.vertex_buffer,
+    vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
+  state.vertex_count += cast(i32) len(vertices)
+
+  index_offset = state.index_count
+  index_byte_offset: int = state.vertex_buffer.index_offset + size_of(Mesh_Index) * cast(int) state.index_count
+  write_gpu_buffer(state.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
+  state.index_count += cast(i32) len(indices)
+
+  return vertex_offset, index_offset
+}
 
 init_state :: proc() -> (ok: bool) {
   state.start_time = time.now()
@@ -260,6 +280,8 @@ init_state :: proc() -> (ok: bool) {
   state.skybox = make_skybox(cube_map_sides) or_return
 
   gl.CreateVertexArrays(1, &state.empty_vao)
+
+  state.vertex_buffer = make_vertex_buffer(Mesh_Vertex, 4 * mem.Megabyte, 16 * mem.Megabyte)
 
   init_assets(state.perm_alloc) or_return
 

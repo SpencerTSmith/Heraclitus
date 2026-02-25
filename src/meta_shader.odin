@@ -114,7 +114,7 @@ gen_glsl_code :: proc() {
   // Parse and append uniform structs
   //
 
-  // FIXME: Make sure that if we encounter a structure it has already been parsed
+  // FIXME: Make sure that if we encounter a structure member, that that structure definition has already been parsed
   // Also just other more rigorous things as described in later comments
   to_glsl_struct :: proc(b: ^strings.Builder, t: typeid) {
     assert(reflect.is_struct(type_info_of(t)))
@@ -166,6 +166,7 @@ gen_glsl_code :: proc() {
   to_glsl_struct(&b, Shadow_Point_Light_Uniform)
   to_glsl_struct(&b, Point_Light_Uniform)
   to_glsl_struct(&b, Frame_Uniform)
+  to_glsl_struct(&b, Mesh_Vertex)
 
   //
   // Generate buffer bindings

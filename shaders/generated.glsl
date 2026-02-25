@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 24-02-2026 (04:41:34 am)
+// NOTE: This code was generated on 25-02-2026 (04:02:14 am)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -53,6 +53,13 @@ struct Frame_Uniform {
   int points_count;
   Direction_Light_Uniform sun_light;
   Spot_Light_Uniform flash_light;
+};
+
+struct Mesh_Vertex {
+  float position[3];
+  float uv[2];
+  float normal[3];
+  vec4 tangent;
 };
 
 #define FRAME_BINDING 0

@@ -32,14 +32,11 @@ Mesh :: struct {
   aabb: AABB, // For each mesh... might do something diff... we will seeeeeee
 }
 
-// NOTE: A model is composed of ONE vertex buffer containing both vertices and indices, vertices first, then indices
-// at the right alignment, with "sub" meshes (conceptually like gltf primitives) that share the same material
-
-// HACK: Might be better to just have a static array with a max number of meshes and materials
 Model :: struct {
-  buffer:       GPU_Buffer,
-  vertex_count: i32,
-  index_count:  i32,
+  vertex_offset: i32,
+  index_offset:  i32,
+  vertex_count:  i32,
+  index_count:   i32,
 
   // Triangle meshes, provide a view into a range of the overall buffer
   meshes:    []Mesh,
@@ -55,8 +52,10 @@ make_model :: proc{
 }
 
 // Takes in all vertices and all indices.. then a slice of the materials and a slice of the meshes
-make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, materials: []Material, meshes: []Mesh, allocator := context.allocator) -> (model: Model, ok: bool) {
-  buffer := make_vertex_buffer(Mesh_Vertex, len(vertices), len(indices), raw_data(vertices), raw_data(indices))
+make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
+  materials: []Material, meshes: []Mesh,
+  allocator := context.allocator) -> (model: Model, ok: bool) {
+  vertex_offset, index_offset := push_vertices(vertices, indices)
 
   //
   // Compute AABB
@@ -78,7 +77,8 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index, mat
 
   ok = true
   model = Model {
-    buffer       = buffer,
+    vertex_offset = vertex_offset,
+    index_offset = index_offset,
     vertex_count = i32(len(vertices)),
     index_count  = i32(len(indices)),
 
@@ -442,20 +442,23 @@ make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model
 draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
   assert(state.current_shader.id != 0)
 
-  bind_vertex_buffer(model.buffer)
-  defer unbind_vertex_buffer()
+  bind_vertex_buffer(state.vertex_buffer)
 
   set_shader_uniform("mul_color", mul_color)
 
   for mesh in model.meshes {
     set_material(model.materials[mesh.material_index])
 
-    true_offset := i32(model.buffer.index_offset) + (mesh.index_offset * size_of(Mesh_Index))
+    true_offset := uintptr(cast(i32)state.vertex_buffer.index_offset + (model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
 
     if instances > 1 {
-      gl.DrawElementsInstanced(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT, rawptr(uintptr(true_offset)), i32(instances))
+      // That's a mouthful.
+      gl.DrawElementsInstancedBaseVertex(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT,
+                                         rawptr(true_offset), i32(instances),
+                                         model.vertex_offset)
     } else {
-      gl.DrawElements(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT, rawptr(uintptr(true_offset)))
+      gl.DrawElementsBaseVertex(gl.TRIANGLES, mesh.index_count,
+                                gl.UNSIGNED_INT, rawptr(true_offset), model.vertex_offset)
     }
 
     state.mesh_draw_calls += 1
@@ -478,7 +481,7 @@ free_model :: proc(model: ^Model) {
     free_material(&material)
   }
 
-  free_gpu_buffer(&model.buffer)
+  // free_gpu_buffer(&model.buffer)
 
   // delete(model.materials)
   // delete(model.meshes)
