@@ -55,7 +55,7 @@ make_model :: proc{
 make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
   materials: []Material, meshes: []Mesh,
   allocator := context.allocator) -> (model: Model, ok: bool) {
-  vertex_offset, index_offset := allocate_model(vertices, indices)
+  vertex_offset, index_offset := push_vertices(vertices, indices)
 
   //
   // Compute AABB
@@ -451,15 +451,25 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
 
     true_offset := uintptr(cast(i32)state.vertex_buffer.index_offset + (model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
 
-    if instances > 1 {
-      // That's a mouthful.
-      gl.DrawElementsInstancedBaseVertex(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT,
-                                         rawptr(true_offset), i32(instances),
-                                         model.vertex_offset)
-    } else {
-      gl.DrawElementsBaseVertex(gl.TRIANGLES, mesh.index_count,
-                                gl.UNSIGNED_INT, rawptr(true_offset), model.vertex_offset)
+    draw := Draw_Command {
+      count          = cast(u32)mesh.index_count,
+      base_vertex    = cast(u32)model.vertex_offset,
+      instance_count = cast(u32)instances,
+      first_index    = cast(u32)true_offset / 4,
+      base_instance  = 0, // TODO: Check what the hell this means.
     }
+
+    push_draw(draw)
+
+    // if instances > 1 {
+    //   // That's a mouthful.
+    //   gl.DrawElementsInstancedBaseVertex(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT,
+    //                                      rawptr(true_offset), i32(instances),
+    //                                      model.vertex_offset)
+    // } else {
+    //   gl.DrawElementsBaseVertex(gl.TRIANGLES, mesh.index_count,
+    //                             gl.UNSIGNED_INT, rawptr(true_offset), model.vertex_offset)
+    // }
 
     state.mesh_draw_calls += 1
   }

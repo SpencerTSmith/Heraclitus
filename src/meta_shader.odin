@@ -75,10 +75,20 @@ Frame_Uniform :: struct {
 
   shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
   shadow_points_count: u32,
+
   point_lights: [MAX_POINT_LIGHTS]Point_Light_Uniform,
   points_count: u32,
+
   sun_light:    Direction_Light_Uniform,
   flash_light:  Spot_Light_Uniform,
+}
+
+Draw_Command :: struct {
+  count:          u32,
+  instance_count: u32,
+  first_index:    u32,
+  base_vertex:    u32,
+  base_instance:  u32,
 }
 
 gen_glsl_code :: proc() {

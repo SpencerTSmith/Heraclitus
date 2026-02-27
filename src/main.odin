@@ -75,6 +75,9 @@ State :: struct {
   vertex_count:  int,
   index_count:   int,
 
+  draw_buffer: GPU_Buffer,
+  draw_count:  int,
+
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
   bound_textures:   [16]Texture,
@@ -91,6 +94,7 @@ State :: struct {
 }
 
 
+MAX_DRAWS    :: 1  * mem.Megabyte
 MAX_VERTICES :: 4  * mem.Megabyte
 MAX_INDICES  :: 16 * mem.Megabyte
 
@@ -118,6 +122,20 @@ push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex
   }
 
   return vertex_offset, index_offset
+}
+
+push_draw :: proc(draw: Draw_Command) {
+  draw := draw // Copy
+  offset := size_of(Draw_Command) * state.draw_count
+  write_gpu_buffer_frame(state.draw_buffer, offset, size_of(draw), &draw)
+
+  state.draw_count += 1
+}
+
+flush_draws :: proc() {
+  gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, state.draw_buffer.id)
+  gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT, nil, cast(i32)state.draw_count, 0)
+  state.draw_count = 0
 }
 
 init_state :: proc() -> (ok: bool)
@@ -296,6 +314,9 @@ init_state :: proc() -> (ok: bool)
   gl.CreateVertexArrays(1, &state.empty_vao)
 
   state.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
+
+  state.draw_buffer = make_gpu_buffer(.DRAW, size_of(Draw_Command) * MAX_DRAWS,
+                                      persistent = true)
 
   init_assets(state.perm_alloc) or_return
 
@@ -532,6 +553,8 @@ main :: proc() {
           for e in state.entities {
             draw_entity(e)
           }
+
+          flush_draws()
         }
       }
 
@@ -565,6 +588,8 @@ main :: proc() {
                   draw_entity(e, instances=6)
                 }
               }
+
+              flush_draws()
 
               // Ok we are good, we can set this to false now that we have redone the shadow map
               l.dirty_shadow = false
@@ -603,7 +628,7 @@ main :: proc() {
           // We're good we can just draw opaque entities
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
-
+        flush_draws()
 
         // Skybox here so it is seen behind transparent objects, binds its own shader
         if state.sun_on {

@@ -18,6 +18,7 @@ GPU_Buffer_Type :: enum {
   UNIFORM,
   VERTEX,
   STORAGE,
+  DRAW,
 }
 
 // NOTE: Fat struct... too much voodoo?
@@ -140,7 +141,7 @@ make_gpu_buffer :: proc(type: GPU_Buffer_Type, size: int, data: rawptr = nil, pe
 
   gl.CreateBuffers(1, &buffer.id)
 
-  flags: u32 = gl.MAP_WRITE_BIT | gl.MAP_PERSISTENT_BIT | gl.MAP_COHERENT_BIT if persistent else 0
+  flags: u32 = gl.MAP_WRITE_BIT|gl.MAP_PERSISTENT_BIT|gl.MAP_COHERENT_BIT if persistent else 0
 
   buffer.range_size  = align_size_for_gpu(size)
   buffer.total_size = buffer.range_size * FRAMES_IN_FLIGHT if persistent else buffer.range_size
@@ -173,32 +174,26 @@ write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: int, data: rawptr) {
   }
 }
 
-// Only for uniform buffers
+buffer_type_to_gl: [GPU_Buffer_Type]u32 = {
+  .NONE    = 0,
+  .UNIFORM = gl.UNIFORM_BUFFER,
+  .STORAGE = gl.SHADER_STORAGE_BUFFER,
+  .VERTEX  = 0, // Should not bind like this
+  .DRAW    = gl.DRAW_INDIRECT_BUFFER,
+}
+
 bind_gpu_buffer_base :: proc(buffer: GPU_Buffer, binding: UBO_Bind) {
   assert(buffer.type == .UNIFORM || buffer.type == .STORAGE, "Only Uniform and Storage Buffers may be bound to locations")
 
-  gl_target: u32
-  #partial switch buffer.type {
-  case .UNIFORM:
-    gl_target = gl.UNIFORM_BUFFER
-  case .STORAGE:
-    gl_target = gl.SHADER_STORAGE_BUFFER
-  }
+  gl_target := buffer_type_to_gl[buffer.type]
 
   gl.BindBufferBase(gl_target, u32(binding), buffer.id)
 }
 
-// Only for uniform buffers
 bind_gpu_buffer_range :: proc(buffer: GPU_Buffer, binding: UBO_Bind, offset, size: int) {
   assert(buffer.type == .UNIFORM || buffer.type == .STORAGE, "Only Uniform and Storage Buffers may be bound to locations")
 
-  gl_target: u32
-  #partial switch buffer.type {
-  case .UNIFORM:
-    gl_target = gl.UNIFORM_BUFFER
-  case .STORAGE:
-    gl_target = gl.SHADER_STORAGE_BUFFER
-  }
+  gl_target := buffer_type_to_gl[buffer.type]
 
   gl.BindBufferRange(gl_target, u32(binding), buffer.id, offset, size)
 }
