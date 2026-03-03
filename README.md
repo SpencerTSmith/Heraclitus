@@ -5,6 +5,8 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 ```
 
 # To Do:
+- FIXME: Weird visual bug when moving shadow casting point lights, guessing has something to do with binding order...
+- Clean up multidraw uniform extraction, helper for grabbing model etc so that can refactor into another level of indexing (a per object instead of per draw) rather than storing model matrix directly in the draw call uniform.
 - Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely necessary...
     - Will simplify internals, and make it easier to add functionality without changing every single immediate call
     - Complete for drawing quads
@@ -13,7 +15,6 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
     - Probably builder code should only add widgets to list, build the tree links, and perhaps do input
         - If doing input then it will probably be based on the last frame's cached layout, if doing multiple passes that will probably require one frame of input lag
 - More AZDO:
-    - Multi-draw indirect
     - Vertex pulling
 - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
 - Switch fully to PBR lighting model
@@ -28,6 +29,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 - Audio in general
 
 # Complete:
+- Multi-draw indirect
 - Shader hot-reloading
 - Asset system basics:
     - Will only load assets once, keeps hashes of file paths to check

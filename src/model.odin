@@ -459,7 +459,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       model     = model_mat,
       material  = material,
       mul_color = mul_color,
-      light_index = light_index, // FIXME:
+      light_index = light_index,
     }
 
     push_draw(command, uniform)
