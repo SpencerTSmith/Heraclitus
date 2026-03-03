@@ -182,7 +182,7 @@ get_material_uniform :: proc(material: Material) -> (uniform: Material_Uniform){
      uniform.emissive_idx = cast(i32)emissive.index
      uniform.normal_idx   = cast(i32)normal.index
 
-     set_shader_uniform("mat_shininess", material.shininess)
+     uniform.shininess = material.shininess
   } else {
     // TODO: Maybe consider having the missing purple texture always
     // present at a specific index in the texture_handles ssbo

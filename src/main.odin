@@ -287,7 +287,7 @@ init_state :: proc() -> (ok: bool)
     ambient   = 0.05,
   }
   state.sun.direction = normalize(state.sun.direction)
-  state.sun_on = false
+  state.sun_on = true
 
   state.bloom_on = true
 
@@ -305,7 +305,7 @@ init_state :: proc() -> (ok: bool)
     inner_cutoff = cos(radians(cast(f32)12.5)),
     outer_cutoff = cos(radians(cast(f32)17.5)),
   }
-  state.flashlight_on = false
+  state.flashlight_on = true
 
   SAMPLES :: 4
   state.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
@@ -601,8 +601,6 @@ main :: proc() {
                 512, 512, 6,
                 gl.DEPTH_COMPONENT, gl.FLOAT, &depth_clear)
 
-              set_shader_uniform("light_index", i32(idx))
-
               // Cull models not in light's radius
               light_sphere: Sphere = {
                 center = l.position,
@@ -610,7 +608,7 @@ main :: proc() {
               }
               for e in state.entities {
                 if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
-                  draw_entity(e, instances=6)
+                  draw_entity(e, instances=6, light_index = cast(u32)idx)
                 }
               }
 
@@ -650,13 +648,12 @@ main :: proc() {
           // We're good we can just draw opaque entities
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
-
         indirect_draw()
 
         // Skybox here so it is seen behind transparent objects, binds its own shader
-        // if state.sun_on {
-        //   draw_skybox(state.skybox)
-        // }
+        if state.sun_on {
+          draw_skybox(state.skybox)
+        }
 
         // Transparent models
         bind_shader(.PHONG)

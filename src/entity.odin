@@ -105,13 +105,9 @@ entity_has_transparency :: proc(e: Entity) -> bool {
 
 // NOTE: This layer of drawing deals with assets not being present yet
 // the draw_model call is only for if we KNOW the model is loaded
-draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false) {
+draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false, light_index: u32 = 0) {
   if draw_aabbs {
     draw_aabb(entity_world_aabb(e))
-
-    // for mesh in model.meshes {
-    //   draw_aabb(transform_aabb(mesh.aabb, e.position, e.rotation, e.scale), BLUE)
-    // }
   }
 
   if .RENDERABLE not_in e.flags { return }

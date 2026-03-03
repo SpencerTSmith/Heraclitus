@@ -439,7 +439,7 @@ make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model
   return
 }
 
-draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, instances: int = 1) {
+draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, instances: int = 1, light_index: u32 = 0) {
   assert(state.current_shader.id != 0)
 
   for mesh in model.meshes {
@@ -459,7 +459,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       model     = model_mat,
       material  = material,
       mul_color = mul_color,
-      light_index = 0, // FIXME:
+      light_index = light_index, // FIXME:
     }
 
     push_draw(command, uniform)
