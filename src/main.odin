@@ -75,8 +75,11 @@ State :: struct {
   vertex_count:  int,
   index_count:   int,
 
-  draw_buffer: GPU_Buffer,
-  draw_count:  int,
+  draw_commands: GPU_Buffer,
+  draw_uniforms: GPU_Buffer,
+  draw_count: int,
+  draw_head:  int,
+
 
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
@@ -92,7 +95,6 @@ State :: struct {
 
   bloom_on: bool,
 }
-
 
 MAX_DRAWS    :: 1  * mem.Megabyte
 MAX_VERTICES :: 4  * mem.Megabyte
@@ -124,18 +126,40 @@ push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex
   return vertex_offset, index_offset
 }
 
-push_draw :: proc(draw: Draw_Command) {
-  draw := draw // Copy
-  offset := size_of(Draw_Command) * state.draw_count
-  write_gpu_buffer_frame(state.draw_buffer, offset, size_of(draw), &draw)
+push_draw :: proc(draw: Draw_Command, uniform: Draw_Uniform) {
+  if (state.draw_count + 1 < MAX_DRAWS)
+  {
+    // Draw Command
+    {
+      draw := draw
+      offset := size_of(Draw_Command) * state.draw_count
+      write_gpu_buffer_frame(state.draw_commands, offset, size_of(draw), &draw)
+    }
 
-  state.draw_count += 1
+    // Draw Uniform
+    {
+      uniform := uniform
+      offset := size_of(Draw_Uniform) * state.draw_count
+      write_gpu_buffer_frame(state.draw_uniforms, offset, size_of(uniform), &uniform)
+    }
+
+    state.draw_count += 1
+  } else {
+    log.errorf("Cannot push any more draw commands");
+  }
 }
 
-flush_draws :: proc() {
-  gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, state.draw_buffer.id)
-  gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT, nil, cast(i32)state.draw_count, 0)
-  state.draw_count = 0
+indirect_draw :: proc() {
+  bind_vertex_buffer(state.vertex_buffer)
+  gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, state.draw_commands.id)
+  batch_offset := cast(uintptr)(state.draw_head * size_of(Draw_Command))
+
+  batch_count := cast(i32) (state.draw_count - state.draw_head)
+
+  gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT,
+    cast([^]gl.DrawElementsIndirectCommand)batch_offset, batch_count, 0)
+
+  state.draw_head = state.draw_count // Move head pointer up
 }
 
 init_state :: proc() -> (ok: bool)
@@ -241,7 +265,7 @@ init_state :: proc() -> (ok: bool)
 
   state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
   reserve(&state.point_lights, MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS)
-  state.point_lights_on = true
+  state.point_lights_on = false
 
   state.running = true
 
@@ -263,7 +287,7 @@ init_state :: proc() -> (ok: bool)
     ambient   = 0.05,
   }
   state.sun.direction = normalize(state.sun.direction)
-  state.sun_on = true
+  state.sun_on = false
 
   state.bloom_on = true
 
@@ -315,8 +339,11 @@ init_state :: proc() -> (ok: bool)
 
   state.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
 
-  state.draw_buffer = make_gpu_buffer(.DRAW, size_of(Draw_Command) * MAX_DRAWS,
-                                      persistent = true)
+  state.draw_commands = make_gpu_buffer(.STORAGE, size_of(Draw_Command) * MAX_DRAWS,
+                                        persistent = true)
+
+  state.draw_uniforms = make_gpu_buffer(.STORAGE, size_of(Draw_Uniform) * MAX_DRAWS,
+                                        persistent = true)
 
   init_assets(state.perm_alloc) or_return
 
@@ -553,8 +580,6 @@ main :: proc() {
           for e in state.entities {
             draw_entity(e)
           }
-
-          flush_draws()
         }
       }
 
@@ -589,8 +614,6 @@ main :: proc() {
                 }
               }
 
-              flush_draws()
-
               // Ok we are good, we can set this to false now that we have redone the shadow map
               l.dirty_shadow = false
 
@@ -624,16 +647,16 @@ main :: proc() {
               continue
           }
 
-          gl.Disable(gl.CULL_FACE)
           // We're good we can just draw opaque entities
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
-        flush_draws()
+
+        indirect_draw()
 
         // Skybox here so it is seen behind transparent objects, binds its own shader
-        if state.sun_on {
-          draw_skybox(state.skybox)
-        }
+        // if state.sun_on {
+        //   draw_skybox(state.skybox)
+        // }
 
         // Transparent models
         bind_shader(.PHONG)
@@ -648,6 +671,8 @@ main :: proc() {
           for e in transparent_entities {
             draw_entity(e^)
           }
+
+          indirect_draw()
         }
 
         // Draw point light billboards
@@ -660,6 +685,7 @@ main :: proc() {
             immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=get_texture("point_light.png")^)
           }
         }
+
 
         if state.draw_debug {
           draw_grid(color = {1.0, 1.0, 1.0, 0.2})

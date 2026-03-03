@@ -439,19 +439,15 @@ make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model
   return
 }
 
-draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
+draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, instances: int = 1) {
   assert(state.current_shader.id != 0)
 
-  bind_vertex_buffer(state.vertex_buffer)
-
-  set_shader_uniform("mul_color", mul_color)
-
   for mesh in model.meshes {
-    set_material(model.materials[mesh.material_index])
+    material := get_material_uniform(model.materials[mesh.material_index])
 
     true_offset := uintptr(cast(i32)state.vertex_buffer.index_offset + (model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
 
-    draw := Draw_Command {
+    command := Draw_Command {
       count          = cast(u32)mesh.index_count,
       base_vertex    = cast(u32)model.vertex_offset,
       instance_count = cast(u32)instances,
@@ -459,19 +455,14 @@ draw_model :: proc(model: Model, mul_color: vec4 = WHITE, instances: int = 1) {
       base_instance  = 0, // TODO: Check what the hell this means.
     }
 
-    push_draw(draw)
+    uniform := Draw_Uniform {
+      model     = model_mat,
+      material  = material,
+      mul_color = mul_color,
+      light_index = 0, // FIXME:
+    }
 
-    // if instances > 1 {
-    //   // That's a mouthful.
-    //   gl.DrawElementsInstancedBaseVertex(gl.TRIANGLES, mesh.index_count, gl.UNSIGNED_INT,
-    //                                      rawptr(true_offset), i32(instances),
-    //                                      model.vertex_offset)
-    // } else {
-    //   gl.DrawElementsBaseVertex(gl.TRIANGLES, mesh.index_count,
-    //                             gl.UNSIGNED_INT, rawptr(true_offset), model.vertex_offset)
-    // }
-
-    state.mesh_draw_calls += 1
+    push_draw(command, uniform)
   }
 }
 

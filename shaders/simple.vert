@@ -1,4 +1,4 @@
-#version 450 core
+#version 460 core
 
 #include "generated.glsl"
 
@@ -13,12 +13,14 @@ out VS_OUT {
   vec3 world_position;
   vec4 sun_space_position;
   mat3 TBN;
+
+  flat int draw_id;
 } vs_out;
 
-uniform mat4 model;
-
 void main() {
+  vs_out.draw_id = gl_DrawID;
   vs_out.uv = vert_uv;
+  mat4 model = draw_uniforms[gl_DrawID].model;
 
   vs_out.world_position = vec3(model * vec4(vert_position, 1.0));
 
@@ -31,7 +33,7 @@ void main() {
   vs_out.normal = normalize(normal_mat * vert_normal);
 
   vec3 T = normalize(normal_mat * vert_tangent.xyz);
-  vec3 N = normalize(normal_mat * vert_normal);
+  vec3 N = vs_out.normal;
   T = normalize(T - dot(T, N) * N);
   vec3 B = cross(N, T) * vert_tangent.w;
 

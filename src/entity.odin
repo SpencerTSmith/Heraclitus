@@ -119,10 +119,7 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aab
   model := get_model(e.model)
 
   if model != nil {
-    set_shader_uniform("model", entity_model_mat4(e))
-    set_shader_uniform("mul_color", e.color)
-
-    draw_model(model^, mul_color=color, instances=instances)
+    draw_model(model^, model_mat = entity_model_mat4(e), mul_color=color, instances=instances)
   } else {
     log.warnf("Tried to draw entity with unloaded model")
   }

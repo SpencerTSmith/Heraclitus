@@ -161,7 +161,7 @@ free_material :: proc(material: ^Material) {
   free_texture(normal)
 }
 
-set_material :: proc(material: Material) {
+get_material_uniform :: proc(material: Material) -> (uniform: Material_Uniform){
   assert(state.current_shader.id != 0)
 
   diffuse  := get_texture(material.diffuse)
@@ -176,17 +176,21 @@ set_material :: proc(material: Material) {
      normal   != nil {
      // NOTE: We are bindless with materials now!
      // So we just send over indexes
-     set_shader_uniform("mat_diffuse_idx",  diffuse.index)
-     set_shader_uniform("mat_specular_idx", specular.index)
-     set_shader_uniform("mat_emissive_idx", emissive.index)
-     set_shader_uniform("mat_normal_idx",   normal.index)
+
+     uniform.diffuse_idx  = cast(i32)diffuse.index
+     uniform.specular_idx = cast(i32)specular.index
+     uniform.emissive_idx = cast(i32)emissive.index
+     uniform.normal_idx   = cast(i32)normal.index
 
      set_shader_uniform("mat_shininess", material.shininess)
   } else {
-    // TODO: Maybe consider having the missing purple texture always present at a specific index in the texture_handles ssbo
-    // so that can be set instead, at present I believe this will just draw with the last material indices
+    // TODO: Maybe consider having the missing purple texture always
+    // present at a specific index in the texture_handles ssbo
+    // so that can be set instead,
     log.warnf("Tried to set material with unloaded material")
   }
+
+  return uniform
 }
 
 make_texture :: proc {

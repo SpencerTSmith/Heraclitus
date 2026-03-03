@@ -18,7 +18,6 @@ GPU_Buffer_Type :: enum {
   UNIFORM,
   VERTEX,
   STORAGE,
-  DRAW,
 }
 
 // NOTE: Fat struct... too much voodoo?
@@ -179,7 +178,6 @@ buffer_type_to_gl: [GPU_Buffer_Type]u32 = {
   .UNIFORM = gl.UNIFORM_BUFFER,
   .STORAGE = gl.SHADER_STORAGE_BUFFER,
   .VERTEX  = 0, // Should not bind like this
-  .DRAW    = gl.DRAW_INDIRECT_BUFFER,
 }
 
 bind_gpu_buffer_base :: proc(buffer: GPU_Buffer, binding: UBO_Bind) {

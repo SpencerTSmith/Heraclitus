@@ -1,4 +1,4 @@
-#version 450 core
+#version 460 core
 
 #include "generated.glsl"
 
@@ -8,21 +8,15 @@ in VS_OUT {
   vec3 world_position;
   vec4 sun_space_position;
   mat3 TBN;
+
+  flat int draw_id;
 } fs_in;
 
 layout(location=0) out vec4 frag_color;
 
-uniform int mat_diffuse_idx;
-uniform int mat_specular_idx;
-uniform int mat_emissive_idx;
-uniform int mat_normal_idx;
-uniform float mat_shininess;
-
 layout(binding = 0) uniform samplerCube skybox;
 layout(binding = 1) uniform sampler2D sun_shadow_map;
 layout(binding = 2) uniform samplerCubeArray point_light_shadows;
-
-uniform vec4 mul_color;
 
 // Must sample the texture first and pass in that color... keeps this nice and generic
 vec3 phong_diffuse(vec3 normal, vec3 light_direction, vec3 diffuse_color) {
@@ -246,11 +240,14 @@ float point_shadow(samplerCubeArray map, int light_index, vec3 frag_pos, vec3 fr
 void main() {
   vec3 result = vec3(0.0);
 
-  float alpha = texture(textures[mat_diffuse_idx], fs_in.uv).a;
-  vec3 diffuse_sample  = vec3(bindless_sample(mat_diffuse_idx,  fs_in.uv));
-  vec3 specular_sample = vec3(bindless_sample(mat_specular_idx, fs_in.uv));
-  vec3 emissive_sample = vec3(bindless_sample(mat_emissive_idx, fs_in.uv));
-  vec3 normal_sample   = vec3(bindless_sample(mat_normal_idx,   fs_in.uv));
+  Material_Uniform material = draw_uniforms[fs_in.draw_id].material;
+  vec4 mul_color = draw_uniforms[fs_in.draw_id].mul_color;
+
+  float alpha = texture(textures[material.diffuse_idx], fs_in.uv).a;
+  vec3 diffuse_sample  = vec3(bindless_sample(material.diffuse_idx,  fs_in.uv));
+  vec3 specular_sample = vec3(bindless_sample(material.specular_idx, fs_in.uv));
+  vec3 emissive_sample = vec3(bindless_sample(material.emissive_idx, fs_in.uv));
+  vec3 normal_sample   = vec3(bindless_sample(material.normal_idx,   fs_in.uv));
 
   // Textures are in range 0 -> 1
   vec3 normal_map = normal_sample;
@@ -282,7 +279,7 @@ void main() {
         light.ambient,
       };
 
-      vec3 point_phong = point_phong(temp, diffuse_sample, specular_sample, mat_shininess,
+      vec3 point_phong = point_phong(temp, diffuse_sample, specular_sample, material.shininess,
                                      normal, view_direction, fs_in.world_position);
       point_phong *= point_shadow;
 
@@ -298,7 +295,7 @@ void main() {
     float distance = length(light.position.xyz - fs_in.world_position);
 
     if (distance < light.radius) {
-      vec3 point_phong = point_phong(light, diffuse_sample, specular_sample, mat_shininess,
+      vec3 point_phong = point_phong(light, diffuse_sample, specular_sample, material.shininess,
                                      normal, view_direction, fs_in.world_position);
       all_point_phong += point_phong;
 
@@ -306,7 +303,7 @@ void main() {
     }
   }
 
-  vec3 direction_phong = direction_phong(frame.sun_light, diffuse_sample, specular_sample, mat_shininess,
+  vec3 direction_phong = direction_phong(frame.sun_light, diffuse_sample, specular_sample, material.shininess,
                                           normal, view_direction);
 
   float shadow = 1.0 - sun_shadow(sun_shadow_map, fs_in.sun_space_position, -frame.sun_light.direction.xyz, normal);
@@ -315,7 +312,7 @@ void main() {
 
   ambient += phong_ambient(frame.sun_light.ambient, frame.sun_light.color.xyz);
 
-  vec3 spot_phong = spot_phong(frame.flash_light, diffuse_sample, specular_sample, mat_shininess,
+  vec3 spot_phong = spot_phong(frame.flash_light, diffuse_sample, specular_sample, material.shininess,
                                     normal, view_direction, fs_in.world_position);
 
   ambient += phong_ambient(frame.flash_light.ambient, frame.flash_light.color.xyz);

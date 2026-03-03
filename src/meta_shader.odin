@@ -10,8 +10,9 @@ import "core:time"
 // NOTE: This is simply a little meta-program to reduce code duplication between glsl and odin
 
 UBO_Bind :: enum u32 {
-  FRAME    = 0,
-  TEXTURES = 1,
+  FRAME         = 0,
+  TEXTURES      = 1,
+  DRAW_UNIFORMS = 2,
 }
 
 MAX_SHADOW_POINT_LIGHTS :: 8
@@ -63,6 +64,16 @@ Spot_Light_Uniform :: struct #align(16) {
   outer_cutoff: f32,
 }
 
+Material_Uniform :: struct #align(16) {
+  // Indexes into bindless textures buffer.
+  diffuse_idx:  i32,
+  specular_idx: i32,
+  emissive_idx: i32,
+  normal_idx:   i32,
+
+  shininess: f32,
+}
+
 Frame_Uniform :: struct {
   projection:      mat4,
   orthographic:    mat4,
@@ -91,6 +102,18 @@ Draw_Command :: struct {
   base_instance:  u32,
 }
 
+// Maybe consider pulling these out, these could just be indices, since will be redundantly uploading for passes drawing the same objects, shadow mapping, main passes, etc.
+Draw_Uniform :: struct {
+  model:     mat4,
+
+  material:  Material_Uniform,
+
+  mul_color: vec4,
+
+  light_index: u32, // Here for point light shader
+}
+
+
 gen_glsl_code :: proc() {
   b := strings.builder_make(allocator=context.temp_allocator)
 
@@ -114,6 +137,8 @@ gen_glsl_code :: proc() {
     case vec4:
       s = "vec4"
     case u32:
+      s = "int"
+    case i32:
       s = "int"
     }
 
@@ -175,6 +200,8 @@ gen_glsl_code :: proc() {
   to_glsl_struct(&b, Spot_Light_Uniform)
   to_glsl_struct(&b, Shadow_Point_Light_Uniform)
   to_glsl_struct(&b, Point_Light_Uniform)
+  to_glsl_struct(&b, Material_Uniform)
+  to_glsl_struct(&b, Draw_Uniform)
   to_glsl_struct(&b, Frame_Uniform)
   to_glsl_struct(&b, Mesh_Vertex)
 
@@ -199,6 +226,10 @@ gen_glsl_code :: proc() {
 
   fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Texture_Handles {{\n", bind_names[.TEXTURES])
   fmt.sbprintf(&b, "  sampler2D textures[];\n")
+  fmt.sbprintf(&b, "};\n\n")
+
+  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Draw_Uniforms {{\n", bind_names[.DRAW_UNIFORMS])
+  fmt.sbprintf(&b, "  Draw_Uniform draw_uniforms[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
   append_always := `

@@ -1,4 +1,4 @@
-#version 450 core
+#version 460 core
 
 // So don't have to deal with geometry shader nonsense
 #extension GL_ARB_shader_viewport_layer_array : enable

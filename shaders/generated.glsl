@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 27-02-2026 (06:15:44 am)
+// NOTE: This code was generated on 03-03-2026 (03:22:49 am)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -38,6 +38,21 @@ struct Point_Light_Uniform {
   float ambient;
 };
 
+struct Material_Uniform {
+  int diffuse_idx;
+  int specular_idx;
+  int emissive_idx;
+  int normal_idx;
+  float shininess;
+};
+
+struct Draw_Uniform {
+  mat4 model;
+  Material_Uniform material;
+  vec4 mul_color;
+  int light_index;
+};
+
 struct Frame_Uniform {
   mat4 projection;
   mat4 orthographic;
@@ -64,6 +79,7 @@ struct Mesh_Vertex {
 
 #define FRAME_BINDING 0
 #define TEXTURES_BINDING 1
+#define DRAW_UNIFORMS_BINDING 2
 
 layout(binding = FRAME_BINDING, std140) uniform Frame_Uniform_UBO {
   Frame_Uniform frame;
@@ -71,6 +87,10 @@ layout(binding = FRAME_BINDING, std140) uniform Frame_Uniform_UBO {
 
 layout(binding = TEXTURES_BINDING, std430) readonly buffer Texture_Handles {
   sampler2D textures[];
+};
+
+layout(binding = DRAW_UNIFORMS_BINDING, std430) readonly buffer Draw_Uniforms {
+  Draw_Uniform draw_uniforms[];
 };
 
 

@@ -177,7 +177,7 @@ make_shader_program :: proc(vert_name, frag_name: string, allocator := context.a
   if success == 0 {
     info: [512]u8
     gl.GetProgramInfoLog(program.id, 512, nil, &info[0])
-    log.errorf("Error linking shader program:\n%s", string(info[:]))
+    log.errorf("Error linking shader program: %v, %v\n%s", vert_name, frag_name, string(info[:]))
     return program, false
   }
 

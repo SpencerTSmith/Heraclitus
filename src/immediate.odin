@@ -93,7 +93,7 @@ start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
                         space: Immediate_Space,
                         depth: Depth_Test_Mode,
                         ) -> (batch_pointer: ^Immediate_Batch) {
-  append(&immediate.batches, Immediate_Batch{
+  append(&immediate.batches, Immediate_Batch {
     vertex_base = immediate.vertex_count, // Always on the end.
 
     primitive = mode,
