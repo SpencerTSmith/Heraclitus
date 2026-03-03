@@ -265,7 +265,7 @@ init_state :: proc() -> (ok: bool)
 
   state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
   reserve(&state.point_lights, MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS)
-  state.point_lights_on = false
+  state.point_lights_on = true
 
   state.running = true
 
@@ -580,6 +580,7 @@ main :: proc() {
           for e in state.entities {
             draw_entity(e)
           }
+          indirect_draw()
         }
       }
 
@@ -589,36 +590,34 @@ main :: proc() {
 
         idx := 0
         for &l in state.point_lights {
-          if l.cast_shadows {
-            // We cache shadow maps and only recompute if point light has moved
+          // TODO if objects in the lights radius move, need to do recalc
+          // We cache shadow maps and only recompute if point light has moved
+          if l.cast_shadows && l.dirty_shadow {
+            // TODO: factor out direct gl call here
+            depth_clear: f32 = 1.0
+            gl.ClearTexSubImage(state.point_depth_buffer.depth_target.id, 0, 0, 0, i32(6 * idx),
+              512, 512, 6,
+              gl.DEPTH_COMPONENT, gl.FLOAT, &depth_clear)
 
-            // TODO if objects in the lights radius move, need to do recalc
-            if l.dirty_shadow {
-
-              // TODO: factor out direct gl call here
-              depth_clear: f32 = 1.0
-              gl.ClearTexSubImage(state.point_depth_buffer.depth_target.id, 0, 0, 0, i32(6 * idx),
-                512, 512, 6,
-                gl.DEPTH_COMPONENT, gl.FLOAT, &depth_clear)
-
-              // Cull models not in light's radius
-              light_sphere: Sphere = {
-                center = l.position,
-                radius = l.radius,
-              }
-              for e in state.entities {
-                if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
-                  draw_entity(e, instances=6, light_index = cast(u32)idx)
-                }
-              }
-
-              // Ok we are good, we can set this to false now that we have redone the shadow map
-              l.dirty_shadow = false
-
-              idx += 1
+            // Cull models not in light's radius
+            light_sphere: Sphere = {
+              center = l.position,
+              radius = l.radius,
             }
+            for e in state.entities {
+              if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
+                draw_entity(e, instances=6, light_index = cast(u32)idx)
+              }
+            }
+
+            // Ok we are good, we can set this to false now that we have redone the shadow map
+            l.dirty_shadow = false
+
+            idx += 1
           }
         }
+
+        indirect_draw()
       }
 
       //
