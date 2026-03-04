@@ -203,8 +203,6 @@ resize_window :: proc() {
 
   ok: bool
 
-  // FIXME: We need to remember which framebuffers need to be the same size as the backbuffer...
-  // Could maybe store all these in an map or something so we can just iterate and remember these
   state.hdr_ms_buffer, ok = remake_framebuffer(&state.hdr_ms_buffer, state.window.w, state.window.h)
   state.post_buffer, ok = remake_framebuffer(&state.post_buffer, state.window.w, state.window.h)
   state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], state.window.w, state.window.h)
@@ -213,7 +211,7 @@ resize_window :: proc() {
   gl.Viewport(0, 0, cast(i32)state.window.w, cast(i32)state.window.h)
 
   if !ok {
-    log.fatal("Window has been resized but unable to recreate multisampling framebuffer")
+    log.fatal("Window has been resized but unable to recreate framebuffers")
     state.running = false
   }
 

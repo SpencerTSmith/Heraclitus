@@ -5,7 +5,6 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 ```
 
 # To Do:
-- FIXME: Weird visual bug when moving shadow casting point lights, guessing has something to do with binding order...
 - Clean up multidraw uniform extraction, helper for grabbing model etc so that can refactor into another level of indexing (a per object instead of per draw) rather than storing model matrix directly in the draw call uniform.
 - Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely necessary...
     - Will simplify internals, and make it easier to add functionality without changing every single immediate call

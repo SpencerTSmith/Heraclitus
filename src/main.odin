@@ -32,7 +32,7 @@ State :: struct {
 
   start_time: time.Time,
 
-  // Hmm maybe should be enum array, these must all be the same dimensions as backbuffer
+  // TODO: Hmm maybe should be enum array, these must all be the same dimensions as backbuffer
   // so simple to loop over enum array when resizing window
   hdr_ms_buffer:      Framebuffer,
   post_buffer:        Framebuffer,
@@ -42,7 +42,7 @@ State :: struct {
   sun_depth_buffer:   Framebuffer,
 
   fps:              f64,
-  frame_count:      uint,
+  frame_count:      int,
   frames:           [FRAMES_IN_FLIGHT]Frame_Info,
   curr_frame_index: int,
 
@@ -80,15 +80,14 @@ State :: struct {
   draw_count: int,
   draw_head:  int,
 
-
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
   bound_textures:   [16]Texture,
 
   // NOTE: Needed to make draw calls, even if not using one
-  empty_vao:          u32,
+  empty_vao: u32,
 
-  input:              Input_State,
+  input: Input_State,
 
   draw_debug:   bool,
   default_font: Font,
@@ -132,10 +131,12 @@ push_draw :: proc(draw: Draw_Command, uniform: Draw_Uniform) {
     // Draw Command
     {
       draw := draw
-      // NOTE: Using this to index into the total buffer. As we have to do multiple
+      // NOTE:
+      /// Using this to index into the total buffer. As we have to do multiple
       // multidraws per frame due to shadow mapping,
       // gl_DrawID no longer works perfectly to index
       draw.base_instance = cast(u32)state.draw_count
+
       offset := size_of(Draw_Command) * state.draw_count
       write_gpu_buffer_frame(state.draw_commands, offset, size_of(draw), &draw)
     }
@@ -149,7 +150,7 @@ push_draw :: proc(draw: Draw_Command, uniform: Draw_Uniform) {
 
     state.draw_count += 1
   } else {
-    log.errorf("Cannot push any more draw commands");
+    log.errorf("Cannot push any more draw commands.");
   }
 }
 
@@ -618,7 +619,7 @@ main :: proc() {
                 }
               }
 
-              l.dirty_shadow = true
+              l.dirty_shadow = false
             }
 
             shadow_light_idx += 1

@@ -27,8 +27,6 @@ Immediate_Space :: enum {
 }
 
 // NOTE: This is not integrated with the general asset system and deals with actual textures and such...
-// FIXME: We use a pointer and not an index into the batch list for the
-// current batch
 // TODO: Finish up render pass system and integrate with batching system...
 // batches would probably include a renderpass, the immediate space, and the primitive
 Immediate_State :: struct {
@@ -38,7 +36,7 @@ Immediate_State :: struct {
   shader:        Shader_Program,
   white_texture: Texture,
 
-  curr_batch: ^Immediate_Batch, // Eh, pointer could maybe do index instead?
+  curr_batch: ^Immediate_Batch,
   batches:    [dynamic]Immediate_Batch,
 }
 
