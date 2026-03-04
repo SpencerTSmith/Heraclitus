@@ -17,9 +17,9 @@ out VS_OUT {
 
 // NOTE: This only works with a cubemap array target!
 void main() {
-  mat4 model = draw_uniforms[gl_DrawID].model;
+  mat4 model = draw_uniforms[gl_BaseInstance].model;
 
-  int light_index = draw_uniforms[gl_DrawID].light_index;
+  int light_index = draw_uniforms[gl_BaseInstance].light_index;
   int face_index = gl_InstanceID;
 
   Shadow_Point_Light_Uniform light = frame.shadow_point_lights[light_index];
@@ -38,5 +38,5 @@ void main() {
   vs_out.uv             = vert_uv;
 
   vs_out.light_index    = light_index;
-  vs_out.draw_id        = gl_DrawID;
+  vs_out.draw_id        = gl_BaseInstance;
 }

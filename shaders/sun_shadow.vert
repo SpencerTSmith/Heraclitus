@@ -12,10 +12,10 @@ out VS_OUT {
 } vs_out;
 
 void main() {
-  vs_out.draw_id = gl_DrawID;
+  vs_out.draw_id = gl_BaseInstance;
   vs_out.uv      = vert_uv;
 
-  mat4 model     = draw_uniforms[gl_DrawID].model;
+  mat4 model     = draw_uniforms[gl_BaseInstance].model;
   mat4 proj_view = frame.sun_light.proj_view;
 
   gl_Position = proj_view * model * vec4(vert_position, 1.0);

@@ -452,7 +452,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       base_vertex    = cast(u32)model.vertex_offset,
       instance_count = cast(u32)instances,
       first_index    = cast(u32)true_offset / 4,
-      base_instance  = 0, // TODO: Check what the hell this means.
+      base_instance  = 0, // We set this in push_draw, as it will know what that ought to be.
     }
 
     uniform := Draw_Uniform {

@@ -132,6 +132,10 @@ push_draw :: proc(draw: Draw_Command, uniform: Draw_Uniform) {
     // Draw Command
     {
       draw := draw
+      // NOTE: Using this to index into the total buffer. As we have to do multiple
+      // multidraws per frame due to shadow mapping,
+      // gl_DrawID no longer works perfectly to index
+      draw.base_instance = cast(u32)state.draw_count
       offset := size_of(Draw_Command) * state.draw_count
       write_gpu_buffer_frame(state.draw_commands, offset, size_of(draw), &draw)
     }
@@ -149,10 +153,13 @@ push_draw :: proc(draw: Draw_Command, uniform: Draw_Uniform) {
   }
 }
 
-indirect_draw :: proc() {
+multi_draw :: proc() {
   bind_vertex_buffer(state.vertex_buffer)
   gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, state.draw_commands.id)
-  batch_offset := cast(uintptr)(state.draw_head * size_of(Draw_Command))
+
+  // Since we can't bind the base we do a frame offset here
+  frame_offset := gpu_buffer_frame_offset(state.draw_commands)
+  batch_offset := cast(uintptr)(frame_offset + state.draw_head * size_of(Draw_Command))
 
   batch_count := cast(i32) (state.draw_count - state.draw_head)
 
@@ -574,14 +581,12 @@ main :: proc() {
       //
       if state.sun_on {
         begin_render_pass(SUN_SHADOW_PASS, state.sun_depth_buffer)
-        {
-          bind_shader(.SUN_DEPTH)
+        bind_shader(.SUN_DEPTH)
 
-          for e in state.entities {
-            draw_entity(e)
-          }
-          indirect_draw()
+        for e in state.entities {
+          draw_entity(e)
         }
+        multi_draw()
       }
 
       if state.point_lights_on {
@@ -613,14 +618,14 @@ main :: proc() {
                 }
               }
 
-              l.dirty_shadow = false
+              l.dirty_shadow = true
             }
 
             shadow_light_idx += 1
           }
         }
 
-        indirect_draw()
+        multi_draw()
       }
 
       //
@@ -650,7 +655,7 @@ main :: proc() {
           // We're good we can just draw opaque entities
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
-        indirect_draw()
+        multi_draw()
 
         // Skybox here so it is seen behind transparent objects, binds its own shader
         if state.sun_on {
@@ -671,7 +676,7 @@ main :: proc() {
             draw_entity(e^)
           }
 
-          indirect_draw()
+          multi_draw()
         }
 
         // Draw point light billboards
