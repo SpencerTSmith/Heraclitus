@@ -68,17 +68,11 @@ State :: struct {
 
   frame_uniforms: GPU_Buffer,
 
+  // TODO: Consider moving to multidraw state
   texture_handles:       GPU_Buffer,
   texture_handles_count: int,
 
-  vertex_buffer: GPU_Buffer,
-  vertex_count:  int,
-  index_count:   int,
-
-  draw_commands: GPU_Buffer,
-  draw_uniforms: GPU_Buffer,
-  draw_count: int,
-  draw_head:  int,
+  mds: Multi_Draw_State,
 
   // TODO: Maybe these should be pointers and not copies
   current_shader:   Shader_Program,
@@ -95,80 +89,8 @@ State :: struct {
   bloom_on: bool,
 }
 
-MAX_DRAWS    :: 1  * mem.Megabyte
-MAX_VERTICES :: 4  * mem.Megabyte
-MAX_INDICES  :: 16 * mem.Megabyte
-
 // NOTE: Global
 state: State
-
-push_vertices :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
-{
-  if state.vertex_count + len(vertices) < MAX_VERTICES &&
-     state.index_count + len(indices)   < MAX_INDICES {
-    vertex_offset = cast(i32) state.vertex_count
-
-    vertex_byte_offset := size_of(Mesh_Vertex) * state.vertex_count
-    write_gpu_buffer(state.vertex_buffer,
-      vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
-
-    state.vertex_count += len(vertices)
-
-    index_offset = cast(i32) state.index_count
-    index_byte_offset := state.vertex_buffer.index_offset + size_of(Mesh_Index) * state.index_count
-    write_gpu_buffer(state.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
-    state.index_count += len(indices)
-  } else {
-    log.errorf("Cannot push any more vertices to mega buffer");
-  }
-
-  return vertex_offset, index_offset
-}
-
-push_draw :: proc(draw: Draw_Command, uniform: Draw_Uniform) {
-  if (state.draw_count + 1 < MAX_DRAWS)
-  {
-    // Draw Command
-    {
-      draw := draw
-      // NOTE:
-      /// Using this to index into the total buffer. As we have to do multiple
-      // multidraws per frame due to shadow mapping,
-      // gl_DrawID no longer works perfectly to index
-      draw.base_instance = cast(u32)state.draw_count
-
-      offset := size_of(Draw_Command) * state.draw_count
-      write_gpu_buffer_frame(state.draw_commands, offset, size_of(draw), &draw)
-    }
-
-    // Draw Uniform
-    {
-      uniform := uniform
-      offset := size_of(Draw_Uniform) * state.draw_count
-      write_gpu_buffer_frame(state.draw_uniforms, offset, size_of(uniform), &uniform)
-    }
-
-    state.draw_count += 1
-  } else {
-    log.errorf("Cannot push any more draw commands.");
-  }
-}
-
-multi_draw :: proc() {
-  bind_vertex_buffer(state.vertex_buffer)
-  gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, state.draw_commands.id)
-
-  // Since we can't bind the base we do a frame offset here
-  frame_offset := gpu_buffer_frame_offset(state.draw_commands)
-  batch_offset := cast(uintptr)(frame_offset + state.draw_head * size_of(Draw_Command))
-
-  batch_count := cast(i32) (state.draw_count - state.draw_head)
-
-  gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT,
-    cast([^]gl.DrawElementsIndirectCommand)batch_offset, batch_count, 0)
-
-  state.draw_head = state.draw_count // Move head pointer up
-}
 
 init_state :: proc() -> (ok: bool)
 {
@@ -345,13 +267,7 @@ init_state :: proc() -> (ok: bool)
 
   gl.CreateVertexArrays(1, &state.empty_vao)
 
-  state.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
-
-  state.draw_commands = make_gpu_buffer(.STORAGE, size_of(Draw_Command) * MAX_DRAWS,
-                                        persistent = true)
-
-  state.draw_uniforms = make_gpu_buffer(.STORAGE, size_of(Draw_Uniform) * MAX_DRAWS,
-                                        persistent = true)
+  state.mds = init_multi_draw()
 
   init_assets(state.perm_alloc) or_return
 
@@ -457,8 +373,8 @@ main :: proc() {
     helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
     append(&state.entities, helmet)
 
-    // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-    // append(&state.entities, chess)
+    chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+    append(&state.entities, chess)
 
     duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
     append(&state.entities, duck1)
@@ -587,7 +503,7 @@ main :: proc() {
         for e in state.entities {
           draw_entity(e)
         }
-        multi_draw()
+        multi_draw(&state.mds)
       }
 
       if state.point_lights_on {
@@ -626,7 +542,7 @@ main :: proc() {
           }
         }
 
-        multi_draw()
+        multi_draw(&state.mds)
       }
 
       //
@@ -656,7 +572,7 @@ main :: proc() {
           // We're good we can just draw opaque entities
           draw_entity(e, draw_aabbs=state.draw_debug)
         }
-        multi_draw()
+        multi_draw(&state.mds)
 
         // Skybox here so it is seen behind transparent objects, binds its own shader
         if state.sun_on {
@@ -677,7 +593,7 @@ main :: proc() {
             draw_entity(e^)
           }
 
-          multi_draw()
+          multi_draw(&state.mds)
         }
 
         // Draw point light billboards

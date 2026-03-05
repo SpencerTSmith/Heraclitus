@@ -55,7 +55,7 @@ make_model :: proc{
 make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
   materials: []Material, meshes: []Mesh,
   allocator := context.allocator) -> (model: Model, ok: bool) {
-  vertex_offset, index_offset := push_vertices(vertices, indices)
+  vertex_offset, index_offset := push_vertices(&state.mds, vertices, indices)
 
   //
   // Compute AABB
@@ -445,7 +445,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
   for mesh in model.meshes {
     material := get_material_uniform(model.materials[mesh.material_index])
 
-    true_offset := uintptr(cast(i32)state.vertex_buffer.index_offset + (model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
+    true_offset := uintptr(cast(i32)state.mds.vertex_buffer.index_offset + (model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
 
     command := Draw_Command {
       count          = cast(u32)mesh.index_count,
@@ -462,7 +462,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       light_index = light_index,
     }
 
-    push_draw(command, uniform)
+    push_draw(&state.mds, command, uniform)
   }
 }
 

@@ -423,7 +423,7 @@ begin_drawing :: proc() {
   write_gpu_buffer_frame(state.frame_uniforms, 0, size_of(frame_ubo), &frame_ubo)
   bind_gpu_buffer_frame_range(state.frame_uniforms, .FRAME)
 
-  bind_gpu_buffer_frame_range(state.draw_uniforms, .DRAW_UNIFORMS)
+  bind_gpu_buffer_frame_range(state.mds.draw_uniforms, .DRAW_UNIFORMS)
 }
 
 flush_drawing :: proc() {
@@ -436,8 +436,6 @@ flush_drawing :: proc() {
 
   state.began_drawing = false
   state.mesh_draw_calls = 0
-  state.draw_count = 0
-  state.draw_head = 0
 
   glfw.SwapBuffers(state.window.handle)
 }
