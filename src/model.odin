@@ -22,8 +22,6 @@ Mesh_Vertex :: struct {
 
 Mesh_Index :: distinct u32
 
-// TODO: Seems not too bad to set this up as just 1 multi-draw indirect per model,
-// instead of one regular draw per mesh, As well this may be more akin to a GLTF "primitive"
 Mesh :: struct {
   index_offset:   i32, // Into the parent model's index buffer
   index_count:    i32,
@@ -157,7 +155,7 @@ make_model_from_file :: proc(file_name: string, allocator := context.allocator) 
     }
 
     // Each primitive will be its own mesh
-    model_mesh_count: uint
+    model_mesh_count:  uint
     model_verts_count: uint
     model_index_count: uint
 
@@ -445,7 +443,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
   for mesh in model.meshes {
     material := get_material_uniform(model.materials[mesh.material_index])
 
-    true_offset := uintptr(cast(i32)state.mds.vertex_buffer.index_offset + (model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
+    true_offset := multi_draw_index_offset(state.mds, uintptr(model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
 
     command := Draw_Command {
       count          = cast(u32)mesh.index_count,

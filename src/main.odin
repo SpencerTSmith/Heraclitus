@@ -373,8 +373,8 @@ main :: proc() {
     helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
     append(&state.entities, helmet)
 
-    chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-    append(&state.entities, chess)
+    // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+    // append(&state.entities, chess)
 
     duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
     append(&state.entities, duck1)

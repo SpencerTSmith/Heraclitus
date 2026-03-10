@@ -14,10 +14,11 @@ Multi_Draw_State :: struct {
   vertex_count:  int,
   index_count:   int,
 
+  // All triple buffered
   draw_commands: GPU_Buffer,
   draw_uniforms: GPU_Buffer,
-  draw_count: int, // Total
   draw_head:  int,
+  draw_count: int, // Total
 }
 
 init_multi_draw :: proc() -> (mds: Multi_Draw_State) {
@@ -104,4 +105,9 @@ reset_multi_draw :: proc(mds: ^Multi_Draw_State) {
   mds.draw_head  = 0
 }
 
-multi_draw_index_offset :: proc(mds: Multi_Draw_State, offset: uintptr)
+// maybe useless but might as well pull this out in case change it later.
+multi_draw_index_offset :: proc(mds: Multi_Draw_State, add_offset: uintptr) -> (final_offset: uintptr) {
+  final_offset = uintptr(mds.vertex_buffer.index_offset) + add_offset
+
+  return final_offset
+}

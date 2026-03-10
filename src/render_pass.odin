@@ -437,5 +437,7 @@ flush_drawing :: proc() {
   state.began_drawing = false
   state.mesh_draw_calls = 0
 
+  reset_multi_draw(&state.mds)
+
   glfw.SwapBuffers(state.window.handle)
 }
