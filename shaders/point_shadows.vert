@@ -4,9 +4,6 @@
 #extension GL_ARB_shader_viewport_layer_array : enable
 #include "generated.glsl"
 
-layout(location = 0) in vec3 vert_position;
-layout(location = 1) in vec2 vert_uv;
-
 out VS_OUT {
   vec4 world_position;
   vec2 uv;
@@ -17,6 +14,9 @@ out VS_OUT {
 
 // NOTE: This only works with a cubemap array target!
 void main() {
+  vec3 vert_position = mesh_vertex_position(gl_VertexID);
+  vec2 vert_uv       = mesh_vertex_uv(gl_VertexID);
+
   mat4 model = draw_uniforms[gl_BaseInstance].model;
 
   int light_index = draw_uniforms[gl_BaseInstance].light_index;

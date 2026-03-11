@@ -2,9 +2,6 @@
 
 #include "generated.glsl"
 
-layout(location = 0) in vec3 vert_position;
-layout(location = 1) in vec2 vert_uv;
-
 out VS_OUT {
   vec2 uv;
 
@@ -12,6 +9,9 @@ out VS_OUT {
 } vs_out;
 
 void main() {
+  vec3 vert_position = mesh_vertex_position(gl_VertexID);
+  vec2 vert_uv       = mesh_vertex_uv(gl_VertexID);
+
   vs_out.draw_id = gl_BaseInstance;
   vs_out.uv      = vert_uv;
 

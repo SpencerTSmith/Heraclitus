@@ -13,6 +13,7 @@ UBO_Bind :: enum u32 {
   FRAME         = 0,
   TEXTURES      = 1,
   DRAW_UNIFORMS = 2,
+  MESH_VERTICES = 3,
 }
 
 MAX_SHADOW_POINT_LIGHTS :: 8
@@ -220,22 +221,50 @@ gen_glsl_code :: proc() {
     fmt.sbprintf(&b, "#define %v %v\n", bind_names[e], int(e))
   }
   fmt.sbprintln(&b)
-  fmt.sbprintf(&b, "layout(binding = %v, std140) uniform Frame_Uniform_UBO {{\n", bind_names[.FRAME])
+  fmt.sbprintf(&b, "layout(binding = %v, std140) uniform Frame_Uniform_UBO {{\n",
+               bind_names[.FRAME])
   fmt.sbprintf(&b, "  %v frame;\n", typeid_of(Frame_Uniform))
   fmt.sbprintf(&b, "};\n\n")
 
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Texture_Handles {{\n", bind_names[.TEXTURES])
+  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Texture_Handles {{\n",
+               bind_names[.TEXTURES])
   fmt.sbprintf(&b, "  sampler2D textures[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Draw_Uniforms {{\n", bind_names[.DRAW_UNIFORMS])
+  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Draw_Uniforms {{\n",
+               bind_names[.DRAW_UNIFORMS])
   fmt.sbprintf(&b, "  Draw_Uniform draw_uniforms[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
+  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Vertices {{\n",
+               bind_names[.MESH_VERTICES])
+  fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
+  fmt.sbprintf(&b, "};\n\n")
+
+  // TODO: Can probably generate these instead of hard coding, might not be worth the effort...
   append_always := `
 vec4 bindless_sample(int index, vec2 uv) {
   return texture(textures[index], uv);
 }
+
+vec3 mesh_vertex_position(int index) {
+  return vec3(mesh_vertices[index].position[0],
+              mesh_vertices[index].position[1],
+              mesh_vertices[index].position[2]);
+}
+vec2 mesh_vertex_uv(int index) {
+  return vec2(mesh_vertices[index].uv[0],
+              mesh_vertices[index].uv[1]);
+}
+vec3 mesh_vertex_normal(int index) {
+  return vec3(mesh_vertices[index].normal[0],
+              mesh_vertices[index].normal[1],
+              mesh_vertices[index].normal[2]);
+}
+vec4 mesh_vertex_tangent(int index) {
+  return mesh_vertices[index].tangent;
+}
+
 `
 
   fmt.sbprint(&b, append_always)

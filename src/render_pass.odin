@@ -435,7 +435,6 @@ flush_drawing :: proc() {
   state.curr_frame_index = (state.curr_frame_index + 1) % FRAMES_IN_FLIGHT
 
   state.began_drawing = false
-  state.mesh_draw_calls = 0
 
   reset_multi_draw(&state.mds)
 

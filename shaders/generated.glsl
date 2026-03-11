@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 10-03-2026 (02:39:39 am)
+// NOTE: This code was generated on 11-03-2026 (05:21:06 am)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -80,6 +80,7 @@ struct Mesh_Vertex {
 #define FRAME_BINDING 0
 #define TEXTURES_BINDING 1
 #define DRAW_UNIFORMS_BINDING 2
+#define MESH_VERTICES_BINDING 3
 
 layout(binding = FRAME_BINDING, std140) uniform Frame_Uniform_UBO {
   Frame_Uniform frame;
@@ -93,7 +94,30 @@ layout(binding = DRAW_UNIFORMS_BINDING, std430) readonly buffer Draw_Uniforms {
   Draw_Uniform draw_uniforms[];
 };
 
+layout(binding = MESH_VERTICES_BINDING, std430) readonly buffer Mesh_Vertices {
+  Mesh_Vertex mesh_vertices[];
+};
+
 
 vec4 bindless_sample(int index, vec2 uv) {
   return texture(textures[index], uv);
 }
+
+vec3 mesh_vertex_position(int index) {
+  return vec3(mesh_vertices[index].position[0],
+              mesh_vertices[index].position[1],
+              mesh_vertices[index].position[2]);
+}
+vec2 mesh_vertex_uv(int index) {
+  return vec2(mesh_vertices[index].uv[0],
+              mesh_vertices[index].uv[1]);
+}
+vec3 mesh_vertex_normal(int index) {
+  return vec3(mesh_vertices[index].normal[0],
+              mesh_vertices[index].normal[1],
+              mesh_vertices[index].normal[2]);
+}
+vec4 mesh_vertex_tangent(int index) {
+  return mesh_vertices[index].tangent;
+}
+

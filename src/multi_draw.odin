@@ -10,6 +10,7 @@ MAX_VERTICES :: 4  * mem.Megabyte
 MAX_INDICES  :: 16 * mem.Megabyte
 
 Multi_Draw_State :: struct {
+  vao: u32,
   vertex_buffer: GPU_Buffer,
   vertex_count:  int,
   index_count:   int,
@@ -22,7 +23,23 @@ Multi_Draw_State :: struct {
 }
 
 init_multi_draw :: proc() -> (mds: Multi_Draw_State) {
-  mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
+  // mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
+
+  vertex_length := MAX_VERTICES * size_of(Mesh_Vertex)
+  index_length  := MAX_INDICES  * size_of(Mesh_Index)
+
+  vertex_length_align := align_size_for_gpu(vertex_length)
+  index_length_align  := align_size_for_gpu(index_length)
+
+  total_size := vertex_length_align + index_length_align
+
+  mds.vertex_buffer = make_gpu_buffer(.STORAGE, total_size)
+  mds.vertex_buffer.index_offset = vertex_length_align
+  gl.CreateVertexArrays(1, &mds.vao)
+  gl.VertexArrayElementBuffer(mds.vao, mds.vertex_buffer.id)
+
+  bind_gpu_buffer_base(mds.vertex_buffer, .MESH_VERTICES)
+
   mds.draw_commands = make_gpu_buffer(.STORAGE, size_of(Draw_Command) * MAX_DRAWS,
                                       persistent = true)
   mds.draw_uniforms = make_gpu_buffer(.STORAGE, size_of(Draw_Uniform) * MAX_DRAWS,
@@ -84,7 +101,7 @@ push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_U
 }
 
 multi_draw :: proc(mds: ^Multi_Draw_State) {
-  bind_vertex_buffer(mds.vertex_buffer)
+  // bind_vertex_buffer(mds.vertex_buffer)
   gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, mds.draw_commands.id)
 
   // Since we can't bind the base we do a frame offset here
@@ -93,6 +110,7 @@ multi_draw :: proc(mds: ^Multi_Draw_State) {
 
   batch_count := cast(i32) (mds.draw_count - mds.draw_head)
 
+  gl.BindVertexArray(mds.vao)
   gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT,
     cast([^]gl.DrawElementsIndirectCommand)batch_offset, batch_count, 0)
 
@@ -105,6 +123,7 @@ reset_multi_draw :: proc(mds: ^Multi_Draw_State) {
   mds.draw_head  = 0
 }
 
+// NOTE: Returns the byte offset.
 // maybe useless but might as well pull this out in case change it later.
 multi_draw_index_offset :: proc(mds: Multi_Draw_State, add_offset: uintptr) -> (final_offset: uintptr) {
   final_offset = uintptr(mds.vertex_buffer.index_offset) + add_offset

@@ -48,8 +48,6 @@ State :: struct {
 
   began_drawing: bool,
 
-  mesh_draw_calls: int,
-
   z_near: f32,
   z_far:  f32,
 
