@@ -9,7 +9,7 @@ layout(binding = 1) uniform sampler2D bloom_blur;
 
 uniform float exposure = 1.0;
 
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color;
 
 void main() {
   vec3 hdr_color   = texture(screen_texture, fs_in.uv).rgb;

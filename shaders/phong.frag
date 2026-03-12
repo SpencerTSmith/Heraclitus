@@ -12,7 +12,7 @@ in VS_OUT {
   flat int draw_id;
 } fs_in;
 
-layout(location=0) out vec4 frag_color;
+layout(location = 0) out vec4 frag_color;
 
 layout(binding = 0) uniform samplerCube skybox;
 layout(binding = 1) uniform sampler2D sun_shadow_map;

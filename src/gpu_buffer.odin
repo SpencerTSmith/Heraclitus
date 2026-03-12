@@ -1,7 +1,7 @@
 package main
 
 import "core:mem"
-import "core:reflect"
+// import "core:reflect"
 
 import gl "vendor:OpenGL"
 
@@ -16,7 +16,6 @@ import gl "vendor:OpenGL"
 GPU_Buffer_Type :: enum {
   NONE,
   UNIFORM,
-  VERTEX,
   STORAGE,
 }
 
@@ -35,54 +34,53 @@ GPU_Buffer :: struct #no_copy {
   index_offset: int,
 }
 
-// Pass in a vertex struct get an VAO with automatic vertex attribs... metaprogramming hahaha
-// NOTE: Still need to bind the vertex buffer to the vertex array... this just sets up attribs
-// FIXME: Only really works if all members are float arrays
-make_vertex_vao :: proc($vert_type: typeid) -> u32 {
-  vao: u32
-  gl.CreateVertexArrays(1, &vao)
-
-  // Helper
-  type_to_gl_type :: proc(id: typeid) -> (gl_type: u32) {
-    switch id {
-    case f32:
-      gl_type = gl.FLOAT
-    case f64:
-      gl_type = gl.DOUBLE
-    }
-
-    return gl_type
-  }
-
-  type_info := type_info_of(vert_type)
-
-  if reflect.is_struct(type_info) {
-    for field, i in reflect.struct_fields_zipped(vert_type) {
-      field_gl_type: u32
-      field_length := 1
-
-      if reflect.is_array(field.type) {
-        array_type := field.type.variant.(reflect.Type_Info_Array)
-
-        field_length = array_type.count
-        field_gl_type = type_to_gl_type(array_type.elem.id)
-      }
-
-      gl.EnableVertexArrayAttrib(vao,  u32(i))
-      gl.VertexArrayAttribFormat(vao,  u32(i), i32(field_length), field_gl_type, gl.FALSE, u32(field.offset))
-      gl.VertexArrayAttribBinding(vao, u32(i), 0)
-    }
-  } else if reflect.is_array(type_info) {
-    array_type := type_info.variant.(reflect.Type_Info_Array)
-
-    field_gl_type := type_to_gl_type(array_type.elem.id)
-    gl.EnableVertexArrayAttrib(vao,  0)
-    gl.VertexArrayAttribFormat(vao,  0, i32(array_type.count), field_gl_type, gl.FALSE, 0)
-    gl.VertexArrayAttribBinding(vao, 0, 0)
-  }
-
-  return vao
-}
+// NOTE: No longer necessary with vertex pulling... remove eventually
+// // Pass in a vertex struct get an VAO with automatic vertex attribs... metaprogramming hahaha
+// make_vertex_vao :: proc($vert_type: typeid) -> u32 {
+//   vao: u32
+//   gl.CreateVertexArrays(1, &vao)
+//
+//   // Helper
+//   type_to_gl_type :: proc(id: typeid) -> (gl_type: u32) {
+//     switch id {
+//     case f32:
+//       gl_type = gl.FLOAT
+//     case f64:
+//       gl_type = gl.DOUBLE
+//     }
+//
+//     return gl_type
+//   }
+//
+//   type_info := type_info_of(vert_type)
+//
+//   if reflect.is_struct(type_info) {
+//     for field, i in reflect.struct_fields_zipped(vert_type) {
+//       field_gl_type: u32
+//       field_length := 1
+//
+//       if reflect.is_array(field.type) {
+//         array_type := field.type.variant.(reflect.Type_Info_Array)
+//
+//         field_length = array_type.count
+//         field_gl_type = type_to_gl_type(array_type.elem.id)
+//       }
+//
+//       gl.EnableVertexArrayAttrib(vao,  u32(i))
+//       gl.VertexArrayAttribFormat(vao,  u32(i), i32(field_length), field_gl_type, gl.FALSE, u32(field.offset))
+//       gl.VertexArrayAttribBinding(vao, u32(i), 0)
+//     }
+//   } else if reflect.is_array(type_info) {
+//     array_type := type_info.variant.(reflect.Type_Info_Array)
+//
+//     field_gl_type := type_to_gl_type(array_type.elem.id)
+//     gl.EnableVertexArrayAttrib(vao,  0)
+//     gl.VertexArrayAttribFormat(vao,  0, i32(array_type.count), field_gl_type, gl.FALSE, 0)
+//     gl.VertexArrayAttribBinding(vao, 0, 0)
+//   }
+//
+//   return vao
+// }
 
 align_size_for_gpu :: proc(size: int) -> (aligned: int) {
   min_alignment: i32
@@ -92,9 +90,9 @@ align_size_for_gpu :: proc(size: int) -> (aligned: int) {
  return aligned
 }
 
+// Now just a fast path for putting vertices and indices into a SSBO.
 make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count: int = 0,
                            vertex_data: rawptr = nil, index_data: rawptr = nil, persistent: bool = false) -> (buffer: GPU_Buffer) {
-  vao := make_vertex_vao(vertex_type)
 
   vertex_length := vertex_count * size_of(vertex_type)
   index_length  := index_count  * size_of(Mesh_Index) // FIXME: Hardcoded, but can't pass in compile time known arg defaults
@@ -104,16 +102,15 @@ make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count:
 
   total_size := vertex_length_align + index_length_align
 
-  buffer = make_gpu_buffer(.VERTEX, total_size, persistent = persistent)
+  buffer = make_gpu_buffer(.STORAGE, total_size, persistent = persistent)
 
-  buffer.vao = u32(vao)
+  // Ack
+  gl.CreateVertexArrays(1, &buffer.vao);
+  if (index_length > 0) {
+    gl.VertexArrayElementBuffer(buffer.vao, buffer.id);
+  }
 
   buffer.index_offset = vertex_length_align
-
-  gl.VertexArrayVertexBuffer(vao, 0, buffer.id, 0, i32(size_of(vertex_type)))
-  if index_count > 0 {
-    gl.VertexArrayElementBuffer(vao, buffer.id)
-  }
 
   write_gpu_buffer(buffer, 0, vertex_length, vertex_data)
   write_gpu_buffer(buffer, buffer.index_offset, index_length, index_data)
@@ -122,9 +119,6 @@ make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count:
 }
 
 bind_vertex_buffer :: proc(buffer: GPU_Buffer) {
-  assert(buffer.type == .VERTEX, "Buffer must be of type vertex")
-  assert(buffer.vao != 0, "Must have valid vao")
-
   gl.BindVertexArray(buffer.vao)
 }
 
@@ -177,7 +171,6 @@ buffer_type_to_gl: [GPU_Buffer_Type]u32 = {
   .NONE    = 0,
   .UNIFORM = gl.UNIFORM_BUFFER,
   .STORAGE = gl.SHADER_STORAGE_BUFFER,
-  .VERTEX  = 0, // Should not bind like this
 }
 
 bind_gpu_buffer_base :: proc(buffer: GPU_Buffer, binding: UBO_Bind) {

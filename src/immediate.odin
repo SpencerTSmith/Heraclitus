@@ -60,12 +60,13 @@ immediate: Immediate_State
 init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
   assert(state.gl_initialized)
 
-  vertex_buffer := make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, persistent = true)
+  vertex_buffer := make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT,
+                                      persistent = true)
+  bind_gpu_buffer_base(vertex_buffer, .IMM_VERTICES)
 
   shader := make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc) or_return
 
-  immediate =
-  {
+  immediate = {
     vertex_buffer = vertex_buffer,
     vertex_count  = 0,
     shader  = shader,

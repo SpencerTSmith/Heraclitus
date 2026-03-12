@@ -8,7 +8,7 @@ in VS_OUT {
 
 layout(binding = 0) uniform samplerCube skybox;
 
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color;
 
 void main() {
   vec4 result = vec4(0.0);

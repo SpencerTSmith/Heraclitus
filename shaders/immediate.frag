@@ -5,7 +5,7 @@ in VS_OUT {
   vec4 color;
 } fs_in;
 
-out vec4 frag_color;
+layout(location = 0) out vec4 frag_color;
 
 layout(binding = 0) uniform sampler2D tex;
 

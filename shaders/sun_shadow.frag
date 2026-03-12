@@ -2,9 +2,6 @@
 
 #include "generated.glsl"
 
-layout(location = 0) in vec3 vert_position;
-layout(location = 1) in vec2 vert_uv;
-
 in VS_OUT {
   vec2 uv;
 

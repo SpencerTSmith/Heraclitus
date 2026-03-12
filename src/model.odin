@@ -8,8 +8,8 @@ import "core:path/filepath"
 import "vendor:cgltf"
 import gl "vendor:OpenGL"
 
+// TODO: Remove
 Skybox :: struct {
-  buffer:  GPU_Buffer,
   texture: Texture,
 }
 
@@ -478,25 +478,12 @@ free_model :: proc(model: ^Model) {
   for &material in model.materials {
     free_material(&material)
   }
-
-  // free_gpu_buffer(&model.buffer)
-
-  // delete(model.materials)
-  // delete(model.meshes)
 }
 
 // TODO: Make this work with the asset system
 make_skybox :: proc(file_paths: [6]string) -> (skybox: Skybox, ok: bool) {
-  skybox_verts := SKYBOX_VERTICES
+  skybox.texture, ok = make_texture_cube_map(file_paths)
 
-  buffer  := make_vertex_buffer(vec3, len(skybox_verts), vertex_data = raw_data(skybox_verts))
-  texture := make_texture_cube_map(file_paths) or_return
-
-  skybox = {
-    buffer  = buffer,
-    texture = texture,
-  }
-  ok = true
   return skybox, ok
 }
 
@@ -510,9 +497,6 @@ draw_skybox :: proc(skybox: Skybox) {
   gl.DepthFunc(gl.LEQUAL)
   defer gl.DepthFunc(u32(depth_func_before))
 
-  bind_vertex_buffer(skybox.buffer)
-  defer unbind_vertex_buffer()
-
   bind_texture("skybox", skybox.texture)
 
   gl.DrawArrays(gl.TRIANGLES, 0, 36)
@@ -520,46 +504,6 @@ draw_skybox :: proc(skybox: Skybox) {
 
 free_skybox :: proc(skybox: ^Skybox) {
   free_texture(&skybox.texture)
-  free_gpu_buffer(&skybox.buffer)
-}
-
-SKYBOX_VERTICES :: []vec3{
-  {-1.0,  1.0, -1.0},
-  {-1.0, -1.0, -1.0},
-  { 1.0, -1.0, -1.0},
-  { 1.0, -1.0, -1.0},
-  { 1.0,  1.0, -1.0},
-  {-1.0,  1.0, -1.0},
-  {-1.0, -1.0,  1.0},
-  {-1.0, -1.0, -1.0},
-  {-1.0,  1.0, -1.0},
-  {-1.0,  1.0, -1.0},
-  {-1.0,  1.0,  1.0},
-  {-1.0, -1.0,  1.0},
-  { 1.0, -1.0, -1.0},
-  { 1.0, -1.0,  1.0},
-  { 1.0,  1.0,  1.0},
-  { 1.0,  1.0,  1.0},
-  { 1.0,  1.0, -1.0},
-  { 1.0, -1.0, -1.0},
-  {-1.0, -1.0,  1.0},
-  {-1.0,  1.0,  1.0},
-  { 1.0,  1.0,  1.0},
-  { 1.0,  1.0,  1.0},
-  { 1.0, -1.0,  1.0},
-  {-1.0, -1.0,  1.0},
-  {-1.0,  1.0, -1.0},
-  { 1.0,  1.0, -1.0},
-  { 1.0,  1.0,  1.0},
-  { 1.0,  1.0,  1.0},
-  {-1.0,  1.0,  1.0},
-  {-1.0,  1.0, -1.0},
-  {-1.0, -1.0, -1.0},
-  {-1.0, -1.0,  1.0},
-  { 1.0, -1.0, -1.0},
-  { 1.0, -1.0, -1.0},
-  {-1.0, -1.0,  1.0},
-  { 1.0, -1.0,  1.0},
 }
 
 DEFAULT_TRIANGLE_VERT :: []Mesh_Vertex {

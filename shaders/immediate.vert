@@ -2,10 +2,6 @@
 
 #include "generated.glsl"
 
-layout(location = 0) in vec3 vert_position;
-layout(location = 1) in vec2 vert_uv;
-layout(location = 2) in vec4 vert_color;
-
 out VS_OUT {
   vec2 uv;
   vec4 color;
@@ -14,6 +10,10 @@ out VS_OUT {
 uniform mat4 transform;
 
 void main() {
+  vec3 vert_position = immediate_vertex_position(gl_VertexID);
+  vec2 vert_uv       = immediate_vertex_uv(gl_VertexID);
+  vec4 vert_color    = immediate_vertex_color(gl_VertexID);
+
   vs_out.uv    = vert_uv;
   vs_out.color = vert_color;
 

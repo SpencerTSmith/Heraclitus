@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 11-03-2026 (05:21:06 am)
+// NOTE: This code was generated on 12-03-2026 (00:43:55 am)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -74,13 +74,20 @@ struct Mesh_Vertex {
   float position[3];
   float uv[2];
   float normal[3];
-  vec4 tangent;
+  float tangent[4];
+};
+
+struct Immediate_Vertex {
+  float position[3];
+  float uv[2];
+  float color[4];
 };
 
 #define FRAME_BINDING 0
 #define TEXTURES_BINDING 1
 #define DRAW_UNIFORMS_BINDING 2
 #define MESH_VERTICES_BINDING 3
+#define IMM_VERTICES_BINDING 4
 
 layout(binding = FRAME_BINDING, std140) uniform Frame_Uniform_UBO {
   Frame_Uniform frame;
@@ -96,6 +103,10 @@ layout(binding = DRAW_UNIFORMS_BINDING, std430) readonly buffer Draw_Uniforms {
 
 layout(binding = MESH_VERTICES_BINDING, std430) readonly buffer Mesh_Vertices {
   Mesh_Vertex mesh_vertices[];
+};
+
+layout(binding = IMM_VERTICES_BINDING, std430) readonly buffer Immediate_Vertices {
+  Immediate_Vertex immediate_vertices[];
 };
 
 
@@ -118,6 +129,25 @@ vec3 mesh_vertex_normal(int index) {
               mesh_vertices[index].normal[2]);
 }
 vec4 mesh_vertex_tangent(int index) {
-  return mesh_vertices[index].tangent;
+  return vec4(mesh_vertices[index].tangent[0],
+              mesh_vertices[index].tangent[1],
+              mesh_vertices[index].tangent[2],
+              mesh_vertices[index].tangent[3]);
+}
+
+vec3 immediate_vertex_position(int index) {
+  return vec3(immediate_vertices[index].position[0],
+              immediate_vertices[index].position[1],
+              immediate_vertices[index].position[2]);
+}
+vec2 immediate_vertex_uv(int index) {
+  return vec2(immediate_vertices[index].uv[0],
+              immediate_vertices[index].uv[1]);
+}
+vec4 immediate_vertex_color(int index) {
+  return vec4(immediate_vertices[index].color[0],
+              immediate_vertices[index].color[1],
+              immediate_vertices[index].color[2],
+              immediate_vertices[index].color[3]);
 }
 

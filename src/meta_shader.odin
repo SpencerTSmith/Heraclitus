@@ -14,13 +14,14 @@ UBO_Bind :: enum u32 {
   TEXTURES      = 1,
   DRAW_UNIFORMS = 2,
   MESH_VERTICES = 3,
+  IMM_VERTICES  = 4,
 }
 
 MAX_SHADOW_POINT_LIGHTS :: 8
 MAX_POINT_LIGHTS :: 128
 
 Shadow_Point_Light_Uniform :: struct #align(16) {
-  proj_views:    [6]mat4,
+  proj_views: [6]mat4,
 
   position:  vec4,
 
@@ -128,7 +129,7 @@ gen_glsl_code :: proc() {
   // Gotta have it
   fmt.sbprint(&b, "#extension GL_ARB_bindless_texture : require\n\n")
 
-  to_glsl_basic_type_string :: proc(type: typeid) -> string {
+  to_glsl_basic_type_string :: proc(type: typeid, allow_vec4: bool) -> string {
     s: string
     switch type {
     case f32:
@@ -136,7 +137,7 @@ gen_glsl_code :: proc() {
     case mat4:
       s = "mat4"
     case vec4:
-      s = "vec4"
+      if allow_vec4 { s = "vec4" }
     case u32:
       s = "int"
     case i32:
@@ -152,7 +153,7 @@ gen_glsl_code :: proc() {
 
   // FIXME: Make sure that if we encounter a structure member, that that structure definition has already been parsed
   // Also just other more rigorous things as described in later comments
-  to_glsl_struct :: proc(b: ^strings.Builder, t: typeid) {
+  to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, allow_vec4: bool = true) {
     assert(reflect.is_struct(type_info_of(t)))
 
     fmt.sbprintf(b, "struct %v {{\n", t)
@@ -162,7 +163,7 @@ gen_glsl_code :: proc() {
         // GLSL does not allow out of order declaration
         fmt.sbprintf(b, "  %v %v;\n", field.type.id, field.name)
       } else {
-        basic := to_glsl_basic_type_string(field.type.id)
+        basic := to_glsl_basic_type_string(field.type.id, allow_vec4)
 
         // Wasn't one of the above basic types
         if basic == "" {
@@ -173,7 +174,7 @@ gen_glsl_code :: proc() {
             array_info := info.variant.(reflect.Type_Info_Array)
 
             // Is it possibly an array of basic types?
-            array_type := to_glsl_basic_type_string(array_info.elem.id)
+            array_type := to_glsl_basic_type_string(array_info.elem.id, allow_vec4)
 
             if array_type == "" {
               // NOTE: Its an array of structures probably, but an assumption
@@ -204,7 +205,8 @@ gen_glsl_code :: proc() {
   to_glsl_struct(&b, Material_Uniform)
   to_glsl_struct(&b, Draw_Uniform)
   to_glsl_struct(&b, Frame_Uniform)
-  to_glsl_struct(&b, Mesh_Vertex)
+  to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
+  to_glsl_struct(&b, Immediate_Vertex, allow_vec4 = false)
 
   //
   // Generate buffer bindings
@@ -241,6 +243,11 @@ gen_glsl_code :: proc() {
   fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
+  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Immediate_Vertices {{\n",
+               bind_names[.IMM_VERTICES])
+  fmt.sbprintf(&b, "  Immediate_Vertex immediate_vertices[];\n")
+  fmt.sbprintf(&b, "};\n\n")
+
   // TODO: Can probably generate these instead of hard coding, might not be worth the effort...
   append_always := `
 vec4 bindless_sample(int index, vec2 uv) {
@@ -262,7 +269,26 @@ vec3 mesh_vertex_normal(int index) {
               mesh_vertices[index].normal[2]);
 }
 vec4 mesh_vertex_tangent(int index) {
-  return mesh_vertices[index].tangent;
+  return vec4(mesh_vertices[index].tangent[0],
+              mesh_vertices[index].tangent[1],
+              mesh_vertices[index].tangent[2],
+              mesh_vertices[index].tangent[3]);
+}
+
+vec3 immediate_vertex_position(int index) {
+  return vec3(immediate_vertices[index].position[0],
+              immediate_vertices[index].position[1],
+              immediate_vertices[index].position[2]);
+}
+vec2 immediate_vertex_uv(int index) {
+  return vec2(immediate_vertices[index].uv[0],
+              immediate_vertices[index].uv[1]);
+}
+vec4 immediate_vertex_color(int index) {
+  return vec4(immediate_vertices[index].color[0],
+              immediate_vertices[index].color[1],
+              immediate_vertices[index].color[2],
+              immediate_vertices[index].color[3]);
 }
 
 `
