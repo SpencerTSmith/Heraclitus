@@ -441,7 +441,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
   assert(state.current_shader.id != 0)
 
   for mesh in model.meshes {
-    material := get_material_uniform(model.materials[mesh.material_index])
+    material := material_uniform(model.materials[mesh.material_index])
 
     true_offset := multi_draw_index_offset(state.mds, uintptr(model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
 

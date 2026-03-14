@@ -247,10 +247,10 @@ init_state :: proc() -> (ok: bool)
   state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
   state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
-  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), persistent=true)
+  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), flags = {.PERSISTENT, .FRAME_BUFFERED})
 
   // For bindless textures!
-  state.texture_handles = make_gpu_buffer(.STORAGE, size_of(u64) * MAX_TEXTURE_HANDLES, persistent=true)
+  state.texture_handles = make_gpu_buffer(.STORAGE, size_of(u64) * MAX_TEXTURE_HANDLES, flags = {.PERSISTENT})
   bind_gpu_buffer_base(state.texture_handles, .TEXTURES)
 
   cube_map_sides := [6]string{

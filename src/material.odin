@@ -161,7 +161,7 @@ free_material :: proc(material: ^Material) {
   free_texture(normal)
 }
 
-get_material_uniform :: proc(material: Material) -> (uniform: Material_Uniform){
+material_uniform :: proc(material: Material) -> (uniform: Material_Uniform) {
   assert(state.current_shader.id != 0)
 
   diffuse  := get_texture(material.diffuse)
@@ -213,7 +213,6 @@ free_texture :: proc(texture: ^Texture) {
 
     gl.DeleteTextures(1, &texture.id)
 
-    // Zero it out
     texture^ = {}
   }
 }
@@ -224,8 +223,6 @@ bind_texture :: proc{
 }
 
 bind_texture_slot :: proc(slot: u32, texture: Texture) {
-  // NOTE: Just creating a copy of this struct... maybe not so good an idea?
-  // just store pointers?
   if state.bound_textures[slot].id != texture.id {
     state.bound_textures[slot] = texture
     gl.BindTextureUnit(slot, texture.id)
@@ -371,7 +368,7 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
   return texture
 }
 
-// NOTE: Creates a handle, makes it resident, appends to the end of the texture_handles gpu_buffer, and returns its index
+// Creates a handle, makes it resident, appends to the end of the texture_handles gpu_buffer, and returns its index
 make_texture_bindless :: proc(texture: ^Texture) {
   if texture.handle == 0 {
     texture.handle = gl.GetTextureHandleARB(texture.id)

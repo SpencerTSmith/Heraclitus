@@ -115,21 +115,21 @@ lerp :: glsl.lerp
 // Static array that acts like it is dynamic
 //
 Array :: struct($Type: typeid, $Capacity: int) {
-  data:  [Capacity]Type,
+  v:  [Capacity]Type,
   count: int,
 }
 
 array_slice :: proc(array: ^$A/Array($Type, $Capacity)) -> []Type {
-  return array.data[:array.count]
+  return array.v[:array.count]
 }
 
 array_add :: proc(array: ^$A/Array($Type, $Capacity), item: Type) -> (added: ^Type) {
   assert(array.count < Capacity, "Not enough elements in static array!")
 
-  array.data[array.count] = item
+  array.v[array.count] = item
   array.count += 1
 
-  return &array.data[array.count - 1]
+  return &array.v[array.count - 1]
 }
 
 array_clear :: proc(array: ^$A/Array($Type, $Capacity)) {

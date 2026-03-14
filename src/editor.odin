@@ -133,9 +133,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     input_direction -= camera_right
   }
 
-  // FIXME: This sucks
-  ui_was_interacted := false
-
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
   ui_push_parent(ui_panel(panel_pos, 300, 100))
   {
@@ -143,9 +140,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
     if ui_button("Clear Entity").clicked {
       clear_editor_selected_entity()
-
-      // FIXME: This sucks
-      ui_was_interacted = true
     }
 
     if ui_button("Dupe Entity").clicked {
@@ -157,9 +151,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
         log.infof("Copied entity at index %v", editor.selected_entity_idx)
       }
-
-      // FIXME: This sucks
-      ui_was_interacted = true
     }
 
     // TODO: Probably just work on pool strucuture... needs to be done at some point at there are bugs when removing entities right now
@@ -167,13 +158,10 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
     if ui_button("Delete Entity").clicked {
       if editor.selected_entity != nil {
         unordered_remove(&state.entities, editor.selected_entity_idx)
-        clear_editor_selected_entity()
-
         log.infof("Removed entity at index %v", editor.selected_entity_idx)
-      }
 
-      // FIXME: This sucks
-      ui_was_interacted = true
+        clear_editor_selected_entity()
+      }
     }
   }
 
@@ -184,7 +172,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera^), get_camera_perspective(camera^))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
 
-  if !ui_was_interacted {
+  if !ui_had_interaction() {
     // Pick entity or gizmo only if not doing ui
     if mouse_pressed(.LEFT) {
 

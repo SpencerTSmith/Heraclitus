@@ -26,9 +26,9 @@ init_multi_draw :: proc() -> (mds: Multi_Draw_State) {
   bind_gpu_buffer_base(mds.vertex_buffer, .MESH_VERTICES)
 
   mds.draw_commands = make_gpu_buffer(.STORAGE, size_of(Draw_Command) * MAX_DRAWS,
-                                      persistent = true)
+                                      flags = {.PERSISTENT, .FRAME_BUFFERED})
   mds.draw_uniforms = make_gpu_buffer(.STORAGE, size_of(Draw_Uniform) * MAX_DRAWS,
-                                      persistent = true)
+                                      flags = {.PERSISTENT, .FRAME_BUFFERED})
 
   return mds
 }

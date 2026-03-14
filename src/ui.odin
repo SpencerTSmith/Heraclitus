@@ -11,6 +11,8 @@ UI_State :: struct {
   draws:   Array(UI_Draw, UI_MAX_DRAWS),
 
   current_parent: ^UI_Widget,
+
+  interaction_this_frame: bool,
 }
 
 UI_Widget_Flags :: enum {
@@ -133,11 +135,13 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
 
   if mouse_in_rect(abs_l, abs_t, abs_b, abs_r) {
     results.hovered = true
+    ui.interaction_this_frame = true
   }
 
   if .CLICKABLE in the_widget.flags {
     if results.hovered && mouse_pressed(.LEFT) {
       results.clicked = true
+      ui.interaction_this_frame = true
     }
   }
 
@@ -184,6 +188,10 @@ ui_button :: proc(text: string) -> (results: UI_Results) {
   return results
 }
 
+ui_had_interaction :: proc() -> bool {
+  return ui.interaction_this_frame
+}
+
 // Flushes all UI draw records to the immediate rendering system
 draw_ui :: proc() {
   immediate_begin(.TRIANGLES, {}, .SCREEN, .ALWAYS)
@@ -195,4 +203,5 @@ draw_ui :: proc() {
 
   array_clear(&ui.draws)
   array_clear(&ui.widgets)
+  ui.interaction_this_frame = false
 }

@@ -37,7 +37,7 @@ Immediate_State :: struct {
   white_texture: Texture,
 
   curr_batch: ^Immediate_Batch,
-  batches:    [dynamic]Immediate_Batch,
+  batches:    Array(Immediate_Batch, 256),
 }
 
 // Just a view into the main vertex buffer
@@ -61,7 +61,7 @@ init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
   assert(state.gl_initialized)
 
   vertex_buffer := make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT,
-                                      persistent = true)
+                                      flags = {.PERSISTENT, .FRAME_BUFFERED})
   bind_gpu_buffer_base(vertex_buffer, .IMM_VERTICES)
 
   shader := make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc) or_return
@@ -70,10 +70,7 @@ init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
     vertex_buffer = vertex_buffer,
     vertex_count  = 0,
     shader  = shader,
-    batches = make([dynamic]Immediate_Batch, allocator),
   }
-  MAX_BATCH_COUNT :: 256
-  reserve(&immediate.batches, MAX_BATCH_COUNT)
 
   immediate.white_texture = get_texture_by_name("white.png")^
 
@@ -82,7 +79,7 @@ init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool) {
 
 immediate_frame_reset :: proc() {
   immediate.vertex_count = 0
-  clear(&immediate.batches)
+  array_clear(&immediate.batches)
   immediate.curr_batch = nil
 }
 
@@ -92,7 +89,7 @@ start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
                         space: Immediate_Space,
                         depth: Depth_Test_Mode,
                         ) -> (batch_pointer: ^Immediate_Batch) {
-  append(&immediate.batches, Immediate_Batch {
+  array_add(&immediate.batches, Immediate_Batch {
     vertex_base = immediate.vertex_count, // Always on the end.
 
     primitive = mode,
@@ -101,7 +98,7 @@ start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
     depth = depth,
   })
 
-  return &immediate.batches[len(immediate.batches) - 1]
+  return &immediate.batches.v[immediate.batches.count - 1]
 }
 
 // Starts a new batch if necessary
@@ -123,7 +120,6 @@ immediate_begin_force :: proc() {
 free_immediate_renderer :: proc() {
   free_gpu_buffer(&immediate.vertex_buffer)
   free_shader_program(&immediate.shader)
-  delete(immediate.batches)
 }
 
 // NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right
@@ -467,7 +463,7 @@ immediate_flush :: proc(flush_world := true, flush_screen := true) {
     gl.Disable(gl.CULL_FACE)
 
     frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
-    for batch in immediate.batches {
+    for batch in array_slice(&immediate.batches) {
       if batch.vertex_count > 0 {
         // TODO: Again make this a more generalizable thing probably
         depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)

@@ -9,78 +9,35 @@ import gl "vendor:OpenGL"
 // But I would like a common interface for getting and writing to GPU buffers without worrying whether it is mapped or not
 // As well as writing to them, at the right index
 
-// TODO: Separate concept of persistently mapped and triple buffered
-// Not every case of a persistently mapped buffer must be triple buffered as in the case of our texture_handles ssbo
-// In that case it does not need to be triple buffered, but instead maybe only memory barriered if we need to begin streaming in handles
-
+// Is this even useful anymore? Used to separate buffers more, but seems less useful now.
 GPU_Buffer_Type :: enum {
   NONE,
   UNIFORM,
   STORAGE,
 }
 
+GPU_Buffer_Flag :: enum {
+  PERSISTENT,
+  FRAME_BUFFERED,
+}
+GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
+
 // NOTE: Fat struct... too much voodoo?
 GPU_Buffer :: struct #no_copy {
   id:         u32,
   type:       GPU_Buffer_Type,
+  flags:      GPU_Buffer_Flags,
+
   mapped:     rawptr,
   total_size: int,
 
-  // Frame range, aligned for you, just for tripled up, mapped buffers
+  // Aligned, frame range, for mapped buffers
   range_size: int,
 
   // Vertex specific stuff
   vao:          u32,
   index_offset: int,
 }
-
-// NOTE: No longer necessary with vertex pulling... remove eventually
-// // Pass in a vertex struct get an VAO with automatic vertex attribs... metaprogramming hahaha
-// make_vertex_vao :: proc($vert_type: typeid) -> u32 {
-//   vao: u32
-//   gl.CreateVertexArrays(1, &vao)
-//
-//   // Helper
-//   type_to_gl_type :: proc(id: typeid) -> (gl_type: u32) {
-//     switch id {
-//     case f32:
-//       gl_type = gl.FLOAT
-//     case f64:
-//       gl_type = gl.DOUBLE
-//     }
-//
-//     return gl_type
-//   }
-//
-//   type_info := type_info_of(vert_type)
-//
-//   if reflect.is_struct(type_info) {
-//     for field, i in reflect.struct_fields_zipped(vert_type) {
-//       field_gl_type: u32
-//       field_length := 1
-//
-//       if reflect.is_array(field.type) {
-//         array_type := field.type.variant.(reflect.Type_Info_Array)
-//
-//         field_length = array_type.count
-//         field_gl_type = type_to_gl_type(array_type.elem.id)
-//       }
-//
-//       gl.EnableVertexArrayAttrib(vao,  u32(i))
-//       gl.VertexArrayAttribFormat(vao,  u32(i), i32(field_length), field_gl_type, gl.FALSE, u32(field.offset))
-//       gl.VertexArrayAttribBinding(vao, u32(i), 0)
-//     }
-//   } else if reflect.is_array(type_info) {
-//     array_type := type_info.variant.(reflect.Type_Info_Array)
-//
-//     field_gl_type := type_to_gl_type(array_type.elem.id)
-//     gl.EnableVertexArrayAttrib(vao,  0)
-//     gl.VertexArrayAttribFormat(vao,  0, i32(array_type.count), field_gl_type, gl.FALSE, 0)
-//     gl.VertexArrayAttribBinding(vao, 0, 0)
-//   }
-//
-//   return vao
-// }
 
 align_size_for_gpu :: proc(size: int) -> (aligned: int) {
   min_alignment: i32
@@ -90,63 +47,25 @@ align_size_for_gpu :: proc(size: int) -> (aligned: int) {
  return aligned
 }
 
-// Now just a fast path for putting vertices and indices into a SSBO.
-make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count: int = 0,
-                           vertex_data: rawptr = nil, index_data: rawptr = nil, persistent: bool = false) -> (buffer: GPU_Buffer) {
-
-  vertex_length := vertex_count * size_of(vertex_type)
-  index_length  := index_count  * size_of(Mesh_Index) // FIXME: Hardcoded, but can't pass in compile time known arg defaults
-
-  vertex_length_align := align_size_for_gpu(vertex_length)
-  index_length_align  := align_size_for_gpu(index_length)
-
-  total_size := vertex_length_align + index_length_align
-
-  buffer = make_gpu_buffer(.STORAGE, total_size, persistent = persistent)
-
-  // Ack
-  gl.CreateVertexArrays(1, &buffer.vao);
-  if (index_length > 0) {
-    gl.VertexArrayElementBuffer(buffer.vao, buffer.id);
-  }
-
-  buffer.index_offset = vertex_length_align
-
-  write_gpu_buffer(buffer, 0, vertex_length, vertex_data)
-  write_gpu_buffer(buffer, buffer.index_offset, index_length, index_data)
-
-  return buffer
-}
-
-bind_vertex_buffer :: proc(buffer: GPU_Buffer) {
-  gl.BindVertexArray(buffer.vao)
-}
-
-unbind_vertex_buffer :: proc() {
-  gl.BindVertexArray(0)
-}
-
 // NOTE: right now not possible to get a buffer you can read from with this interface
-make_gpu_buffer :: proc(type: GPU_Buffer_Type, size: int, data: rawptr = nil, persistent: bool = true) -> (buffer: GPU_Buffer) {
+make_gpu_buffer :: proc(type: GPU_Buffer_Type, size: int, data: rawptr = nil, flags: GPU_Buffer_Flags = {}) -> (buffer: GPU_Buffer) {
   assert(state.gl_initialized)
 
+  is_persistent := .PERSISTENT in flags
+  is_buffered   := .FRAME_BUFFERED in flags
+
   buffer.type = type
+  buffer.range_size = align_size_for_gpu(size)
+  buffer.total_size = buffer.range_size * FRAMES_IN_FLIGHT if is_buffered else buffer.range_size
 
   gl.CreateBuffers(1, &buffer.id)
 
-  flags: u32 = gl.MAP_WRITE_BIT|gl.MAP_PERSISTENT_BIT|gl.MAP_COHERENT_BIT if persistent else 0
+  gl_flags: u32 = gl.MAP_WRITE_BIT|gl.MAP_PERSISTENT_BIT|gl.MAP_COHERENT_BIT if is_persistent else 0
 
-  buffer.range_size  = align_size_for_gpu(size)
-  buffer.total_size = buffer.range_size * FRAMES_IN_FLIGHT if persistent else buffer.range_size
+  gl.NamedBufferStorage(buffer.id, buffer.total_size, data, gl_flags | gl.DYNAMIC_STORAGE_BIT)
 
-  gl.NamedBufferStorage(buffer.id, buffer.total_size, data, flags | gl.DYNAMIC_STORAGE_BIT)
-
-  if persistent {
-    buffer.mapped = gl.MapNamedBufferRange(buffer.id, 0, buffer.total_size, flags)
-  }
-
-  if !persistent {
-    assert(buffer.total_size == buffer.range_size)
+  if is_persistent {
+    buffer.mapped = gl.MapNamedBufferRange(buffer.id, 0, buffer.total_size, gl_flags)
   }
 
   return buffer
@@ -227,3 +146,40 @@ free_gpu_buffer :: proc(buffer: ^GPU_Buffer) {
     gl.DeleteBuffers(1, &buffer.id)
   }
 }
+
+// Now just a fast path for putting vertices and indices into a SSBO.
+make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count: int = 0,
+                           vertex_data: rawptr = nil, index_data: rawptr = nil, flags: GPU_Buffer_Flags = {}) -> (buffer: GPU_Buffer) {
+
+  vertex_length := vertex_count * size_of(vertex_type)
+  index_length  := index_count  * size_of(Mesh_Index) // FIXME: Hardcoded, but can't pass in compile time known arg defaults
+
+  vertex_length_align := align_size_for_gpu(vertex_length)
+  index_length_align  := align_size_for_gpu(index_length)
+
+  total_size := vertex_length_align + index_length_align
+
+  buffer = make_gpu_buffer(.STORAGE, total_size, flags = flags)
+
+  // Ack
+  gl.CreateVertexArrays(1, &buffer.vao);
+  if (index_length > 0) {
+    gl.VertexArrayElementBuffer(buffer.vao, buffer.id);
+  }
+
+  buffer.index_offset = vertex_length_align
+
+  write_gpu_buffer(buffer, 0, vertex_length, vertex_data)
+  write_gpu_buffer(buffer, buffer.index_offset, index_length, index_data)
+
+  return buffer
+}
+
+bind_vertex_buffer :: proc(buffer: GPU_Buffer) {
+  gl.BindVertexArray(buffer.vao)
+}
+
+unbind_vertex_buffer :: proc() {
+  gl.BindVertexArray(0)
+}
+
