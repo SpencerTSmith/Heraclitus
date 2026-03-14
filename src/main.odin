@@ -131,12 +131,14 @@ init_state :: proc() -> (ok: bool)
   glfw.MakeContextCurrent(state.window.handle)
   glfw.SwapInterval(1)
 
-  glfw.SetFramebufferSizeCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32) {
+  glfw.SetFramebufferSizeCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
+  {
     state.window.w = int(width)
     state.window.h = int(height)
     state.window.resized = true
   })
-  glfw.SetScrollCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64) {
+  glfw.SetScrollCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64)
+  {
     // Just get the direction
     dir_x := math.sign(x_scroll)
     dir_y := math.sign(y_scroll)
@@ -147,21 +149,36 @@ init_state :: proc() -> (ok: bool)
 
   gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
 
+  gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
+  {
+    switch (severity)
+    {
+      case gl.DEBUG_SEVERITY_NOTIFICATION:
+      case gl.DEBUG_SEVERITY_LOW:
+      case gl.DEBUG_SEVERITY_MEDIUM:
+      case gl.DEBUG_SEVERITY_HIGH:
+    }
+  }, nil)
+
   //
   // Query GL extensions
   //
-  needed_extensions := []string {
+  needed_extensions: []string =
+  {
     "GL_ARB_shader_viewport_layer_array",
     "GL_ARB_bindless_texture",
   }
 
   extension_count: i32
   gl.GetIntegerv(gl.NUM_EXTENSIONS, &extension_count)
-  for i in 0..<extension_count {
+  for i in 0..<extension_count
+  {
     have := gl.GetStringi(gl.EXTENSIONS, u32(i))
 
-    for need in needed_extensions {
-      if string(have) == need {
+    for need in needed_extensions
+    {
+      if string(have) == need
+      {
         log.infof("Necessary GL extension: %v is supported!", need)
       }
     }
@@ -178,7 +195,8 @@ init_state :: proc() -> (ok: bool)
   mem.arena_init(&state.perm, state.perm_mem)
   state.perm_alloc = mem.arena_allocator(&state.perm)
 
-  state.camera = {
+  state.camera =
+  {
     sensitivity  = 0.2,
     yaw          = 270.0,
     position     = {0.0, 0.0, 5.0},
@@ -188,7 +206,7 @@ init_state :: proc() -> (ok: bool)
   }
 
   MAX_ENTITY_COUNT :: 10000
-  state.entities     = make([dynamic]Entity, state.perm_alloc)
+  state.entities = make([dynamic]Entity, state.perm_alloc)
   reserve(&state.entities, MAX_ENTITY_COUNT)
 
   state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
@@ -208,7 +226,8 @@ init_state :: proc() -> (ok: bool)
   state.shaders[.GAUSSIAN]    = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
   state.shaders[.GET_BRIGHT]  = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
 
-  state.sun = {
+  state.sun =
+  {
     direction = {0.5, -1.0,  0.7},
     color     = {0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
@@ -219,7 +238,8 @@ init_state :: proc() -> (ok: bool)
 
   state.bloom_on = true
 
-  state.flashlight = {
+  state.flashlight =
+  {
 
     direction = {0.0, 0.0, -1.0},
     position  = state.camera.position,
@@ -253,7 +273,8 @@ init_state :: proc() -> (ok: bool)
   state.texture_handles = make_gpu_buffer(.STORAGE, size_of(u64) * MAX_TEXTURE_HANDLES, flags = {.PERSISTENT})
   bind_gpu_buffer_base(state.texture_handles, .TEXTURES)
 
-  cube_map_sides := [6]string{
+  cube_map_sides: [6]string =
+  {
     "skybox/right.jpg",
     "skybox/left.jpg",
     "skybox/top.jpg",
@@ -280,20 +301,25 @@ init_state :: proc() -> (ok: bool)
   return true
 }
 
-main :: proc() {
+main :: proc()
+{
   logger := log.create_console_logger()
   context.logger = logger
   defer log.destroy_console_logger(logger)
 
-  when ODIN_DEBUG {
+  when ODIN_DEBUG
+  {
     track: mem.Tracking_Allocator
     mem.tracking_allocator_init(&track, context.allocator)
     context.allocator = mem.tracking_allocator(&track)
 
-    defer {
-      if len(track.allocation_map) > 0 {
+    defer
+    {
+      if len(track.allocation_map) > 0
+      {
         log.errorf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-        for _, entry in track.allocation_map {
+        for _, entry in track.allocation_map
+        {
           log.errorf("- %v bytes @ %v\n", entry.size, entry.location)
         }
       }
@@ -309,13 +335,15 @@ main :: proc() {
     }
   }
 
-  if !init_state() {
+  if !init_state()
+  {
     log.fatalf("Failed to initialize global state")
     return
   }
   defer free_state()
 
-  for pos in DEFAULT_MODEL_POSITIONS {
+  for pos in DEFAULT_MODEL_POSITIONS
+  {
     block := make_entity("cube/BoxTextured.gltf", position=pos - {20,0,30})
     append(&state.entities, block)
   }
@@ -344,54 +372,55 @@ main :: proc() {
   pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
   append(&state.entities, pl)
 
-  // NOTE: Have to gen tangents for these and that takes too long
-  if true {
-    sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
-    append(&state.entities, sponza)
+  sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
+  append(&state.entities, sponza)
 
-    // Sponza lights
+  // Sponza lights
+  {
+    spacing := 20
+    bounds  := 4
+    y_bounds := bounds/2
+    for x in 0..<bounds
     {
-      spacing := 20
-      bounds  := 4
-      y_bounds := bounds/2
-      for x in 0..<bounds {
-        for y in 0..<y_bounds {
-          x0 := (x - bounds/2) * spacing
-          y0 := y * spacing / 2 + 1
+      for y in 0..<y_bounds
+      {
+        x0 := (x - bounds/2) * spacing
+        y0 := y * spacing / 2 + 1
 
-          position := vec3{sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z}
-          color    := vec4{rand.float32() * 10.0, rand.float32() * 10.0, rand.float32() * 10.0, 1.0}
+        position := vec3{sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z}
+        color    := vec4{rand.float32() * 10.0, rand.float32() * 10.0, rand.float32() * 10.0, 1.0}
 
-          p := make_point_light_entity(position, color, 10, 1.0, cast_shadows=false)
-          append(&state.entities, p)
-        }
+        p := make_point_light_entity(position, color, 10, 1.0, cast_shadows=false)
+        append(&state.entities, p)
       }
     }
-
-    helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-    append(&state.entities, helmet)
-
-    // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-    // append(&state.entities, chess)
-
-    duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
-    append(&state.entities, duck1)
-
-    duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
-    append(&state.entities, duck2)
   }
+
+  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+  append(&state.entities, helmet)
+
+  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
+  // append(&state.entities, chess)
+
+  duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
+  append(&state.entities, duck1)
+
+  duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
+  append(&state.entities, duck2)
 
   // Clean up temp allocator from initialization... fresh for per-frame allocations
   free_all(context.temp_allocator)
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
-  for (!should_close()) {
+  for (!should_close())
+  {
     // Resize check
     if state.window.resized { resize_window() }
 
     // dt and sleeping
-    if (time.tick_since(last_frame_time) < TARGET_FRAME_TIME_NS) {
+    if (time.tick_since(last_frame_time) < TARGET_FRAME_TIME_NS)
+    {
       time.accurate_sleep(TARGET_FRAME_TIME_NS - time.tick_since(last_frame_time))
     }
 
@@ -405,34 +434,42 @@ main :: proc() {
 
     poll_input_state(dt_s)
 
-    if key_pressed(.ESCAPE) {
+    if key_pressed(.ESCAPE)
+    {
       toggle_menu()
     }
 
-    if key_pressed(.F1) {
+    if key_pressed(.F1)
+    {
       state.draw_debug = !state.draw_debug
     }
 
-    if key_pressed(.TAB) {
+    if key_pressed(.TAB)
+    {
       state.mode = .EDIT if state.mode == .GAME else .GAME
     }
 
-    if key_pressed(.L) {
+    if key_pressed(.L)
+    {
       state.sun_on = !state.sun_on
     }
-    if key_pressed(.P) {
+    if key_pressed(.P)
+    {
       state.point_lights_on = !state.point_lights_on
     }
-    if key_pressed(.F) {
+    if key_pressed(.F)
+    {
       state.flashlight_on = !state.flashlight_on
     }
 
-    if key_pressed(.B) {
+    if key_pressed(.B)
+    {
       state.bloom_on = !state.bloom_on
     }
 
     // 'Simulate' (not really doing much right now) if in game mode
-    if state.mode == .GAME {
+    if state.mode == .GAME
+    {
       move_camera_game(&state.camera, dt_s)
       state.flashlight.position  = state.camera.position
       state.flashlight.direction = get_camera_forward(state.camera)
@@ -440,20 +477,24 @@ main :: proc() {
       //
       // Collision
       //
-      for &e in state.entities {
+      for &e in state.entities
+      {
         if .STATIC in e.flags { continue } // Static things should not be movable
         if .COLLISION not_in e.flags { continue }
 
         entity_aabb := entity_world_aabb(e)
 
-        for &o in state.entities {
+        for &o in state.entities
+        {
           if &o == &e { continue } // Same entity
 
-          if .COLLISION not_in o.flags { continue }
+          if .COLLISION not_in o.flags
+          { continue }
 
           other_aabb := entity_world_aabb(o)
 
-          if aabbs_intersect(entity_aabb, other_aabb) {
+          if aabbs_intersect(entity_aabb, other_aabb)
+          {
             min_pen := aabb_min_penetration_vector(entity_aabb, other_aabb)
 
             e.position += min_pen
@@ -463,7 +504,8 @@ main :: proc() {
 
     }
 
-    if state.mode == .EDIT {
+    if state.mode == .EDIT
+    {
       do_editor(&state.camera, dt_s)
     }
 
