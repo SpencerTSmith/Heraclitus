@@ -171,7 +171,8 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
     text = text,
     text_pos = vec2{abs_l + padding, abs_t + text_height},
     text_color = RED if results.hovered else WHITE,
-    quad = {
+    quad =
+    {
       top_left = abs,
       width    = w,
       height   = h,

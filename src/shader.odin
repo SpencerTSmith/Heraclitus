@@ -5,6 +5,7 @@ import "core:log"
 import "core:strings"
 import "core:fmt"
 import "core:time"
+import "base:runtime"
 
 import gl "vendor:OpenGL"
 
@@ -181,7 +182,7 @@ free_shader :: proc(shader: Shader) {
   gl.DeleteShader(u32(shader))
 }
 
-make_shader_program :: proc(vert_name, frag_name: string, allocator := context.allocator) -> (program: Shader_Program, ok: bool)
+make_shader_program :: proc(vert_name, frag_name: string, allocator: runtime.Allocator) -> (program: Shader_Program, ok: bool)
 {
   vert_path := join_file_path({SHADER_DIR, vert_name}, context.temp_allocator)
   frag_path := join_file_path({SHADER_DIR, frag_name}, context.temp_allocator)
@@ -229,7 +230,7 @@ make_shader_program :: proc(vert_name, frag_name: string, allocator := context.a
   return program, ok
 }
 
-make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.allocator) -> (uniforms: map[string]Uniform)
+make_shader_uniform_map :: proc(program: Shader_Program, allocator: runtime.Allocator) -> (uniforms: map[string]Uniform)
 {
   uniform_count: i32
   gl.GetProgramiv(program.id, gl.ACTIVE_UNIFORMS, &uniform_count)
@@ -273,7 +274,7 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator := context.al
   return uniforms
 }
 
-hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator := context.allocator)
+hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator: runtime.Allocator)
 {
   // TODO: Maybe keep track of includes... any programs that include get recompiled
   for &s, tag in shaders

@@ -407,7 +407,10 @@ begin_drawing :: proc()
 {
   // Probably fine to have a little bit of fragmenting in perm_arena...
   // only going to be doing hot reloads while developing
-  hot_reload_shaders(&state.shaders, state.perm_alloc)
+  when ODIN_DEBUG
+  {
+    hot_reload_shaders(&state.shaders, state.perm_alloc)
+  }
 
   frame := &state.frames[state.curr_frame_index]
   if frame.fence != nil
