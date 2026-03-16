@@ -6,7 +6,8 @@ UI_MAX_DRAWS           :: 512
 UI_WIDGET_MAX_CHILDREN :: 8
 
 // TODO: Either need to clear these data structures every frame or hash them some how if we want to cache them
-UI_State :: struct {
+UI_State :: struct
+{
   widgets: Array(UI_Widget, UI_MAX_WIDGETS), // Probably want a pool or fridge array generic eventually
   draws:   Array(UI_Draw, UI_MAX_DRAWS),
 
@@ -15,7 +16,8 @@ UI_State :: struct {
   interaction_this_frame: bool,
 }
 
-UI_Widget_Flags :: enum {
+UI_Widget_Flags :: enum
+{
   DRAW_TEXT,
   DRAW_BACKGROUND,
   CLICKABLE,
@@ -23,7 +25,8 @@ UI_Widget_Flags :: enum {
 }
 
 // Units for size and position are screen coords in pixels
-UI_Widget :: struct {
+UI_Widget :: struct
+{
   flags: bit_set[UI_Widget_Flags],
 
   position: vec2, // Relative to the parent
@@ -41,12 +44,14 @@ UI_Widget :: struct {
 // NOTE: It might be better to have these as flags
 // But then we will no langer have the nice syntax of:
 // if ui_button(...).clicked {}
-UI_Results :: struct {
+UI_Results :: struct
+{
   clicked: bool,
   hovered: bool,
 }
 
-UI_Draw :: struct {
+UI_Draw :: struct
+{
   // Optional
   text:       string,
   text_pos:   vec2,
@@ -59,11 +64,13 @@ UI_Draw :: struct {
 @(private="file")
 ui: UI_State
 
-calc_ui_absolute_position :: proc(widget: UI_Widget) -> (absolute: vec2) {
+calc_ui_absolute_position :: proc(widget: UI_Widget) -> vec2
+{
   ancestor := widget.parent
   x: f32
   y: f32
-  for ancestor != nil {
+  for ancestor != nil
+  {
     x += ancestor.position.x
     y += ancestor.position.y
 
@@ -80,11 +87,15 @@ calc_ui_absolute_position :: proc(widget: UI_Widget) -> (absolute: vec2) {
 // Fit to text size, fit to parent, fit to children, etc.
 
 make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, width, height: f32,
-                       text: string) -> (the_widget: ^UI_Widget, results: UI_Results) {
+                       text: string) -> (the_widget: ^UI_Widget, results: UI_Results)
+{
   l, t, b, r: f32
-  if .DRAW_TEXT in flags {
+  if .DRAW_TEXT in flags
+  {
     l, t, b, r = text_draw_rect(text, state.default_font, relative_pos.x, relative_pos.y)
-  } else {
+  }
+  else
+  {
     l = relative_pos.x
     t = relative_pos.y
     b = t + height
@@ -96,7 +107,8 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
   padding: f32 = TEXT_PADDING if .DRAW_TEXT in flags else 0.0
 
   w, h: f32
-  if .DRAW_BACKGROUND in flags {
+  if .DRAW_BACKGROUND in flags
+  {
     l = l - padding
     t = t - padding
     w = r - l + padding
@@ -112,9 +124,11 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
   })
 
   // Now within the parent's children where does it need to be?
-  if ui.current_parent != nil {
+  if ui.current_parent != nil
+  {
     layout_cursor: f32
-    for child in array_slice(&ui.current_parent.children) {
+    for child in array_slice(&ui.current_parent.children)
+    {
       layout_cursor += child.height
       layout_cursor += ui.current_parent.child_padding
     }
@@ -133,13 +147,16 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
   abs_b := abs_t + the_widget.height
   abs_r := abs_l + the_widget.width
 
-  if mouse_in_rect(abs_l, abs_t, abs_b, abs_r) {
+  if mouse_in_rect(abs_l, abs_t, abs_b, abs_r)
+  {
     results.hovered = true
     ui.interaction_this_frame = true
   }
 
-  if .CLICKABLE in the_widget.flags {
-    if results.hovered && mouse_pressed(.LEFT) {
+  if .CLICKABLE in the_widget.flags
+  {
+    if results.hovered && mouse_pressed(.LEFT)
+    {
       results.clicked = true
       ui.interaction_this_frame = true
     }
@@ -165,22 +182,26 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
   return the_widget, results
 }
 
-ui_push_parent :: proc(widget: ^UI_Widget) {
+ui_push_parent :: proc(widget: ^UI_Widget)
+{
   ui.current_parent = widget
 }
 
-ui_pop_parent :: proc() {
+ui_pop_parent :: proc()
+{
   ui.current_parent = nil
 }
 
-ui_panel :: proc(pos: vec2, width, height: f32) -> (panel: ^UI_Widget) {
+ui_panel :: proc(pos: vec2, width, height: f32) -> (panel: ^UI_Widget)
+{
   panel, _ = make_ui_widget({}, pos, width, height, "")
 
   return panel
 }
 
 // Requires a parent
-ui_button :: proc(text: string) -> (results: UI_Results) {
+ui_button :: proc(text: string) -> (results: UI_Results)
+{
   assert(ui.current_parent != nil)
 
   _, results = make_ui_widget({.DRAW_TEXT, .DRAW_BACKGROUND, .CLICKABLE}, {}, 0, 0, text)
@@ -188,15 +209,18 @@ ui_button :: proc(text: string) -> (results: UI_Results) {
   return results
 }
 
-ui_had_interaction :: proc() -> bool {
+ui_had_interaction :: proc() -> bool
+{
   return ui.interaction_this_frame
 }
 
 // Flushes all UI draw records to the immediate rendering system
-draw_ui :: proc() {
+draw_ui :: proc()
+{
   immediate_begin(.TRIANGLES, {}, .SCREEN, .ALWAYS)
 
-  for d in array_slice(&ui.draws) {
+  for d in array_slice(&ui.draws)
+  {
     immediate_quad(d.quad.top_left, d.quad.width, d.quad.height, d.quad_color)
     draw_text(d.text, state.default_font, d.text_pos.x, d.text_pos.y, d.text_color)
   }

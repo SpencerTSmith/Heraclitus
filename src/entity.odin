@@ -1,15 +1,18 @@
-package main
+package
+main
 
 import "core:log"
 
-Entity_Flags :: enum {
+Entity_Flags :: enum
+{
   COLLISION,
   RENDERABLE,
   STATIC, // Should never 'move'
 }
 
 // TODO: Point light should probably be a handle and not a pointer, depends on if we keep the global point light array as dynamic
-Entity :: struct {
+Entity :: struct
+{
   flags:    bit_set[Entity_Flags],
 
   position: vec3,
@@ -35,15 +38,18 @@ make_entity :: proc(model: string,
                     position: vec3 = {0, 0, 0},
                     rotation: vec3 = {0, 0, 0},
                     scale:    vec3 = {1, 1, 1},
-                    color:    vec4 = {1, 1, 1, 1}) -> Entity {
+                    color:    vec4 = {1, 1, 1, 1}) -> (entity: Entity)
+{
   model, ok := load_model(model)
-  if !ok {
+  if !ok
+  {
     log.warnf("Entity failed to load model: %v", model)
   }
 
   assert(.STATIC not_in flags || .COLLISION in flags, "Static entities must have collsion")
 
-  entity := Entity {
+  entity =
+  {
     flags    = flags,
     position = position,
     scale    = scale,
@@ -59,7 +65,8 @@ make_entity :: proc(model: string,
 //
 // Common entity combos
 //
-make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: f32, cast_shadows := false) -> Entity {
+make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: f32, cast_shadows := false) -> (entity: Entity)
+{
   append(&state.point_lights, Point_Light {
     position  = position,
     color     = color,
@@ -69,7 +76,8 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
     dirty_shadow = true,
   })
 
-  entity := Entity {
+  entity =
+  {
     position = position,
     scale    = {1, 1, 1},
     color    = color,
@@ -79,11 +87,13 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
   return entity
 }
 
-duplicate_entity :: proc(entity: Entity) -> (duplicate: Entity) {
+duplicate_entity :: proc(entity: Entity) -> (duplicate: Entity)
+{
   duplicate = entity
 
   // Need to make a new point light, model handle is fine to be copied as that's already handled by asset system
-  if duplicate.point_light != nil {
+  if duplicate.point_light != nil
+  {
     pl_copy := duplicate.point_light^
 
     append(&state.point_lights, pl_copy)
@@ -93,42 +103,33 @@ duplicate_entity :: proc(entity: Entity) -> (duplicate: Entity) {
   return duplicate
 }
 
-entity_has_transparency :: proc(e: Entity) -> bool {
+entity_has_transparency :: proc(e: Entity) -> bool
+{
   model := get_model(e.model)
 
-  if model != nil {
-    return model_has_transparency(model^)
-  } else {
-    return false
-  }
+  return model_has_transparency(model^)
 }
 
 // NOTE: This layer of drawing deals with assets not being present yet
 // the draw_model call is only for if we KNOW the model is loaded
-draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false, light_index: u32 = 0) {
-  if draw_aabbs {
+draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false, light_index: u32 = 0)
+{
+  if draw_aabbs
+  {
     draw_aabb(entity_world_aabb(e))
   }
 
-  if .RENDERABLE not_in e.flags { return }
-
-  model := get_model(e.model)
-
-  if model != nil {
+  if .RENDERABLE in e.flags
+  {
+    model := get_model(e.model)
     draw_model(model^, model_mat=entity_model_mat4(e), mul_color=color, instances=instances, light_index=light_index)
-  } else {
-    log.warnf("Tried to draw entity with unloaded model")
   }
 }
 
 // TODO: Cache these and only recompute if we've moved
 entity_world_aabb :: proc(e: Entity) -> (world_aabb: AABB) {
   model := get_model(e.model)
-
-  // If it has a model
-  if model != nil {
-    world_aabb = transform_aabb(model.aabb, e.position, e.rotation, e.scale)
-  }
+  world_aabb = transform_aabb(model.aabb, e.position, e.rotation, e.scale)
 
   return world_aabb
 }

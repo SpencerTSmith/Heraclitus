@@ -2,7 +2,6 @@ package main
 
 import "core:log"
 import "core:os"
-import "core:path/filepath"
 
 import stbtt "vendor:stb/truetype"
 import gl "vendor:OpenGL"
@@ -16,7 +15,8 @@ FONT_CHAR_COUNT :: FONT_LAST_CHAR - FONT_FIRST_CHAR
 FONT_ATLAS_WIDTH  :: 512
 FONT_ATLAS_HEIGHT :: 512
 
-Font_Glyph :: struct {
+Font_Glyph :: struct
+{
   // Atlas bounding box
   x0: f32,
   y0: f32,
@@ -29,7 +29,8 @@ Font_Glyph :: struct {
 }
 
 // NOTE: This is not integrated with the general asset system and deals with actual textures and such...
-Font :: struct {
+Font :: struct
+{
   pixel_height: f32,
   scale:        f32,
 
@@ -43,70 +44,81 @@ Font :: struct {
   atlas:  Texture,
 }
 
-Text_Alignment :: enum {
+Text_Alignment :: enum
+{
   LEFT,
   CENTER,
   RIGHT,
 }
 
-make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool) {
-  rel_path := filepath.join({FONT_DIR, file_name}, context.temp_allocator)
+make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool)
+{
+  rel_path := join_file_path({FONT_DIR, file_name}, context.temp_allocator)
 
   font_data: []byte
-  font_data, ok = os.read_entire_file(rel_path, context.temp_allocator)
-  if !ok {
+  err: os.Error
+  font_data, err = os.read_entire_file(rel_path, context.temp_allocator)
+  if err != nil
+  {
     log.error("Couldn't read font file: %s", rel_path)
-    return font, ok
+    ok = false
   }
+  else
+  {
+    // NOTE: Always loads only the first font
+    font_info: stbtt.fontinfo
+    ok = bool(stbtt.InitFont(&font_info, raw_data(font_data), stbtt.GetFontOffsetForIndex(raw_data(font_data), 0)))
+    if ok
+    {
+      font.pixel_height = pixel_height
 
-  font.pixel_height = pixel_height
+      stbtt.GetFontVMetrics(&font_info, &font.ascent, &font.descent, &font.line_gap)
+      font.scale = stbtt.ScaleForPixelHeight(&font_info, pixel_height)
 
-  // NOTE: Always loads only the first font
-  font_info: stbtt.fontinfo
-  ok = bool(stbtt.InitFont(&font_info, raw_data(font_data), stbtt.GetFontOffsetForIndex(raw_data(font_data), 0)))
-  if !ok {
-    log.error("STB Truetype could not init font file: %s", rel_path)
-    return font, ok
-  }
+      font.line_height = font.scale * f32(font.ascent - font.descent + font.line_gap)
 
-  stbtt.GetFontVMetrics(&font_info, &font.ascent, &font.descent, &font.line_gap)
-  font.scale = stbtt.ScaleForPixelHeight(&font_info, pixel_height)
+      bitmap := make([]byte, FONT_ATLAS_WIDTH * FONT_ATLAS_HEIGHT, context.temp_allocator)
 
-  font.line_height = font.scale * f32(font.ascent - font.descent + font.line_gap)
+      packed_chars: [FONT_CHAR_COUNT]stbtt.packedchar
+      pack_context: stbtt.pack_context
+      stbtt.PackBegin(&pack_context, raw_data(bitmap), FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT, 0, 1, nil)
+      stbtt.PackFontRange(&pack_context, raw_data(font_data), 0, pixel_height, FONT_FIRST_CHAR, FONT_CHAR_COUNT, &packed_chars[0])
+      stbtt.PackEnd(&pack_context)
 
-  bitmap := make([]byte, FONT_ATLAS_WIDTH * FONT_ATLAS_HEIGHT, context.temp_allocator)
+      for char, i in packed_chars
+      {
+        font.glyphs[i] =
+        {
+          x0 = f32(char.x0) / FONT_ATLAS_WIDTH,
+          y0 = f32(char.y0) / FONT_ATLAS_HEIGHT,
+          x1 = f32(char.x1) / FONT_ATLAS_WIDTH,
+          y1 = f32(char.y1) / FONT_ATLAS_HEIGHT,
 
-  packed_chars: [FONT_CHAR_COUNT]stbtt.packedchar
-  pack_context: stbtt.pack_context
-  stbtt.PackBegin(&pack_context, raw_data(bitmap), FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT, 0, 1, nil)
-  stbtt.PackFontRange(&pack_context, raw_data(font_data), 0, pixel_height, FONT_FIRST_CHAR, FONT_CHAR_COUNT, &packed_chars[0])
-  stbtt.PackEnd(&pack_context)
+          advance = char.xadvance,
+          x_off   = char.xoff,
+          y_off   = char.yoff,
+        }
+      }
 
-  for char, i in packed_chars {
-    font.glyphs[i] = {
-      x0 = f32(char.x0) / FONT_ATLAS_WIDTH,
-      y0 = f32(char.y0) / FONT_ATLAS_HEIGHT,
-      x1 = f32(char.x1) / FONT_ATLAS_WIDTH,
-      y1 = f32(char.y1) / FONT_ATLAS_HEIGHT,
+      font.atlas = make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
 
-      advance = char.xadvance,
-      x_off   = char.xoff,
-      y_off   = char.yoff,
+      // Make R show up as alpha
+      swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED}
+      gl.TextureParameteriv(font.atlas.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
+    }
+    else
+    {
+      log.error("STB Truetype could not init font file: %s", rel_path)
     }
   }
-
-  font.atlas = make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
-
-  // Make R show up as alpha
-  swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED}
-  gl.TextureParameteriv(font.atlas.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
 
   return font, ok
 }
 
 // TODO: May wish to use the bounding box of each glyph
 text_draw_rect :: proc(text: string, font: Font, x, y: f32,
-                       align: Text_Alignment = .LEFT) -> (left, top, bottom, right: f32) {
+                       align: Text_Alignment = .LEFT) -> (left, top, bottom, right: f32)
+{
   width, height := text_draw_size(text, font)
   left   = align_text_start_x(text, font, x, align)
   right  = left + width
@@ -116,14 +128,17 @@ text_draw_rect :: proc(text: string, font: Font, x, y: f32,
   return left, top, bottom, right
 }
 
-text_draw_size :: proc(text: string, font: Font) -> (w, h: f32) {
+text_draw_size :: proc(text: string, font: Font) -> (w, h: f32)
+{
   max_line_width: f32
 
   line_count := 1
 
   line_width: f32
-  for c in text {
-    if c == '\n' {
+  for c in text
+  {
+    if c == '\n'
+    {
       line_count += 1
 
       max_line_width = max(line_width, max_line_width)
@@ -147,8 +162,10 @@ text_draw_size :: proc(text: string, font: Font) -> (w, h: f32) {
 }
 
 @(private="file")
-align_text_start_x :: proc(text: string, font: Font, x: f32, align: Text_Alignment) -> (x_start: f32) {
-  switch align {
+align_text_start_x :: proc(text: string, font: Font, x: f32, align: Text_Alignment) -> (x_start: f32)
+{
+  switch align
+  {
   case .LEFT:
     x_start = x
   case .CENTER:
@@ -162,17 +179,20 @@ align_text_start_x :: proc(text: string, font: Font, x: f32, align: Text_Alignme
   return x_start
 }
 
-text_draw_width :: proc(text: string, font: Font) -> f32 {
+text_draw_width :: proc(text: string, font: Font) -> f32
+{
   w, _ := text_draw_size(text, font)
   return w
 }
 
-text_draw_height :: proc(text: string, font: Font) -> f32 {
+text_draw_height :: proc(text: string, font: Font) -> f32
+{
   _, h := text_draw_size(text, font)
   return h
 }
 
-draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT) {
+draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT)
+{
   assert(font.atlas.id != 0, "Tried to use uninitialized font")
 
   x_start := align_text_start_x(text, font, x, align)
@@ -182,8 +202,10 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, alig
 
   immediate_begin(.TRIANGLES, font.atlas, .SCREEN, .ALWAYS)
 
-  for c in text {
-    if c == '\n' {
+  for c in text
+  {
+    if c == '\n'
+    {
       y_cursor += font.line_height
       x_cursor = x_start
       continue
@@ -191,7 +213,7 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, alig
 
     glyph := font.glyphs[c - FONT_FIRST_CHAR]
 
-    char_xy := vec2{x_cursor + glyph.x_off, y_cursor + glyph.y_off}
+    char_xy := vec2 {x_cursor + glyph.x_off, y_cursor + glyph.y_off}
     char_w  := (glyph.x1 - glyph.x0) * FONT_ATLAS_WIDTH
     char_h  := (glyph.y1 - glyph.y0) * FONT_ATLAS_HEIGHT
 
@@ -207,7 +229,8 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, alig
 DEFAULT_TEXT_BACKGROUND :: vec4{0.0, 0.0, 0.0, 0.7}
 
 draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT,
-                                  padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) -> (left, top, bottom, right: f32) {
+                                  padding: f32, background_color: vec4 = DEFAULT_TEXT_BACKGROUND) -> (left, top, bottom, right: f32)
+{
   l, t, b, r := text_draw_rect(text, font, x, y, align)
 
   w := r - l
@@ -231,6 +254,8 @@ draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_colo
   return left, top, bottom, right
 }
 
-free_font :: proc(font: ^Font) {
+free_font :: proc(font: ^Font)
+{
   free_texture(&font.atlas)
+  font^ = {}
 }

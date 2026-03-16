@@ -3,7 +3,8 @@ package main
 POINT_SHADOW_MAP_SIZE  :: 512
 SUN_SHADOW_MAP_SIZE    :: 4096
 
-Point_Light :: struct {
+Point_Light :: struct
+{
   position:    vec3,
 
   color:       vec4,
@@ -17,7 +18,8 @@ Point_Light :: struct {
   dirty_shadow: bool, // For caching shadow maps
 }
 
-Direction_Light :: struct {
+Direction_Light :: struct
+{
   direction: vec3,
 
   color:     vec4,
@@ -26,7 +28,8 @@ Direction_Light :: struct {
   ambient:   f32,
 }
 
-Spot_Light :: struct {
+Spot_Light :: struct
+{
   position:     vec3,
   direction:    vec3,
 

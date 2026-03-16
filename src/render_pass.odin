@@ -6,7 +6,8 @@ import "core:slice"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
 
-Framebuffer :: struct {
+Framebuffer :: struct
+{
   id:            u32,
 
   attachments:   []Framebuffer_Attachment,
@@ -20,7 +21,8 @@ Framebuffer :: struct {
 
 DEFAULT_FRAMEBUFFER :: Framebuffer{}
 
-Framebuffer_Attachment :: enum {
+Framebuffer_Attachment :: enum
+{
   COLOR,
   HDR_COLOR,
   DEPTH,
@@ -29,13 +31,15 @@ Framebuffer_Attachment :: enum {
   DEPTH_CUBE_ARRAY,
 }
 
-Face_Cull_Mode :: enum {
+Face_Cull_Mode :: enum
+{
   DISABLED,
   FRONT,
   BACK,
 }
 
-Depth_Test_Mode :: enum {
+Depth_Test_Mode :: enum
+{
   DISABLED,
   ALWAYS,
   LESS,
@@ -43,25 +47,29 @@ Depth_Test_Mode :: enum {
 }
 
 // NOTE: Read left to right as src factor and dst factor
-Blend_Mode :: enum {
+Blend_Mode :: enum
+{
   DISABLED,
   ALPHA_ONE_MINUS_ALPHA,
 }
 
-Viewport :: struct {
+Viewport :: struct
+{
   x: i32,
   y: i32,
   w: i32,
   h: i32,
 }
 
-Render_Pass_Flags :: enum {
+Render_Pass_Flags :: enum
+{
   CLEAR_FRAMEBUFFER,
   USE_ALL_FRAMEBUFFER_VIEWPORT,
   USE_WINDOW_VIEWPORT,
 }
 
-Render_Pass :: struct {
+Render_Pass :: struct
+{
   flags:      bit_set[Render_Pass_Flags],
 
   depth_test: Depth_Test_Mode,
@@ -109,9 +117,11 @@ UI_PASS :: Render_Pass {
 }
 
 // TODO: Save state as it was before this pass, perhaps as an optional return
-begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
+begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer)
+{
   bind_framebuffer(fb)
-  if .CLEAR_FRAMEBUFFER in pass.flags {
+  if .CLEAR_FRAMEBUFFER in pass.flags
+  {
     clear_framebuffer(fb)
   }
 
@@ -122,7 +132,8 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
   DISABLED_SENTINEL :: 0
 
   // Depth Testing
-  gl_depth_map: [Depth_Test_Mode]u32 = {
+  gl_depth_map: [Depth_Test_Mode]u32 =
+  {
     .DISABLED   = DISABLED_SENTINEL,
 
     .ALWAYS     = gl.ALWAYS,
@@ -131,15 +142,19 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
   }
   gl_depth := gl_depth_map[pass.depth_test]
 
-  if gl_depth == DISABLED_SENTINEL {
+  if gl_depth == DISABLED_SENTINEL
+  {
     gl.Disable(gl.DEPTH_TEST)
-  } else {
+  }
+  else
+  {
     gl.Enable(gl.DEPTH_TEST)
     gl.DepthFunc(gl_depth)
   }
 
   // Face Culling
-  gl_cull_map: [Face_Cull_Mode]u32 = {
+  gl_cull_map: [Face_Cull_Mode]u32 =
+  {
     .DISABLED = DISABLED_SENTINEL,
 
     .FRONT    = gl.FRONT,
@@ -147,41 +162,53 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
   }
   gl_cull := gl_cull_map[pass.face_cull]
 
-  if gl_cull == DISABLED_SENTINEL {
+  if gl_cull == DISABLED_SENTINEL
+  {
     gl.Disable(gl.CULL_FACE)
-  } else {
+  }
+  else
+  {
     gl.Enable(gl.CULL_FACE)
     gl.CullFace(gl_cull)
   }
 
   // Blending
-  gl_blend_map: [Blend_Mode][2]u32 = {
+  gl_blend_map: [Blend_Mode][2]u32 =
+  {
     .DISABLED = {DISABLED_SENTINEL, DISABLED_SENTINEL},
 
     .ALPHA_ONE_MINUS_ALPHA = {gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA},
   }
   gl_blend := gl_blend_map[pass.blend]
 
-  if gl_blend == DISABLED_SENTINEL {
+  if gl_blend == DISABLED_SENTINEL
+  {
     gl.Disable(gl.BLEND)
-  } else {
+  }
+  else
+  {
     gl.Enable(gl.BLEND)
     gl.BlendFunc(gl_blend[0], gl_blend[1])
   }
 
   // Viewport
   vp: Viewport
-  if .USE_ALL_FRAMEBUFFER_VIEWPORT in pass.flags {
+  if .USE_ALL_FRAMEBUFFER_VIEWPORT in pass.flags
+  {
     vp.x = 0
     vp.y = 0
     vp.w = cast(i32) fb.width
     vp.h = cast(i32) fb.height
-  } else if .USE_WINDOW_VIEWPORT in pass.flags {
+  }
+  else if .USE_WINDOW_VIEWPORT in pass.flags
+  {
     vp.x = 0
     vp.y = 0
     vp.w = cast(i32) state.window.w
     vp.h = cast(i32) state.window.h
-  } else {
+  }
+  else
+  {
     vp = pass.viewport
   }
 
@@ -191,8 +218,8 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer) {
 // For now depth target can either be depth only or depth+stencil,
 // also can only have one attachment of each type
 make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
-                         attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL},
-                         ) -> (buffer: Framebuffer, ok: bool) {
+                         attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL}) -> (buffer: Framebuffer, ok: bool)
+{
   fbo: u32
   gl.CreateFramebuffers(1, &fbo)
 
@@ -201,8 +228,10 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
 
   gl_attachments := make([dynamic]u32, context.temp_allocator)
 
-  for attachment in attachments {
-    switch attachment {
+  for attachment in attachments
+  {
+    switch attachment
+    {
     case .COLOR:
       color_target := alloc_texture(._2D, .RGBA8, .NONE, width, height, samples=samples)
       attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
@@ -255,26 +284,33 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
 
   gl.NamedFramebufferDrawBuffers(fbo, cast(i32)len(color_targets), raw_data(gl_attachments))
 
-  buffer = {
-    id            = fbo,
-    attachments   = slice.clone(attachments, state.perm_alloc),
-    color_targets = slice.clone(color_targets[:], state.perm_alloc),
-    depth_target  = depth_target,
-    sample_count  = samples,
-    width         = width,
-    height        = height,
+
+  if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
+  {
+    buffer =
+    {
+      id            = fbo,
+      attachments   = slice.clone(attachments, state.perm_alloc),
+      color_targets = slice.clone(color_targets[:], state.perm_alloc),
+      depth_target  = depth_target,
+      sample_count  = samples,
+      width         = width,
+      height        = height,
+    }
+    ok = true
   }
-  if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE {
+  else
+  {
     log.error("Unable to create complete framebuffer: %v", buffer)
-    return {}, false
+    ok = false
   }
 
-  ok = true
   return buffer, ok
 }
 
 // NOTE: If none passed in clear the default framebuffer
-clear_framebuffer :: proc(fb: Framebuffer, color := BLACK) {
+clear_framebuffer :: proc(fb: Framebuffer, color := BLACK)
+{
   clear_color := color
 
   // Hmm may want this to be controllable maybe
@@ -282,37 +318,46 @@ clear_framebuffer :: proc(fb: Framebuffer, color := BLACK) {
   DEFAULT_STENCIL :: 0.0
 
   // This is the default framebuffer
-  if fb.id == 0 {
+  if fb.id == 0
+  {
     gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, 0, raw_data(&clear_color))
     gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, DEFAULT_DEPTH, DEFAULT_STENCIL)
-  } else {
+  }
+  else
+  {
     // This is a created framebuffer
 
     // Clear ALL the draw buffers
-    for _, idx in fb.color_targets {
+    for _, idx in fb.color_targets
+    {
       gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, i32(idx), raw_data(&clear_color))
     }
 
     // Clear depth stencil target if it exists
-    if fb.depth_target.format == .DEPTH24_STENCIL8 {
+    if fb.depth_target.format == .DEPTH24_STENCIL8
+    {
       gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, DEFAULT_DEPTH, DEFAULT_STENCIL)
     }
 
     // Clear depth target if it exists
-    if fb.depth_target.format == .DEPTH32 {
+    if fb.depth_target.format == .DEPTH32
+    {
       default_depth: f32 = DEFAULT_DEPTH // Since we need a pointer, can't use constant
       gl.ClearNamedFramebufferfv(fb.id, gl.DEPTH, 0, &default_depth)
     }
   }
 }
 
-bind_framebuffer :: proc(fb: Framebuffer) {
+bind_framebuffer :: proc(fb: Framebuffer)
+{
   // Should be fine for binding default if pass in empty struct
   gl.BindFramebuffer(gl.FRAMEBUFFER, fb.id)
 }
 
-free_framebuffer :: proc(fb: ^Framebuffer) {
-  for &c in fb.color_targets {
+free_framebuffer :: proc(fb: ^Framebuffer)
+{
+  for &c in fb.color_targets
+  {
     free_texture(&c)
   }
   free_texture(&fb.depth_target)
@@ -321,12 +366,14 @@ free_framebuffer :: proc(fb: ^Framebuffer) {
 
 // NOTE: This blits the entire size of the targets, respectively
 // As well as always blitting color and depth buffer info
-blit_framebuffers :: proc(from, to: Framebuffer) {
+blit_framebuffers :: proc(from, to: Framebuffer)
+{
   gl_filter: u32 = gl.NEAREST
 
   // TODO: Is this a good idea? Basically only use filtering if we aren't blitting from a multisample buffer
   // and they are not the same size
-  if from.sample_count > 1 && (from.width != to.width || from.height != to.height) {
+  if from.sample_count > 1 && (from.width != to.width || from.height != to.height)
+  {
     log.info("Blitting with linear filtering, check if that was something you wished to do")
     gl_filter = gl.LINEAR
   }
@@ -339,13 +386,15 @@ blit_framebuffers :: proc(from, to: Framebuffer) {
 }
 
 // TODO: Find a way to assert that the currently bound shader has the to_screen vertex shader
-draw_screen_quad :: proc() {
+draw_screen_quad :: proc()
+{
   gl.BindVertexArray(state.empty_vao)
   gl.DrawArrays(gl.TRIANGLES, 0, 6)
 }
 
 // Will use the same sample count and attachment list as the old
-remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (new_buffer: Framebuffer, ok: bool) {
+remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (new_buffer: Framebuffer, ok: bool)
+{
   old_samples     := frame_buffer.sample_count
   old_attachments := frame_buffer.attachments
   free_framebuffer(frame_buffer)
@@ -354,13 +403,15 @@ remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (n
   return new_buffer, ok
 }
 
-begin_drawing :: proc() {
+begin_drawing :: proc()
+{
   // Probably fine to have a little bit of fragmenting in perm_arena...
   // only going to be doing hot reloads while developing
   hot_reload_shaders(&state.shaders, state.perm_alloc)
 
   frame := &state.frames[state.curr_frame_index]
-  if frame.fence != nil {
+  if frame.fence != nil
+  {
     gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, U64_MAX)
     gl.DeleteSync(frame.fence)
 
@@ -381,7 +432,8 @@ begin_drawing :: proc() {
   //
   projection := get_camera_perspective(state.camera)
   view       := get_camera_view(state.camera)
-  frame_ubo: Frame_Uniform = {
+  frame_ubo: Frame_Uniform =
+  {
     projection      = projection,
     view            = view,
     proj_view       = projection * view,
@@ -395,24 +447,37 @@ begin_drawing :: proc() {
     flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
   }
 
-  if state.point_lights_on {
-    for pl in state.point_lights {
-      if pl.cast_shadows {
-        if frame_ubo.shadow_points_count >= MAX_SHADOW_POINT_LIGHTS {
+  // FIXME: Terribly ugly, pull stuff out.
+  if state.point_lights_on
+  {
+    for pl in state.point_lights
+    {
+      if pl.cast_shadows
+      {
+        if frame_ubo.shadow_points_count >= MAX_SHADOW_POINT_LIGHTS
+        {
           log.errorf("Too many shadow casting point lights! Adding to non shadow casting lights.")
 
+          // FIXME: Doesn't check if this buffer is also full.
           idx := frame_ubo.points_count
           frame_ubo.point_lights[idx] = point_light_uniform(pl)
           frame_ubo.points_count += 1
-        } else {
+        }
+        else
+        {
           idx := frame_ubo.shadow_points_count
           frame_ubo.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
           frame_ubo.shadow_points_count += 1
         }
-      } else {
-        if frame_ubo.shadow_points_count >= MAX_POINT_LIGHTS {
-          log.errorf("Too many shadow casting point lights! Ignoring.")
-        } else {
+      }
+      else
+      {
+        if frame_ubo.points_count >= MAX_POINT_LIGHTS
+        {
+          log.errorf("Too many point lights! Ignoring.")
+        }
+        else
+        {
           idx := frame_ubo.points_count
           frame_ubo.point_lights[idx] = point_light_uniform(pl)
           frame_ubo.points_count += 1
@@ -426,7 +491,8 @@ begin_drawing :: proc() {
   bind_gpu_buffer_frame_range(state.mds.draw_uniforms, .DRAW_UNIFORMS)
 }
 
-flush_drawing :: proc() {
+flush_drawing :: proc()
+{
   immediate_frame_reset()
 
   // And set up for next frame

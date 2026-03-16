@@ -1,6 +1,5 @@
 package main
 
-import "core:path/filepath"
 import "core:log"
 import "core:strings"
 import "core:math"
@@ -10,7 +9,8 @@ import stbi "vendor:stb/image"
 
 
 // TODO: Unify texture creation under 1 function group would be nice
-Texture_Type :: enum {
+Texture_Type :: enum
+{
   NONE,
   _2D,
   CUBE,
@@ -19,14 +19,16 @@ Texture_Type :: enum {
 
 // NOTE: Maybe once more complicated sampler setups can move samplers into separate thing, but for
 // now we really only need these combos for everything anyways
-Sampler_Config :: enum {
+Sampler_Config :: enum
+{
   NONE,
   REPEAT_TRILINEAR,
   REPEAT_LINEAR,
   CLAMP_LINEAR,
 }
 
-Texture :: struct {
+Texture :: struct
+{
   id:     u32,
   handle: u64,
   index:  int, // Into the texture_handles gpu_buffer
@@ -40,7 +42,8 @@ Texture :: struct {
   sampler: Sampler_Config,
 }
 
-Pixel_Format :: enum u32 {
+Pixel_Format :: enum u32
+{
   NONE,
   R8,
   RGB8,
@@ -57,13 +60,15 @@ Pixel_Format :: enum u32 {
   DEPTH24_STENCIL8,
 }
 
-Material_Blend_Mode :: enum {
+Material_Blend_Mode :: enum
+{
   OPAQUE = 0,
   BLEND,
   MASK,
 }
 
-Material :: struct {
+Material :: struct
+{
   diffuse:   Texture_Handle,
   specular:  Texture_Handle,
   emissive:  Texture_Handle,
@@ -74,7 +79,8 @@ Material :: struct {
   blend: Material_Blend_Mode,
 }
 
-make_material :: proc {
+make_material :: proc
+{
   make_material_from_files,
 }
 
@@ -90,10 +96,12 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
                                  normal_path   := NORMAL_DEFAULT,
                                  shininess: f32 = 32.0,
                                  blend: Material_Blend_Mode = .OPAQUE,
-                                 in_texture_dir: bool = false) -> (material: Material, ok: bool) {
+                                 in_texture_dir: bool = false) -> (material: Material, ok: bool)
+{
   // HACK: Quite ugly but I think this makes it a nicer interface
   // But always remember too much VOOODOO?!
-  resolve_path :: proc(argument, default: string, argument_in_dir: bool) -> (resolved: string, in_texture_dir: bool) {
+  resolve_path :: proc(argument, default: string, argument_in_dir: bool) -> (resolved: string, in_texture_dir: bool)
+  {
     if argument == "" || argument == default {
       resolved       = default
       in_texture_dir = true
@@ -111,25 +119,29 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
   normal,   normal_in_dir   := resolve_path(normal_path,   NORMAL_DEFAULT,   in_texture_dir)
 
   material.diffuse, ok  = load_texture(diffuse, nonlinear_color = true, in_texture_dir = diffuse_in_dir)
-  if !ok {
+  if !ok
+  {
     material.diffuse,_ = load_texture("missing.png")
     log.errorf("Unable to create diffuse texture \"%v\" for material, using missing", diffuse)
   }
 
   material.specular, ok  = load_texture(specular, in_texture_dir = specular_in_dir)
-  if !ok {
+  if !ok
+  {
     material.specular,_ = load_texture("missing.png")
     log.errorf("Unable to create specular texture \"%v\" for material, using missing", specular)
   }
 
   material.emissive, ok = load_texture(emissive, in_texture_dir = emissive_in_dir)
-  if !ok {
+  if !ok
+  {
     material.emissive,_ = load_texture("missing.png")
     log.errorf("Unable to create emissive texture \"%v\" for material, using missing", emissive)
   }
 
   material.normal, ok = load_texture(normal, in_texture_dir = normal_in_dir)
-  if !ok {
+  if !ok
+  {
     material.normal,_ = load_texture("missing.png")
     log.errorf("Unable to create normal texture \"%v\" for material, using missing", normal)
   }
@@ -149,7 +161,8 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
   return material, ok
 }
 
-free_material :: proc(material: ^Material) {
+free_material :: proc(material: ^Material)
+{
   diffuse  := get_texture(material.diffuse)
   specular := get_texture(material.specular)
   emissive := get_texture(material.emissive)
@@ -161,7 +174,8 @@ free_material :: proc(material: ^Material) {
   free_texture(normal)
 }
 
-material_uniform :: proc(material: Material) -> (uniform: Material_Uniform) {
+material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
+{
   assert(state.current_shader.id != 0)
 
   diffuse  := get_texture(material.diffuse)
@@ -173,7 +187,8 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform) {
   if diffuse  != nil &&
      specular != nil &&
      emissive != nil &&
-     normal   != nil {
+     normal   != nil
+  {
      // NOTE: We are bindless with materials now!
      // So we just send over indexes
 
@@ -183,7 +198,9 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform) {
      uniform.normal_idx   = cast(i32)normal.index
 
      uniform.shininess = material.shininess
-  } else {
+  }
+  else
+  {
     // TODO: Maybe consider having the missing purple texture always
     // present at a specific index in the texture_handles ssbo
     // so that can be set instead,
@@ -193,21 +210,25 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform) {
   return uniform
 }
 
-make_texture :: proc {
+make_texture :: proc
+{
   make_texture_from_data,
   make_texture_from_file,
   make_texture_from_missing,
 }
 
 // Ugly, so we know it's missing
-make_texture_from_missing :: proc() -> (texture: Texture) {
+make_texture_from_missing :: proc() -> (texture: Texture)
+{
   texture, _ = make_texture_from_file("missing.png")
-  return
+  return texture
 }
 
 free_texture :: proc(texture: ^Texture) {
-  if texture != nil && texture.id != 0 {
-    if texture.handle != 0 {
+  if texture != nil && texture.id != 0
+  {
+    if texture.handle != 0
+    {
       gl.MakeTextureHandleNonResidentARB(texture.handle)
     }
 
@@ -217,20 +238,25 @@ free_texture :: proc(texture: ^Texture) {
   }
 }
 
-bind_texture :: proc{
+bind_texture :: proc
+{
   bind_texture_slot,
   bind_texture_name,
 }
 
-bind_texture_slot :: proc(slot: u32, texture: Texture) {
-  if state.bound_textures[slot].id != texture.id {
+bind_texture_slot :: proc(slot: u32, texture: Texture)
+{
+  if state.bound_textures[slot].id != texture.id
+  {
     state.bound_textures[slot] = texture
     gl.BindTextureUnit(slot, texture.id)
   }
 }
 
-bind_texture_name :: proc(name: string, texture: Texture) {
-  if name in state.current_shader.uniforms {
+bind_texture_name :: proc(name: string, texture: Texture)
+{
+  if name in state.current_shader.uniforms
+  {
     slot := state.current_shader.uniforms[name].binding
     bind_texture_slot(u32(slot), texture)
   }
@@ -239,7 +265,8 @@ bind_texture_name :: proc(name: string, texture: Texture) {
 // First value is the internal format and the second is the logical format
 // Ie you pass the first to TextureStorage and the second to TextureSubImage
 @(private="file")
-gl_pixel_format_table := [Pixel_Format][2]u32 {
+gl_pixel_format_table: [Pixel_Format][2]u32 =
+{
   .NONE  = {0,        0},
   .R8    = {gl.R8,    gl.RED},
   .RGB8  = {gl.RGB8,  gl.RGB},
@@ -257,7 +284,8 @@ gl_pixel_format_table := [Pixel_Format][2]u32 {
 }
 
 @(private="file")
-gl_texture_type_table := [Texture_Type]u32 {
+gl_texture_type_table: [Texture_Type]u32 =
+{
   .NONE       = 0,
   ._2D        = gl.TEXTURE_2D,
   .CUBE       = gl.TEXTURE_CUBE_MAP,
@@ -266,13 +294,15 @@ gl_texture_type_table := [Texture_Type]u32 {
 
 
 alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Config,
-                      width, height: int, samples: int = 0, array_depth: int = 0) -> (texture: Texture) {
+                      width, height: int, samples: int = 0, array_depth: int = 0) -> (texture: Texture)
+{
   assert(width > 0 && height > 0)
 
   gl_internal := gl_pixel_format_table[format][0]
   gl_type     := gl_texture_type_table[type]
 
-  if samples > 0 {
+  if samples > 0
+  {
     assert(type == ._2D) // HACK: Only 2D textures can be multisampled for now
     gl_type = gl.TEXTURE_2D_MULTISAMPLE
   }
@@ -280,19 +310,24 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
   gl.CreateTextures(gl_type, 1, &texture.id)
 
   mip_level: i32 = 1
-  if sampler == .REPEAT_TRILINEAR {
+  if sampler == .REPEAT_TRILINEAR
+  {
     mip_level = i32(math.log2(f32(max(width, height))) + 1)
   }
 
-  switch type {
+  switch type
+  {
   case .NONE:
     log.error("Texture type cannont be none")
   case ._2D: fallthrough
   case .CUBE:
-    if samples > 0 {
+    if samples > 0
+    {
       assert(type == ._2D)
       gl.TextureStorage2DMultisample(texture.id, i32(samples), gl_internal, i32(width), i32(height), gl.TRUE)
-    } else {
+    }
+    else
+    {
       gl.TextureStorage2D(texture.id, mip_level, gl_internal, i32(width), i32(height))
     }
   case .CUBE_ARRAY:
@@ -303,10 +338,12 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
     gl.TextureStorage3D(texture.id, mip_level, gl_internal, i32(width), i32(height), i32(cube_depth))
   }
 
-  if samples == 0 {
+  if samples == 0
+  {
     // Only non multisampling textures can have sampler parameters I believe?
     // HACK: This sucks... might just separate samplers conceptually from textures?
-    switch sampler {
+    switch sampler
+    {
     case .NONE: // Nothin'
     case .REPEAT_TRILINEAR:
       gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_S,     gl.REPEAT)
@@ -341,20 +378,25 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
 }
 
 make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Config,
-                               datas: []rawptr, width, height: int, samples: int = 0) -> (texture: Texture) {
+                               datas: []rawptr, width, height: int, samples: int = 0) -> (texture: Texture)
+{
   texture = alloc_texture(type, format, sampler, width, height, samples)
 
-  if datas != nil {
+  if datas != nil
+  {
     gl_format := gl_pixel_format_table[format][1]
-    switch type {
+    switch type
+    {
     case .NONE:
       assert(false, "Texture type cannot be none")
     case ._2D:
       assert(len(datas) == 1)
       gl.TextureSubImage2D(texture.id, 0, 0, 0, i32(width), i32(height), gl_format, gl.UNSIGNED_BYTE, datas[0])
     case .CUBE:
-      if type == .CUBE {
-        for data, face in datas {
+      if type == .CUBE
+      {
+        for data, face in datas
+        {
           gl.TextureSubImage3D(texture.id, 0, 0, 0, i32(face), i32(width), i32(height), 1, gl_format, gl.UNSIGNED_BYTE, data)
         }
       }
@@ -369,7 +411,8 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
 }
 
 // Creates a handle, makes it resident, appends to the end of the texture_handles gpu_buffer, and returns its index
-make_texture_bindless :: proc(texture: ^Texture) {
+make_texture_bindless :: proc(texture: ^Texture)
+{
   if texture.handle == 0 {
     texture.handle = gl.GetTextureHandleARB(texture.id)
     gl.MakeTextureHandleResidentARB(texture.handle)
@@ -386,14 +429,18 @@ make_texture_bindless :: proc(texture: ^Texture) {
 
     // For now we only ever append, believe this means we don't need to sync?
     state.texture_handles_count += 1
-  } else {
+  }
+  else
+  {
     // log.infof("Texture: %v is already bindless.", texture.id)
   }
 }
 
-format_for_channels :: proc(channels: int, nonlinear_color: bool = false) -> Pixel_Format {
+format_for_channels :: proc(channels: int, nonlinear_color: bool = false) -> Pixel_Format
+{
   format: Pixel_Format
-  switch channels {
+  switch channels
+  {
   case 1:
     format = .R8
   case 3:
@@ -405,74 +452,94 @@ format_for_channels :: proc(channels: int, nonlinear_color: bool = false) -> Pix
   return format
 }
 
-get_image_data :: proc(file_path: string) -> (data: rawptr, width, height, channels: int) {
+get_image_data :: proc(file_path: string) -> (data: rawptr, width, height, channels: int)
+{
   c_path := strings.clone_to_cstring(file_path, context.temp_allocator)
 
   w, h, c: i32
   data = stbi.load(c_path, &w, &h, &c, 0)
 
-  if data == nil {
+  if data == nil
+  {
     log.errorf("Could not load texture \"%v\"\n", file_path)
-    return nil, 0, 0, 0
   }
 
   width    = cast(int)w
   height   = cast(int)h
   channels = cast(int)c
+
   return data, width, height, channels
 }
 
-free_image_data :: proc(data: rawptr) {
+free_image_data :: proc(data: rawptr)
+{
   stbi.image_free(data)
 }
 
 // Right, left, top, bottom, back, front... or
 // +x,    -x,   +y,    -y,   +z,  -z
-make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true) -> (cube_map: Texture, ok: bool) {
+make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true) -> (cube_map: Texture, ok: bool)
+{
+  ok = true
+
   datas: [6]rawptr
   width, height, channels: int
-  for file_name, idx in file_paths {
-    path := filepath.join({TEXTURE_DIR, file_name}, context.temp_allocator) if in_texture_dir else file_name
+  for file_name, idx in file_paths
+  {
+    path := join_file_path({TEXTURE_DIR, file_name}, context.temp_allocator) if in_texture_dir else file_name
 
     data, w, h, c := get_image_data(path)
-    if data == nil {
-      log.errorf("Could not load %v for cubemap\n", path)
-      return cube_map, false
+    if data != nil
+    {
+      // NOTE: these should all be the same
+      assert(!(width != 0) || (width == w && height == h && channels == c))
+
+      width  = w
+      height = h
+      channels = c
+
+      datas[idx] = data
     }
-
-    // NOTE: these should all be the same
-    assert(!(width != 0) || (width == w && height == h && channels == c))
-
-    width  = w
-    height = h
-    channels = c
-
-    datas[idx] = data
+    else
+    {
+      log.errorf("Could not load %v for cubemap\n", path)
+      ok = false
+      break
+    }
   }
 
-  format := format_for_channels(channels, nonlinear_color=true)
+  if ok
+  {
+    format := format_for_channels(channels, nonlinear_color=true)
 
-  cube_map = make_texture_from_data(.CUBE, format, .CLAMP_LINEAR, datas[:], width, height)
+    cube_map = make_texture_from_data(.CUBE, format, .CLAMP_LINEAR, datas[:], width, height)
 
-  // Clean up
-  for data in datas {
-    free_image_data(data)
+    // Clean up
+    for data in datas
+    {
+      free_image_data(data)
+    }
   }
 
-  return cube_map, true
+  return cube_map, ok
 }
 
-make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false) -> (texture: Texture, ok: bool) {
+make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false) -> (texture: Texture, ok: bool)
+{
   data, w, h, channels := get_image_data(file_name)
-  if data == nil {
-    log.errorf("Could not load texture \"%v\"\n", file_name)
-    return texture, false
+  if data != nil
+  {
+    defer free_image_data(data)
+
+    format := format_for_channels(channels, nonlinear_color)
+
+    texture = make_texture_from_data(._2D, format, .REPEAT_TRILINEAR, {data}, w, h)
+    ok = true
   }
-  defer free_image_data(data)
+  else
+  {
+    log.errorf("Could not load texture \"%v\"\n", file_name)
+  }
 
-  format := format_for_channels(channels, nonlinear_color)
-
-  texture = make_texture_from_data(._2D, format, .REPEAT_TRILINEAR, {data}, w, h)
-
-  return texture, true
+  return texture, ok
 }

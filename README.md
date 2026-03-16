@@ -5,7 +5,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 ```
 
 # To Do:
-- Clean up multidraw uniform extraction, helper for grabbing model etc so that can refactor into another level of indexing (a per object instead of per draw) rather than storing model matrix directly in the draw call uniform.
+- Big rewrite to replace gl backend with vulkan
 - Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely necessary...
     - Will simplify internals, and make it easier to add functionality without changing every single immediate call
     - Complete for drawing quads
@@ -13,19 +13,20 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
     - Will probably need to do caching and multiple passes
     - Probably builder code should only add widgets to list, build the tree links, and perhaps do input
         - If doing input then it will probably be based on the last frame's cached layout, if doing multiple passes that will probably require one frame of input lag
-- More AZDO:
-    - Vertex pulling
-- Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
 - Switch fully to PBR lighting model
 - Editor
     - Rotation and scaling gizmo's
     - Editable entity fields
-- Sort of just normalizing vectors everywhere, almost certainly redundantly... profile and find out if this is significant enough to fix
-- Thread pool loading of assets
-    - Need to have a fence before we begin drawing to actually upload gpu data, as that can only be done from the thread with the gl context
-        - But there is still work that can be done in parallel that actually takes a bit of time, namely computing tangents for models that don't have them
-        - Could also look into mapped staging buffers... need pbo for textures, but vertex geometry should be very simple... write into the mapped buffer from threads and issue the copy to gpu memory from main thread at the beginning of frame...
 - Audio in general
+
+- Potential ideas that could possibly be worth it:
+    - Sort of just normalizing vectors everywhere, almost certainly redundantly... profile and find out if this is significant enough to fix
+    - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
+    - Clean up multidraw uniform extraction, helper for grabbing model etc so that can refactor into another level of indexing (a per object instead of per draw) rather than storing model matrix directly in the draw call uniform.
+    - Thread pool loading of assets
+        - Need to have a fence before we begin drawing to actually upload gpu data, as that can only be done from the thread with the gl context
+            - But there is still work that can be done in parallel that actually takes a bit of time, namely computing tangents for models that don't have them
+            - Could also look into mapped staging buffers... need pbo for textures, but vertex geometry should be very simple... write into the mapped buffer from threads and issue the copy to gpu memory from main thread at the beginning of frame...
 
 # Complete:
 - Multi-draw indirect
@@ -52,6 +53,6 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 - Editor
     - Axis and plane move gizmos
 - Full blinn-phong shading model
-- Menu (press ESC)
-- Zoom (scroll wheel)
+- Menu... press ESC
+- Zoom... scroll wheel
 - GLTF model loading (works as far as I can tell, obviously not even close to all the features)

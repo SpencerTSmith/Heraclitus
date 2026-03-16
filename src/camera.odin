@@ -2,7 +2,8 @@ package main
 
 import "vendor:glfw"
 
-Camera :: struct {
+Camera :: struct
+{
   position:   vec3,
   velocity:   vec3,
 
@@ -19,7 +20,8 @@ Camera :: struct {
   aabb: AABB,
 }
 
-update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
+update_camera_look :: proc(camera: ^Camera, dt_s: f64)
+{
   glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
 
   x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
@@ -29,10 +31,12 @@ update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
   camera.pitch -= camera.sensitivity * y_delta
   camera.pitch = clamp(camera.pitch, -89.0, 89.0)
 
-  if mouse_scrolled_up() {
+  if mouse_scrolled_up()
+  {
     camera.target_fov_y -= 5.0
   }
-  if mouse_scrolled_down() {
+  if mouse_scrolled_down()
+  {
     camera.target_fov_y += 5.0
   }
   camera.target_fov_y = clamp(state.camera.target_fov_y, 10.0, 120)
@@ -41,7 +45,8 @@ update_camera_look :: proc(camera: ^Camera, dt_s: f64) {
   camera.curr_fov_y = lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
 }
 
-move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
+move_camera_game :: proc(camera: ^Camera, dt_s: f64)
+{
   update_camera_look(camera, dt_s)
 
   dt_s := f32(dt_s)
@@ -51,32 +56,41 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   camera_forward, _, camera_right := get_camera_axes(camera^)
 
   // Z, forward
-  if key_down(.W) {
+  if key_down(.W)
+  {
     wish_dir += camera_forward
   }
-  if key_down(.S) {
+  if key_down(.S)
+  {
     wish_dir -= camera_forward
   }
   // X, strafe
-  if key_down(.D) {
+  if key_down(.D)
+  {
     wish_dir += camera_right
   }
-  if key_down(.A) {
+  if key_down(.A)
+  {
     wish_dir -= camera_right
   }
 
-  if key_pressed(.LEFT_CONTROL) {
+  if key_pressed(.LEFT_CONTROL)
+  {
     camera.crouched = !camera.crouched
-    if camera.crouched {
+    if camera.crouched
+    {
       camera.position.y -= 2 // Hmmm, is this ok?
       camera.aabb = {{-1.0, -2.0, -1.0}, {1.0, 1.0, 1.0},}
-    } else {
+    }
+    else
+    {
       camera.aabb = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},}
     }
   }
 
 
-  if key_pressed(.SPACE) && camera.on_ground {
+  if key_pressed(.SPACE) && camera.on_ground
+  {
     camera.velocity.y = 15.0
     camera.on_ground  = false
   }
@@ -92,7 +106,8 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   friction: f32 = GROUND_FRICTION if camera.on_ground else AIR_FRICTION
   speed := length(camera.velocity)
 
-  if speed > 1 {
+  if speed > 1
+  {
     // How much speed to lose per frame
     drop := speed * friction * dt_s
 
@@ -113,7 +128,8 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   //
   MAX_GROUND_SPEED :: 40.0
   MAX_AIR_SPEED :: 35.0
-  if length(wish_dir) > 0 {
+  if length(wish_dir) > 0
+  {
     // How fast are we going in the direction we want to go?
     curr_speed_in_wish_dir := dot(camera.velocity, wish_dir)
 
@@ -123,7 +139,8 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
     add_speed := max_speed - curr_speed_in_wish_dir
 
     // If we have room to grow in speed?
-    if add_speed > 0 {
+    if add_speed > 0
+    {
       GROUND_ACCELERATION :: 12.0
       AIR_ACCELERATION    :: 4.0
 
@@ -132,7 +149,8 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
       accel_speed := factor * max_speed * dt_s
 
       // If we can accelerate to more in this step than max, then just add only enough to get to max
-      if accel_speed > add_speed {
+      if accel_speed > add_speed
+      {
         accel_speed = add_speed
       }
 
@@ -158,18 +176,21 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   wish_cam_aabb.min += (wish_pos - camera.position)
   wish_cam_aabb.max += (wish_pos - camera.position)
 
-  if state.draw_debug {
+  if state.draw_debug
+  {
     draw_aabb(cam_aabb)
     draw_aabb(wish_cam_aabb, CORAL)
   }
 
   camera.on_ground = false
-  for e in state.entities {
+  for e in state.entities
+  {
     if .COLLISION not_in e.flags { continue }
 
     entity_aabb := entity_world_aabb(e)
 
-    if aabbs_intersect(wish_cam_aabb, entity_aabb) {
+    if aabbs_intersect(wish_cam_aabb, entity_aabb)
+    {
       offset := aabb_min_penetration_vector(wish_cam_aabb, entity_aabb)
 
       wish_pos += offset // push the camera out of collision
@@ -177,11 +198,14 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
       // Surface normal, should basically be this, works fine
       normal := normalize0(offset)
 
-      if normal.y > 0.1 {
+      if normal.y > 0.1
+      {
         camera.on_ground = true
         camera.velocity.y = 0
         continue
-      } else {
+      }
+      else
+      {
         // Take the velocity into the collision away, plus a little for some bounce
         // This has the added side effect of increasing speed by running into a wall purposefully
         // Our wish dir is into the wall, but that velocity gets taken away, therefore we can accelerate
@@ -194,12 +218,14 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   // Come to complete stop if going slow enough horizontally
-  if length(camera.velocity.xz) < 1 {
+  if length(camera.velocity.xz) < 1
+  {
     camera.velocity = {0, camera.velocity.y, 0}
   }
 
   // Neat message
-  if length(camera.velocity) > MAX_GROUND_SPEED * 1.2 {
+  if length(camera.velocity) > MAX_GROUND_SPEED * 1.2
+  {
     text := "Speed Excellence!"
     x := f32(state.window.w) * 0.5
     y := f32(state.window.w) * 0.02
@@ -208,7 +234,8 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   }
 
   // Draw out input and velocity vectors
-  if state.draw_debug {
+  if state.draw_debug
+  {
     draw_pos := camera.position
     draw_pos.y -= 0.5
 
@@ -220,18 +247,22 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64) {
   camera.position = wish_pos
 }
 
-get_camera_view :: proc(camera: Camera) -> (view: mat4) {
+get_camera_view :: proc(camera: Camera) -> (view: mat4)
+{
   forward := get_camera_forward(camera)
   // the target is the camera position + the forward direction
   return get_view(camera.position, forward, WORLD_UP)
 }
 
-get_view :: proc(position, forward, up: vec3) -> (view: mat4) {
+get_view :: proc(position, forward, up: vec3) -> (view: mat4)
+{
   return mat4_look_at(position, forward + position, up)
 }
 
-camera_world_aabb :: proc(c: Camera) -> AABB {
-  world_aabb: AABB = {
+camera_world_aabb :: proc(c: Camera) -> AABB
+{
+  world_aabb: AABB =
+  {
     min = c.aabb.min + c.position,
     max = c.aabb.max + c.position,
   }
@@ -240,10 +271,12 @@ camera_world_aabb :: proc(c: Camera) -> AABB {
 }
 
 // Returns normalized
-get_camera_forward :: proc(camera: Camera) -> (forward: vec3) {
+get_camera_forward :: proc(camera: Camera) -> (forward: vec3)
+{
   rad_yaw   := radians(camera.yaw)
   rad_pitch := radians(camera.pitch)
-  forward = {
+  forward =
+  {
     -cos(rad_pitch) * cos(rad_yaw),
      sin(rad_pitch),
      cos(rad_pitch) * sin(rad_yaw),
@@ -253,11 +286,13 @@ get_camera_forward :: proc(camera: Camera) -> (forward: vec3) {
   return forward
 }
 
-get_camera_perspective :: proc(camera: Camera, z_far: f32 = state.z_far) -> (perspective: mat4){
+get_camera_perspective :: proc(camera: Camera, z_far: f32 = state.z_far) -> (perspective: mat4)
+{
   return mat4_perspective(radians(camera.curr_fov_y), window_aspect_ratio(state.window), state.z_near, z_far)
 }
 
-get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3) {
+get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3)
+{
   forward = get_camera_forward(camera)
   up = WORLD_UP
   right = normalize(cross(forward, up))

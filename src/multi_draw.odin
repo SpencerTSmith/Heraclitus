@@ -9,7 +9,8 @@ MAX_DRAWS    :: 1  * mem.Megabyte
 MAX_VERTICES :: 4  * mem.Megabyte
 MAX_INDICES  :: 16 * mem.Megabyte
 
-Multi_Draw_State :: struct {
+Multi_Draw_State :: struct
+{
   vertex_buffer: GPU_Buffer,
   vertex_count:  int,
   index_count:   int,
@@ -21,7 +22,8 @@ Multi_Draw_State :: struct {
   draw_count: int, // Total
 }
 
-init_multi_draw :: proc() -> (mds: Multi_Draw_State) {
+init_multi_draw :: proc() -> (mds: Multi_Draw_State)
+{
   mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
   bind_gpu_buffer_base(mds.vertex_buffer, .MESH_VERTICES)
 
@@ -36,7 +38,8 @@ init_multi_draw :: proc() -> (mds: Multi_Draw_State) {
 push_vertices :: proc(mds: ^Multi_Draw_State, vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
 {
   if mds.vertex_count + len(vertices) < MAX_VERTICES &&
-     mds.index_count + len(indices)   < MAX_INDICES {
+     mds.index_count + len(indices)   < MAX_INDICES
+  {
     vertex_offset = cast(i32) mds.vertex_count
 
     vertex_byte_offset := size_of(Mesh_Vertex) * mds.vertex_count
@@ -49,21 +52,23 @@ push_vertices :: proc(mds: ^Multi_Draw_State, vertices: []Mesh_Vertex, indices: 
     index_byte_offset := mds.vertex_buffer.index_offset + size_of(Mesh_Index) * mds.index_count
     write_gpu_buffer(mds.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
     mds.index_count += len(indices)
-  } else {
+  }
+  else
+  {
     log.errorf("Cannot push any more vertices to mega buffer");
   }
 
   return vertex_offset, index_offset
 }
 
-push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_Uniform) {
+push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_Uniform)
+{
   if (mds.draw_count + 1 < MAX_DRAWS)
   {
     // Draw Command
     {
       command := command
-      // NOTE:
-      /// Using this to index into the total buffer. As we have to do multiple
+      // NOTE: Using this to index into the total buffer. As we have to do multiple
       // multidraws per frame due to shadow mapping,
       // gl_DrawID no longer works perfectly to index
       command.base_instance = cast(u32)mds.draw_count
@@ -80,12 +85,15 @@ push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_U
     }
 
     mds.draw_count += 1
-  } else {
+  }
+  else
+  {
     log.errorf("Cannot push any more draw commands.");
   }
 }
 
-multi_draw :: proc(mds: ^Multi_Draw_State) {
+multi_draw :: proc(mds: ^Multi_Draw_State)
+{
   bind_vertex_buffer(mds.vertex_buffer)
   gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, mds.draw_commands.id)
 
@@ -102,14 +110,16 @@ multi_draw :: proc(mds: ^Multi_Draw_State) {
 }
 
 // NOTE: Per frame.
-reset_multi_draw :: proc(mds: ^Multi_Draw_State) {
+reset_multi_draw :: proc(mds: ^Multi_Draw_State)
+{
   mds.draw_count = 0
   mds.draw_head  = 0
 }
 
 // NOTE: Returns the byte offset.
 // maybe useless but might as well pull this out in case change it later.
-multi_draw_index_offset :: proc(mds: Multi_Draw_State, add_offset: uintptr) -> (final_offset: uintptr) {
+multi_draw_index_offset :: proc(mds: Multi_Draw_State, add_offset: uintptr) -> (final_offset: uintptr)
+{
   final_offset = uintptr(mds.vertex_buffer.index_offset) + add_offset
 
   return final_offset

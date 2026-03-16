@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 14-03-2026 (06:37:35 am)
+// NOTE: This code was generated on 16-03-2026 (06:22:48 am)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -110,41 +110,49 @@ layout(binding = IMM_VERTICES_BINDING, std430) readonly buffer Immediate_Vertice
 };
 
 
-vec4 bindless_sample(int index, vec2 uv) {
+vec4 bindless_sample(int index, vec2 uv)
+{
   return texture(textures[index], uv);
 }
 
-vec3 mesh_vertex_position(int index) {
+vec3 mesh_vertex_position(int index)
+{
   return vec3(mesh_vertices[index].position[0],
               mesh_vertices[index].position[1],
               mesh_vertices[index].position[2]);
 }
-vec2 mesh_vertex_uv(int index) {
+vec2 mesh_vertex_uv(int index)
+{
   return vec2(mesh_vertices[index].uv[0],
               mesh_vertices[index].uv[1]);
 }
-vec3 mesh_vertex_normal(int index) {
+vec3 mesh_vertex_normal(int index)
+{
   return vec3(mesh_vertices[index].normal[0],
               mesh_vertices[index].normal[1],
               mesh_vertices[index].normal[2]);
 }
-vec4 mesh_vertex_tangent(int index) {
+vec4 mesh_vertex_tangent(int index)
+{
   return vec4(mesh_vertices[index].tangent[0],
               mesh_vertices[index].tangent[1],
               mesh_vertices[index].tangent[2],
               mesh_vertices[index].tangent[3]);
 }
 
-vec3 immediate_vertex_position(int index) {
+vec3 immediate_vertex_position(int index)
+{
   return vec3(immediate_vertices[index].position[0],
               immediate_vertices[index].position[1],
               immediate_vertices[index].position[2]);
 }
-vec2 immediate_vertex_uv(int index) {
+vec2 immediate_vertex_uv(int index)
+{
   return vec2(immediate_vertices[index].uv[0],
               immediate_vertices[index].uv[1]);
 }
-vec4 immediate_vertex_color(int index) {
+vec4 immediate_vertex_color(int index)
+{
   return vec4(immediate_vertices[index].color[0],
               immediate_vertices[index].color[1],
               immediate_vertices[index].color[2],

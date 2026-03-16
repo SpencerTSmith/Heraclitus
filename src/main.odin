@@ -7,6 +7,7 @@ import "core:strings"
 import "core:time"
 import "core:slice"
 import "core:log"
+import "base:runtime"
 
 import gl "vendor:OpenGL"
 import "vendor:glfw"
@@ -151,13 +152,22 @@ init_state :: proc() -> (ok: bool)
 
   gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
   {
+    // Too much voodoo?
+    log_proc: proc(fmt_str: string, args: ..any, location := #caller_location)
     switch (severity)
     {
       case gl.DEBUG_SEVERITY_NOTIFICATION:
+        log_proc = log.debugf
       case gl.DEBUG_SEVERITY_LOW:
+        log_proc = log.infof
       case gl.DEBUG_SEVERITY_MEDIUM:
+        log_proc = log.warnf
       case gl.DEBUG_SEVERITY_HIGH:
+        log_proc = log.errorf
     }
+    context = runtime.default_context()
+
+    log_proc("GL: %v", string(message))
   }, nil)
 
   //
@@ -512,11 +522,14 @@ main :: proc()
     //
     // Update entities with point lights, AFTER we do everything else
     //
-    for e in state.entities {
-      if e.point_light != nil {
+    for e in state.entities
+    {
+      if e.point_light != nil
+      {
 
         // Check if the point light has moved
-        if e.point_light.position != e.position {
+        if e.point_light.position != e.position
+        {
           e.point_light.dirty_shadow = true
         }
 
@@ -528,7 +541,8 @@ main :: proc()
     begin_drawing()
 
     // What to draw based on mode
-    switch state.mode {
+    switch state.mode
+    {
     case .EDIT:
       draw_editor_gizmos()
       fallthrough
@@ -536,26 +550,32 @@ main :: proc()
       //
       // Shadow passes
       //
-      if state.sun_on {
+      if state.sun_on
+      {
         begin_render_pass(SUN_SHADOW_PASS, state.sun_depth_buffer)
         bind_shader(.SUN_DEPTH)
 
-        for e in state.entities {
+        for e in state.entities
+        {
           draw_entity(e)
         }
         multi_draw(&state.mds)
       }
 
-      if state.point_lights_on {
+      if state.point_lights_on
+      {
         begin_render_pass(POINT_SHADOW_PASS, state.point_depth_buffer)
         bind_shader(.POINT_DEPTH)
 
         shadow_light_idx := 0
-        for &l in state.point_lights {
+        for &l in state.point_lights
+        {
           // TODO if objects in the lights radius move, need to do recalc
-          if l.cast_shadows {
+          if l.cast_shadows
+          {
             // We cache shadow maps and only recompute if point light has moved
-            if l.dirty_shadow {
+            if l.dirty_shadow
+            {
 
               // Clear the part of the texture corresponding to this light
               depth_clear: f32 = 1.0
@@ -565,12 +585,15 @@ main :: proc()
                 gl.DEPTH_COMPONENT, gl.FLOAT, &depth_clear)
 
               // Cull models not in light's radius
-              light_sphere: Sphere = {
+              light_sphere: Sphere =
+              {
                 center = l.position,
                 radius = l.radius,
               }
-              for e in state.entities {
-                if sphere_intersects_aabb(light_sphere, entity_world_aabb(e)) {
+              for e in state.entities
+              {
+                if sphere_intersects_aabb(light_sphere, entity_world_aabb(e))
+                {
                   draw_entity(e, instances=6, light_index = cast(u32)shadow_light_idx)
                 }
               }
@@ -592,9 +615,12 @@ main :: proc()
       {
         bind_shader(.PHONG)
 
-        if state.sun_on {
+        if state.sun_on
+        {
           bind_texture("skybox", state.skybox.texture)
-        } else {
+        }
+        else
+        {
           bind_texture("skybox", {})
         }
 
@@ -629,7 +655,8 @@ main :: proc()
             return da > db
           })
 
-          for e in transparent_entities {
+          for e in transparent_entities
+          {
             draw_entity(e^)
           }
 
@@ -637,8 +664,10 @@ main :: proc()
         }
 
         // Draw point light billboards
-        if state.point_lights_on {
-          for l in state.point_lights {
+        if state.point_lights_on
+        {
+          for l in state.point_lights
+          {
             w: f32 = 1.0
             h: f32 = 1.0
             normal := normalize(l.position - state.camera.position) // Billboard it!
@@ -648,7 +677,8 @@ main :: proc()
         }
 
 
-        if state.draw_debug {
+        if state.draw_debug
+        {
           draw_grid(color = {1.0, 1.0, 1.0, 0.2})
         }
 
@@ -667,7 +697,8 @@ main :: proc()
         // Bloom
         //
         BLOOM_GAUSSIAN_COUNT :: 5
-        if state.bloom_on {
+        if state.bloom_on
+        {
           // Now collect bright spots
           bind_framebuffer(state.ping_pong_buffers[0])
           bind_shader(.GET_BRIGHT)
@@ -682,18 +713,19 @@ main :: proc()
           bind_texture("image", state.ping_pong_buffers[0].color_targets[1]) // The bright spot texture
           horizontal := true
 
-          for _ in 0..<BLOOM_GAUSSIAN_COUNT {
+          for _ in 0..<BLOOM_GAUSSIAN_COUNT
+          {
             set_shader_uniform("horizontal", horizontal)
             draw_screen_quad()
 
             horizontal = !horizontal
             read_index  := 0 if horizontal else 1
             write_index := 1 - read_index
+
             bind_texture("image", state.ping_pong_buffers[read_index].color_targets[0])
             bind_framebuffer(state.ping_pong_buffers[write_index])
           }
         }
-
       }
 
       begin_render_pass(UI_PASS, {})
@@ -705,7 +737,8 @@ main :: proc()
         set_shader_uniform("exposure", f32(0.5))
         draw_screen_quad()
 
-        if state.draw_debug {
+        if state.draw_debug
+        {
           draw_debug_stats()
         }
 
@@ -728,7 +761,8 @@ main :: proc()
   }
 }
 
-free_state :: proc() {
+free_state :: proc()
+{
   free_immediate_renderer()
 
   free_assets()
@@ -737,7 +771,8 @@ free_state :: proc() {
 
   free_gpu_buffer(&state.frame_uniforms)
 
-  for &shader in state.shaders {
+  for &shader in state.shaders
+  {
     free_shader_program(&shader)
   }
 
@@ -747,6 +782,7 @@ free_state :: proc() {
   delete(state.perm_mem)
 }
 
-seconds_since_start :: proc() -> (seconds: f64) {
+seconds_since_start :: proc() -> (seconds: f64)
+{
   return time.duration_seconds(time.since(state.start_time))
 }

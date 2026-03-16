@@ -6,6 +6,8 @@ import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:path/filepath"
 import "core:time"
+import "core:os"
+import "base:runtime"
 
 import gl "vendor:OpenGL"
 import "vendor:glfw"
@@ -57,7 +59,8 @@ WHITE  :: vec4{1.0, 1.0, 1.0,  1.0}
 LEARN_OPENGL_BLUE   :: vec4{0.2, 0.3, 0.3, 1.0}
 LEARN_OPENGL_ORANGE :: vec4{1.0, 0.5, 0.2, 1.0}
 
-set_alpha :: proc(color: vec4, alpha: f32) -> (tweaked: vec4) {
+set_alpha :: proc(color: vec4, alpha: f32) -> (tweaked: vec4)
+{
   return {color.r, color.g, color.b, alpha}
 }
 
@@ -111,19 +114,36 @@ mat4_look_at      :: glsl.mat4LookAt
 
 lerp :: glsl.lerp
 
+join_file_path :: proc(strings: []string, allocator: runtime.Allocator) -> (path: string)
+{
+  err: os.Error
+  path, err = os.join_path(strings, allocator)
+
+  // Shouldn't ever fire, but ok
+  if err != nil
+  {
+    log.errorf("Failed to join filepath.")
+  }
+
+  return path
+}
+
 //
 // Static array that acts like it is dynamic
 //
-Array :: struct($Type: typeid, $Capacity: int) {
+Array :: struct($Type: typeid, $Capacity: int)
+{
   v:  [Capacity]Type,
   count: int,
 }
 
-array_slice :: proc(array: ^$A/Array($Type, $Capacity)) -> []Type {
+array_slice :: proc(array: ^$A/Array($Type, $Capacity)) -> []Type
+{
   return array.v[:array.count]
 }
 
-array_add :: proc(array: ^$A/Array($Type, $Capacity), item: Type) -> (added: ^Type) {
+array_add :: proc(array: ^$A/Array($Type, $Capacity), item: Type) -> (added: ^Type)
+{
   assert(array.count < Capacity, "Not enough elements in static array!")
 
   array.v[array.count] = item
@@ -132,18 +152,21 @@ array_add :: proc(array: ^$A/Array($Type, $Capacity), item: Type) -> (added: ^Ty
   return &array.v[array.count - 1]
 }
 
-array_clear :: proc(array: ^$A/Array($Type, $Capacity)) {
+array_clear :: proc(array: ^$A/Array($Type, $Capacity))
+{
   array.count = 0
 }
 
 // Adds a 1 to the end by default
-vec4_from_3 :: proc(vec: vec3, w: f32 = 1.0) -> vec4 {
+vec4_from_3 :: proc(vec: vec3, w: f32 = 1.0) -> vec4
+{
   return {vec.x, vec.y, vec.z, w}
 }
 
 // NOTE: Unprojects the the near plane
 // TODO: Maybe think about caching ray inverses if we are doing this operation a lot
-unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (world_coord: vec3){
+unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (world_coord: vec3)
+{
   screen_width  := cast (f32) state.window.w
   screen_height := cast (f32) state.window.h
 
@@ -166,23 +189,27 @@ unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (wo
   return world_coord
 }
 
-squared_distance :: proc(a_pos: vec3, b_pos: vec3) -> f32 {
+squared_distance :: proc(a_pos: vec3, b_pos: vec3) -> f32
+{
   delta := a_pos - b_pos
 
   return dot(delta, delta)
 }
 
-Quad :: struct {
+Quad :: struct
+{
   top_left: vec2,
   width:    f32,
   height:   f32,
 }
 
-point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool {
+point_in_rect :: proc(point: vec2, left, top, bottom, right: f32) -> bool
+{
   return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom
 }
 
-lerp_colors :: proc(t: f32, color_a, color_b: vec4) -> (lerped: vec4) {
+lerp_colors :: proc(t: f32, color_a, color_b: vec4) -> (lerped: vec4)
+{
   t := t
   t *= t
   lerped = lerp(color_a, color_b, vec4{t, t, t, t})
@@ -190,14 +217,16 @@ lerp_colors :: proc(t: f32, color_a, color_b: vec4) -> (lerped: vec4) {
   return lerped
 }
 
-Window :: struct {
+Window :: struct
+{
   handle:  glfw.WindowHandle,
   w, h:    int,
   title:   string,
   resized: bool,
 }
 
-resize_window :: proc() {
+resize_window :: proc()
+{
   // Reset
   state.window.resized = false
 
@@ -210,7 +239,8 @@ resize_window :: proc() {
 
   gl.Viewport(0, 0, cast(i32)state.window.w, cast(i32)state.window.h)
 
-  if !ok {
+  if !ok
+  {
     log.fatal("Window has been resized but unable to recreate framebuffers")
     state.running = false
   }
@@ -221,11 +251,13 @@ resize_window :: proc() {
   log.infof("Window has resized to %vpx, %vpx", state.window.w, state.window.h)
 }
 
-window_aspect_ratio :: proc(window: Window) -> (aspect: f32) {
+window_aspect_ratio :: proc(window: Window) -> (aspect: f32)
+{
   aspect = f32(window.w) / f32(window.h)
   return aspect
 }
 
-should_close :: proc() -> bool {
+should_close :: proc() -> bool
+{
   return bool(glfw.WindowShouldClose(state.window.handle)) || !state.running
 }

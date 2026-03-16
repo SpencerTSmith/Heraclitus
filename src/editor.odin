@@ -10,7 +10,8 @@ import "vendor:glfw"
 
 AXIS_GIZMO_LENGTH :: 10.0
 
-Editor_Gizmo :: enum {
+Editor_Gizmo :: enum
+{
   NONE,
   X_AXIS,
   Y_AXIS,
@@ -21,7 +22,8 @@ Editor_Gizmo :: enum {
 }
 
 // Could probably store a 'mask' of what directions this gizmo is allowed to move things in instead of the enum
-Editor_Gizmo_Info :: struct {
+Editor_Gizmo_Info :: struct
+{
   hitbox: AABB,
 
   // For manipulating entities
@@ -30,7 +32,8 @@ Editor_Gizmo_Info :: struct {
   anchor_entity_pos: vec3,
 }
 
-Editor_State :: struct {
+Editor_State :: struct
+{
   selected_entity: ^Entity,
   selected_entity_idx: int,
 
@@ -42,7 +45,7 @@ Editor_State :: struct {
 editor: Editor_State
 
 EDITOR_GIZMO_OPACITY :: 0.9
-EDITOR_SELECTED_GIZMO_COLOR :: vec4{WHITE.r, WHITE.g, WHITE.b, EDITOR_GIZMO_OPACITY}
+EDITOR_SELECTED_GIZMO_COLOR :: vec4 {WHITE.r, WHITE.g, WHITE.b, EDITOR_GIZMO_OPACITY}
 
 // NOTE: UGLY!
 @(private="file")
@@ -56,13 +59,17 @@ DEFAULT_GIZMO_COLORS :: [Editor_Gizmo]vec4 {
   .YZ_PLANE = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
 }
 
-pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int) {
+pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int)
+{
   closest_t := F32_MAX
-  for &e, idx in state.entities {
+  for &e, idx in state.entities
+  {
     entity_aabb := entity_world_aabb(e)
-    if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes {
+    if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes
+    {
       // Get the closest entity
-      if t_min < closest_t {
+      if t_min < closest_t
+      {
         closest_t = t_min
         entity = &e
         index = idx
@@ -73,14 +80,18 @@ pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int) {
   return entity, index
 }
 
-pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo) {
+pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo)
+{
   gizmo = .NONE
 
   closest_t := F32_MAX
-  for info, g in editor.gizmos {
-    if yes, t_min, _ := ray_intersects_aabb(ray, info.hitbox); yes {
+  for info, g in editor.gizmos
+  {
+    if yes, t_min, _ := ray_intersects_aabb(ray, info.hitbox); yes
+    {
       // Get the closest gizmo
-      if t_min < closest_t {
+      if t_min < closest_t
+      {
         closest_t = t_min
         gizmo = g
       }
@@ -91,15 +102,20 @@ pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo) {
 }
 
 @(private="file")
-clear_editor_selected_entity :: proc() {
+clear_editor_selected_entity :: proc()
+{
   editor.selected_entity = nil
   editor.selected_entity_idx = -1
 }
 
-do_editor :: proc(camera: ^Camera, dt_s: f64) {
-  if mouse_down(.MIDDLE) || key_down(.Q) {
+do_editor :: proc(camera: ^Camera, dt_s: f64)
+{
+  if mouse_down(.MIDDLE) || key_down(.Q)
+  {
     update_camera_look(camera, dt_s)
-  } else {
+  }
+  else
+  {
     glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
   }
 
@@ -110,26 +126,32 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   camera_forward, camera_up, camera_right := get_camera_axes(camera^)
 
   // Z, forward
-  if key_down(.W) {
+  if key_down(.W)
+  {
     input_direction += camera_forward
   }
-  if key_down(.S) {
+  if key_down(.S)
+  {
     input_direction -= camera_forward
   }
 
   // Y, vertical
-  if key_down(.SPACE) {
+  if key_down(.SPACE)
+  {
     input_direction += camera_up
   }
-  if key_down(.LEFT_CONTROL) {
+  if key_down(.LEFT_CONTROL)
+  {
     input_direction -= camera_up
   }
 
   // X, strafe
-  if key_down(.D) {
+  if key_down(.D)
+  {
     input_direction += camera_right
   }
-  if key_down(.A) {
+  if key_down(.A)
+  {
     input_direction -= camera_right
   }
 
@@ -138,12 +160,15 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   {
     defer ui_pop_parent()
 
-    if ui_button("Clear Entity").clicked {
+    if ui_button("Clear Entity").clicked
+    {
       clear_editor_selected_entity()
     }
 
-    if ui_button("Dupe Entity").clicked {
-      if editor.selected_entity != nil {
+    if ui_button("Dupe Entity").clicked
+    {
+      if editor.selected_entity != nil
+      {
         dupe := duplicate_entity(editor.selected_entity^)
         dupe.position += (rand.float32() * 2.0) - 1.0
         append(&state.entities, dupe)
@@ -155,8 +180,10 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
     // TODO: Probably just work on pool strucuture... needs to be done at some point at there are bugs when removing entities right now
     // specifically when that entity has an attached point light, does not get removed.
-    if ui_button("Delete Entity").clicked {
-      if editor.selected_entity != nil {
+    if ui_button("Delete Entity").clicked
+    {
+      if editor.selected_entity != nil
+      {
         unordered_remove(&state.entities, editor.selected_entity_idx)
         log.infof("Removed entity at index %v", editor.selected_entity_idx)
 
@@ -172,12 +199,15 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
   world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera^), get_camera_perspective(camera^))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
 
-  if !ui_had_interaction() {
+  if !ui_had_interaction()
+  {
     // Pick entity or gizmo only if not doing ui
-    if mouse_pressed(.LEFT) {
+    if mouse_pressed(.LEFT)
+    {
 
       // If we can select a gizmo
-      if editor.selected_entity != nil {
+      if editor.selected_entity != nil
+      {
         // Preferentially pick gizmo first
         editor.selected_gizmo  = pick_gizmo(mouse_ray, camera^)
         the_gizmo := &editor.gizmos[editor.selected_gizmo]
@@ -189,100 +219,117 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         the_gizmo.hit_plane = hit_plane
 
         intersect, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
-        assert(intersect && t >= 0.0)
-
-        the_gizmo.anchor_plane_hit = hit_point
-        the_gizmo.anchor_entity_pos = editor.selected_entity.position
+        if intersect && t >= 0.0
+        {
+          the_gizmo.anchor_plane_hit = hit_point
+          the_gizmo.anchor_entity_pos = editor.selected_entity.position
+        }
       }
 
       // If we didn't select a gizmo
-      if editor.selected_gizmo == .NONE {
+      if editor.selected_gizmo == .NONE
+      {
         editor.selected_entity, editor.selected_entity_idx = pick_entity(mouse_ray, camera^)
       }
     }
   }
 
   // Move with the gizmo
-  if editor.selected_gizmo != .NONE && mouse_down(.LEFT) {
+  if editor.selected_gizmo != .NONE && mouse_down(.LEFT)
+  {
     the_gizmo := editor.gizmos[editor.selected_gizmo]
 
     intersect, _, hit_now := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
-    assert(intersect)
+    if intersect
+    {
+      delta_plane := hit_now - the_gizmo.anchor_plane_hit
 
-    delta_plane := hit_now - the_gizmo.anchor_plane_hit
+      basis_0, basis_1: vec3
+      switch editor.selected_gizmo
+      {
+      case .NONE:
+        assert(false, "What da")
+      case .X_AXIS:
+        basis_0 = WORLD_RIGHT
+      case .Y_AXIS:
+        basis_0 = WORLD_UP
+      case .Z_AXIS:
+        basis_0 = -WORLD_FORWARD
+      case .XY_PLANE:
+        basis_0 = WORLD_RIGHT
+        basis_1 = WORLD_UP
+      case .XZ_PLANE:
+        basis_0 = WORLD_RIGHT
+        basis_1 = -WORLD_FORWARD
+      case .YZ_PLANE:
+        basis_0 = WORLD_UP
+        basis_1 = -WORLD_FORWARD
+      }
 
-    basis_0, basis_1: vec3
-    switch editor.selected_gizmo {
-    case .NONE:
-      assert(false, "What da")
-    case .X_AXIS:
-      basis_0 = WORLD_RIGHT
-    case .Y_AXIS:
-      basis_0 = WORLD_UP
-    case .Z_AXIS:
-      basis_0 = -WORLD_FORWARD
-    case .XY_PLANE:
-      basis_0 = WORLD_RIGHT
-      basis_1 = WORLD_UP
-    case .XZ_PLANE:
-      basis_0 = WORLD_RIGHT
-      basis_1 = -WORLD_FORWARD
-    case .YZ_PLANE:
-      basis_0 = WORLD_UP
-      basis_1 = -WORLD_FORWARD
+      // Now project the move in the plane into the world
+      move_0 := dot(delta_plane, basis_0) * basis_0
+      move_1 := dot(delta_plane, basis_1) * basis_1
+      delta_in_world := move_0 + move_1
+
+      editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
+
+      // Visualize the movement
+      move_direction := editor.selected_entity.position - the_gizmo.anchor_entity_pos
+      move_component_0 := move_direction * basis_0
+      move_component_1 := move_direction * basis_1
+      draw_vector(the_gizmo.anchor_entity_pos, move_direction, YELLOW)
+      draw_vector(the_gizmo.anchor_entity_pos, move_component_0, YELLOW)
+      draw_vector(the_gizmo.anchor_entity_pos + move_component_0, move_component_1, YELLOW)
     }
-
-    // Now project the move in the plane into the world
-    move_0 := dot(delta_plane, basis_0) * basis_0
-    move_1 := dot(delta_plane, basis_1) * basis_1
-    delta_in_world := move_0 + move_1
-
-    editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
-
-    // Visualize the movement
-    move_direction := editor.selected_entity.position - the_gizmo.anchor_entity_pos
-    move_component_0 := move_direction * basis_0
-    move_component_1 := move_direction * basis_1
-    draw_vector(the_gizmo.anchor_entity_pos, move_direction, YELLOW)
-    draw_vector(the_gizmo.anchor_entity_pos, move_component_0, YELLOW)
-    draw_vector(the_gizmo.anchor_entity_pos + move_component_0, move_component_1, YELLOW)
   }
 
   // Unselect gizmo when not held down
-  if mouse_released(.LEFT) {
+  if mouse_released(.LEFT)
+  {
     editor.selected_gizmo = .NONE
   }
 
-  if mouse_pressed(.RIGHT) {
+  if mouse_pressed(.RIGHT)
+  {
     clear_editor_selected_entity()
   }
 
   // Manipulate picked entity
-  if editor.selected_entity != nil {
+  if editor.selected_entity != nil
+  {
     EDITOR_PICKED_MOVE_SPEED :: 10.0
 
     // TODO: Think about if these should be relative to the camera's axes or to the world axes?
     // But won't matter as much once we get more sophisticated widgets and ui
 
-    if key_down(.LEFT) {
+    if key_down(.LEFT)
+    {
       editor.selected_entity.position.x -= EDITOR_PICKED_MOVE_SPEED * dt_s
     }
-    if key_down(.RIGHT) {
+    if key_down(.RIGHT)
+    {
       editor.selected_entity.position.x += EDITOR_PICKED_MOVE_SPEED * dt_s
     }
 
-    if key_down(.LEFT_SHIFT) {
-      if key_down(.UP) {
+    if key_down(.LEFT_SHIFT)
+    {
+      if key_down(.UP)
+      {
         editor.selected_entity.position.z -= EDITOR_PICKED_MOVE_SPEED * dt_s
       }
-      if key_down(.DOWN) {
+      if key_down(.DOWN)
+      {
         editor.selected_entity.position.z += EDITOR_PICKED_MOVE_SPEED * dt_s
       }
-    } else {
-      if key_down(.UP) {
+    }
+    else
+    {
+      if key_down(.UP)
+      {
         editor.selected_entity.position.y += EDITOR_PICKED_MOVE_SPEED * dt_s
       }
-      if key_down(.DOWN) {
+      if key_down(.DOWN)
+      {
         editor.selected_entity.position.y -= EDITOR_PICKED_MOVE_SPEED * dt_s
       }
     }
@@ -293,14 +340,16 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       entity_aabb := entity_world_aabb(e)
       entity_center := aabb_center(entity_aabb)
 
-      make_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB) {
+      make_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB)
+      {
         BOUNDING_RANGE :: 0.5
 
         // Since not all world directions in my coordinate space are in the positive direction
         world_axes := WORLD_AXES
         axis_add   := AXIS_GIZMO_LENGTH * world_axes[axis_index]
 
-        hitbox = {
+        hitbox =
+        {
           min = entity_center - BOUNDING_RANGE,
           max = entity_center + BOUNDING_RANGE,
         }
@@ -310,10 +359,12 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         return hitbox
       }
 
-      make_plane_hitbox :: proc(position: vec3) -> (hitbox: AABB) {
+      make_plane_hitbox :: proc(position: vec3) -> (hitbox: AABB)
+      {
         BOUNDING_RANGE :: 0.5
 
-        hitbox = {
+        hitbox =
+        {
           min = position - BOUNDING_RANGE,
           max = position + BOUNDING_RANGE,
         }
@@ -341,11 +392,14 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
       current_colors := DEFAULT_GIZMO_COLORS
 
       // Quickly flash the currently selected gizmos color
-      if editor.selected_gizmo != .NONE {
+      if editor.selected_gizmo != .NONE
+      {
         t := cast(f32)cos(seconds_since_start() * 8.0)
         flashing_color := lerp_colors(t, current_colors[editor.selected_gizmo], EDITOR_SELECTED_GIZMO_COLOR)
         current_colors[editor.selected_gizmo] = flashing_color
-      } else {
+      }
+      else
+      {
         // Brighten the currently hovered gizmos color if we aren't already selecting one
         hovered_gizmo := pick_gizmo(mouse_ray, camera^)
         current_colors[hovered_gizmo].rgb *= 3.0
@@ -361,12 +415,14 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 
       // FIXME: The gizmos should store more info about themselves so don't have to hardcode it terribly
       {
-        Plane_Info :: struct {
+        Plane_Info :: struct
+        {
           position: vec3,
           normal:   vec3,
           color:    vec4,
         }
-        sort_info := []Plane_Info {
+        sort_info: []Plane_Info =
+        {
           {xy_pos, WORLD_FORWARD, current_colors[.XY_PLANE]},
           {xz_pos, WORLD_UP,      current_colors[.XZ_PLANE]},
           {yz_pos, WORLD_RIGHT,   current_colors[.YZ_PLANE]},
@@ -384,7 +440,9 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
         }
       }
     }
-  } else {
+  }
+  else
+  {
     // No active entity then clear out the gizmos
     editor.selected_gizmo = .NONE
 
@@ -400,7 +458,8 @@ do_editor :: proc(camera: ^Camera, dt_s: f64) {
 }
 
 // TODO: Remove, consolidate into do_editor or more likely as a ui widget
-draw_editor_gizmos :: proc() {
+draw_editor_gizmos :: proc()
+{
   entity_text := fmt.tprintf("%v", editor.selected_entity^)
 
   x := f32(state.window.w) * 0.5
@@ -410,7 +469,8 @@ draw_editor_gizmos :: proc() {
 }
 
 // Eh, should this go in editor? This is useful even when testing in game mode
-draw_debug_stats :: proc() {
+draw_debug_stats :: proc()
+{
   text := fmt.aprintf(
 `FPS: %0.4v
 Frametime: %0.4v ms
