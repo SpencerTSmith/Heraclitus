@@ -2,13 +2,15 @@
 
 #include "generated.glsl"
 
-out VS_OUT {
+out VS_OUT
+{
   vec2 uv;
 
   flat int draw_id;
 } vs_out;
 
-void main() {
+void main()
+{
   vec3 vert_position = mesh_vertex_position(gl_VertexID);
   vec2 vert_uv       = mesh_vertex_uv(gl_VertexID);
 

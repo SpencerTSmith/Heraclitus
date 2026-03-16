@@ -1,6 +1,7 @@
 #version 460 core
 
-in VS_OUT {
+in VS_OUT
+{
   vec2 uv;
 } fs_in;
 
@@ -11,7 +12,8 @@ uniform float exposure = 1.0;
 
 layout(location = 0) out vec4 frag_color;
 
-void main() {
+void main()
+{
   vec3 hdr_color   = texture(screen_texture, fs_in.uv).rgb;
   vec3 bloom_color = texture(bloom_blur, fs_in.uv).rgb;
 

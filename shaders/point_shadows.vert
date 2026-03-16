@@ -4,7 +4,8 @@
 #extension GL_ARB_shader_viewport_layer_array : enable
 #include "generated.glsl"
 
-out VS_OUT {
+out VS_OUT
+{
   vec4 world_position;
   vec2 uv;
 
@@ -13,7 +14,8 @@ out VS_OUT {
 } vs_out;
 
 // NOTE: This only works with a cubemap array target!
-void main() {
+void main()
+{
   vec3 vert_position = mesh_vertex_position(gl_VertexID);
   vec2 vert_uv       = mesh_vertex_uv(gl_VertexID);
 

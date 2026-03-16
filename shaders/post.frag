@@ -1,6 +1,7 @@
 #version 460 core
 
-in VS_OUT {
+in VS_OUT
+{
   vec2 uv;
 } fs_in;
 
@@ -11,20 +12,23 @@ uniform float exposure = 1.0;
 out vec4 frag_color;
 
 // Averages the color of the samples
-vec4 sample_ms_texture(sampler2DMS texture, vec2 uv) {
+vec4 sample_ms_texture(sampler2DMS texture, vec2 uv)
+{
   ivec2 texture_coords = ivec2(uv * textureSize(texture));
 
   vec4 color  = vec4(0.0);
   int samples = textureSamples(texture);
 
-  for (int i = 0; i < samples; i++) {
+  for (int i = 0; i < samples; i++)
+  {
     color += texelFetch(texture, texture_coords, i);
   }
 
   return color / float(samples);
 }
 
-void main() {
+void main()
+{
   vec3 hdr_color = sample_ms_texture(screen_texture, fs_in.uv).rgb;
 
   // Reinhard

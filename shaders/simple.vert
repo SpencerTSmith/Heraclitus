@@ -7,7 +7,8 @@
 // layout(location = 2) in vec3 vert_normal;
 // layout(location = 3) in vec4 vert_tangent;
 
-out VS_OUT {
+out VS_OUT
+{
   vec2 uv;
   vec3 normal;
   vec3 world_position;
@@ -17,7 +18,8 @@ out VS_OUT {
   flat int draw_id;
 } vs_out;
 
-void main() {
+void main()
+{
   vec3 vert_position = mesh_vertex_position(gl_VertexID);
   vec2 vert_uv       = mesh_vertex_uv(gl_VertexID);
   vec3 vert_normal   = mesh_vertex_normal(gl_VertexID);

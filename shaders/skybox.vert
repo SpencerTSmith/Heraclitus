@@ -3,7 +3,8 @@
 #include "generated.glsl"
 
 // Hardcode verts here so don't need it anywhere else.
-vec3 verts[] = {
+vec3 verts[] =
+{
   vec3(-1.0,  1.0, -1.0),
   vec3(-1.0, -1.0, -1.0),
   vec3( 1.0, -1.0, -1.0),
@@ -42,11 +43,13 @@ vec3 verts[] = {
   vec3( 1.0, -1.0,  1.0),
 };
 
-out VS_OUT {
+out VS_OUT
+{
   vec3 uvw;
 } vs_out;
 
-void main() {
+void main()
+{
   vec3 vert_position = verts[gl_VertexID];
 
   vs_out.uvw = vert_position;

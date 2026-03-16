@@ -34,7 +34,7 @@ Shader_Program :: struct
   id:       u32,
 
   // NOTE: Does not store the full path, just the name
-  parts: [Shader_Type]struct
+  files: [Shader_Type]struct
   {
     name:        string,
     modify_time: time.Time,
@@ -211,15 +211,15 @@ make_shader_program :: proc(vert_name, frag_name: string, allocator := context.a
   err: os.Error
 
   // NOTE: Since we should not be generating new names, all names should just be static strings, so hopefully this is ok
-  program.parts[.VERT].name = vert_name
-  program.parts[.VERT].modify_time, err = os.last_write_time_by_name(vert_path)
+  program.files[.VERT].name = vert_name
+  program.files[.VERT].modify_time, err = os.last_write_time_by_name(vert_path)
   if err != nil
   {
     log.errorf("Could not collect modify time for vertex shader: %v... error: %v", vert_name, err)
   }
 
-  program.parts[.FRAG].name = frag_name
-  program.parts[.FRAG].modify_time, err = os.last_write_time_by_name(frag_path)
+  program.files[.FRAG].name = frag_name
+  program.files[.FRAG].modify_time, err = os.last_write_time_by_name(frag_path)
   if err != nil
   {
     log.errorf("Could not collect modify time for fragment shader: %v... error: %v", frag_name, err)
@@ -279,7 +279,7 @@ hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator := co
   for &s, tag in shaders
   {
     needs_reload := false
-    for &p in s.parts
+    for &p in s.files
     {
       path := join_file_path({SHADER_DIR, p.name}, context.temp_allocator)
       new_modify_time, err := os.modification_time_by_path(path)
@@ -297,7 +297,7 @@ hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator := co
 
     if needs_reload
     {
-      hot, ok := make_shader_program(s.parts[.VERT].name, s.parts[.FRAG].name, allocator)
+      hot, ok := make_shader_program(s.files[.VERT].name, s.files[.FRAG].name, allocator)
       if !ok
       {
         log.errorf("Unable to hot reload shader %v, keeping the old", tag)
