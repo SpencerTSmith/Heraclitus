@@ -59,13 +59,13 @@ init_assets :: proc(allocator := context.allocator) -> (ok: bool)
 FALLBACK_TEXTURE :: "missing.png"
 FALLBACK_MODEL   :: "missing/BoxTextured.gltf"
 
-get_fallback_texture_handle :: proc() -> Texture_Handle
+fallback_texture_handle :: proc() -> Texture_Handle
 {
   assert(TEXTURE_DIR + FALLBACK_TEXTURE in assets.texture_catalog.path_map)
   return assets.texture_catalog.path_map[TEXTURE_DIR + FALLBACK_TEXTURE]
 }
 
-get_fallback_model_handle :: proc() -> Model_Handle
+fallback_model_handle :: proc() -> Model_Handle
 {
   assert(MODEL_DIR + FALLBACK_MODEL in assets.model_catalog.path_map)
   return assets.model_catalog.path_map[MODEL_DIR + FALLBACK_MODEL]
@@ -110,8 +110,8 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool)
 
   if !ok
   {
-    log.errorf("Model: %v unable to be loaded", path)
-    handle = get_fallback_model_handle()
+    log.errorf("Model: %v unable to be loaded, using fallback model", path)
+    handle = fallback_model_handle()
   }
   else
   {
@@ -148,7 +148,7 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
     if !ok
     {
       log.errorf("Texture: %v unable to be loaded", path)
-      handle = get_fallback_texture_handle()
+      handle = fallback_texture_handle()
     }
     else
     {
@@ -178,13 +178,12 @@ get_texture_by_handle :: proc(handle: Texture_Handle) -> ^Texture
 
 get_texture_by_name :: proc(name: string) -> (texture: ^Texture)
 {
-  // HACK: Maybe handle hashing should just hash the name, not the path, so don't have to do this business
-  path := join_file_path( {TEXTURE_DIR, name}, context.temp_allocator) // Temp for checking, if we really need to load it... permanent alloc in load_texture
+  path := join_file_path({TEXTURE_DIR, name}, context.temp_allocator) // Temp for checking, if we really need to load it... permanent alloc in load_texture
 
   // Already loaded
   if path in assets.texture_catalog.path_map
   {
-    texture = get_texture_by_handle(assets.texture_catalog.path_map[path])
+    texture = get_texture(assets.texture_catalog.path_map[path])
   }
   else
   {
@@ -197,7 +196,8 @@ get_texture_by_name :: proc(name: string) -> (texture: ^Texture)
     }
     else
     {
-      // NOTE: Really should not be using this function often, so not going to bother with robust error handling yet
+      log.errorf("Unable to load texture by name.")
+      texture = get_texture(fallback_texture_handle())
     }
   }
 

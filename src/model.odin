@@ -4,6 +4,7 @@ import "core:log"
 import "core:slice"
 import "core:strings"
 import "core:path/filepath"
+import "base:runtime"
 
 import "vendor:cgltf"
 import gl "vendor:OpenGL"
@@ -106,9 +107,9 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
 // NOTE: Big assumptions:
 // 1. This is one model (might not be an issue if just make that make_scene() proc)
 // 2. That the image is always a separate image file (png, jpg, etc.)
-make_model_from_file :: proc(file_name: string, allocator := context.allocator) -> (model: Model, ok: bool)
+make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) -> (model: Model, ok: bool)
 {
-  c_path := strings.clone_to_cstring(file_name, allocator = context.temp_allocator)
+  c_path := strings.clone_to_cstring(file_name, context.temp_allocator)
 
   dir := filepath.dir(file_name, context.temp_allocator)
 

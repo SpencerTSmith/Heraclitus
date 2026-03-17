@@ -440,6 +440,15 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
         }
       }
     }
+
+    {
+      entity_text := fmt.tprintf("%v", editor.selected_entity^)
+
+      x := f32(state.window.w) * 0.5
+      y := f32(state.window.h) - f32(state.window.h) * 0.05
+
+      draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 2.0, align=.CENTER, padding=10.0)
+    }
   }
   else
   {
@@ -455,17 +464,6 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
   camera.velocity  = {0,0,0}
   camera.on_ground = false
-}
-
-// TODO: Remove, consolidate into do_editor or more likely as a ui widget
-draw_editor_gizmos :: proc()
-{
-  entity_text := fmt.tprintf("%v", editor.selected_entity^)
-
-  x := f32(state.window.w) * 0.5
-  y := f32(state.window.h) - f32(state.window.h) * 0.05
-
-  draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 2.0, align=.CENTER, padding=10.0)
 }
 
 // Eh, should this go in editor? This is useful even when testing in game mode

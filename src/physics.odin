@@ -40,6 +40,80 @@ Vector :: struct
   direction: vec3, // Not necessarily normalized
 }
 
+Frustum_Face :: enum
+{
+  TOP,
+  BOTTOM,
+  LEFT,
+  RIGHT,
+  NEAR,
+  FAR,
+}
+Frustum :: distinct [Frustum_Face]Plane
+
+// NOTE: w/h aspect ratio.
+make_frustum :: proc(camera: Camera, aspect_ratio, fov_y, z_near, z_far: f32) -> (frustum: Frustum)
+{
+  forward, up, right := get_camera_axes(camera)
+
+  // Half the width of the vertical axis of view
+  half_v_side := z_far * tan(fov_y * 0.5)
+  // Half the width of the horizontal axis of view
+  half_h_side := aspect_ratio * half_v_side
+
+  near_forward := z_near * forward
+  far_forward  := z_far * forward
+
+  // Self explanatory I think, normals point into the frustum
+  frustum[.NEAR] = make_plane(forward, camera.position + near_forward)
+  frustum[.FAR]  = make_plane(-forward, camera.position + far_forward)
+
+  // These do have a point at the camera position since they converge there
+  // As well, the far_forward +- camera_dir * aspect (which is the vector parallel to the plane),
+  // crossed with the other camera direction will give the normal
+  frustum[.RIGHT]  = make_plane(cross(up, far_forward + right * half_h_side), camera.position)
+  frustum[.LEFT]   = make_plane(cross(far_forward - right * half_h_side, up), camera.position)
+  frustum[.TOP]    = make_plane(cross(far_forward + up * half_v_side, right), camera.position)
+  frustum[.BOTTOM] = make_plane(cross(right, far_forward - up * half_v_side), camera.position)
+
+  return frustum
+}
+
+sphere_inside_plane :: proc(sphere: Sphere, plane: Plane) -> (inside: bool)
+{
+  // Project the sphere point onto the normal, subtract how far the plane actually is from world origin
+  distance_to_plane := dot(plane.normal, sphere.center) - plane.d_origin
+
+  // If the center is closer to the plane than its -radius, its at least partially inside
+  inside = distance_to_plane > -sphere.radius
+  return inside
+}
+
+sphere_inside_frustum :: proc(sphere: Sphere, frustum: Frustum) -> (inside: bool)
+{
+  inside = true
+
+  // Inside all frustum planes
+  for plane in frustum
+  {
+    if !sphere_inside_plane(sphere, plane)
+    {
+      inside = false
+      break
+    }
+  }
+
+  return inside
+}
+
+make_sphere :: proc(aabb: AABB) -> (sphere: Sphere)
+{
+  sphere.center = aabb_center(aabb)
+  sphere.radius = length(aabb.max - sphere.center)
+
+  return sphere
+}
+
 // Normalizes direction for you
 make_ray :: proc(origin: vec3, direction: vec3) -> (ray: Ray)
 {
@@ -64,15 +138,14 @@ make_plane :: proc(normal, point: vec3) -> (plane: Plane)
   return plane
 }
 
-// Useless? Eh just to make sure I don't make ez, stupid mistakes
 aabb_center:: proc(aabb: AABB) -> (center: vec3)
 {
-  center = (aabb.min + aabb.max) / 2.0
+  center = (aabb.min + aabb.max) * 0.5
 
   return center
 }
 
-// An 3D AABB is an intersection of 3 'Slabs' really, so we just test if the ray overlaps
+// A 3D AABB is an intersection of 3 'Slabs' really, so we just test if the ray overlaps
 // ALL 3 'Slabs'
 ray_intersects_aabb :: proc(ray: Ray, box: AABB) -> (intersects: bool, t_min: f32, point: vec3)
 {
@@ -384,10 +457,10 @@ orthonormal_axes :: proc(forward: vec3) -> (right, up: vec3)
   forw := normalize(forward) // Just in case
 
   // Pick a direction that is not parallel to forward
-  tmp := WORLD_UP if abs(forw.x) > abs(forward.z) else WORLD_RIGHT
+  tmp := WORLD_UP if abs(forw.x) > abs(forw.z) else WORLD_RIGHT
 
   right = normalize(cross(forw, tmp))
-  up    = normalize(cross(forw, right))
+  up    = normalize(cross(right, forw))
 
   return right, up
 }

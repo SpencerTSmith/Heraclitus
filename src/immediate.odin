@@ -169,7 +169,7 @@ immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHIT
                           top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
                           texture: Texture = immediate.white_texture)
 {
-
+  assert(immediate.curr_batch != nil)
   immediate_begin(immediate.curr_batch.primitive, texture, immediate.curr_batch.space, immediate.curr_batch.depth)
 
   top_left: Immediate_Vertex =
@@ -208,9 +208,10 @@ immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHIT
 
 immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
                           uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
-                          texture:    Texture = immediate.white_texture)
+                          texture: Texture = immediate.white_texture)
 {
   // NOTE: Only switch texture, other batch parameters should be declared by user before calling
+  assert(immediate.curr_batch != nil)
   immediate_begin(immediate.curr_batch.primitive, texture, immediate.curr_batch.space, immediate.curr_batch.depth)
 
   norm := normalize(normal) // Just in case
@@ -521,7 +522,7 @@ immediate_flush :: proc(flush_world := true, flush_screen := true)
 
           set_shader_uniform("transform", orthographic)
         case .WORLD:
-          if !flush_world { continue } // We shouldn't flush screen immediates
+          if !flush_world { continue } // We shouldn't flush world immediates
 
           set_shader_uniform("transform", perspective)
         }

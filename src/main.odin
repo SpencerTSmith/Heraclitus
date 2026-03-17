@@ -358,7 +358,7 @@ main :: proc()
     append(&state.entities, block)
   }
 
-  floor := make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -4, 0}, scale={1000.0, 1.0, 1000.0})
+  floor := make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
   append(&state.entities, floor)
 
   block := make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
@@ -519,6 +519,7 @@ main :: proc()
       do_editor(&state.camera, dt_s)
     }
 
+
     //
     // Update entities with point lights, AFTER we do everything else
     //
@@ -537,15 +538,14 @@ main :: proc()
       }
     }
 
+
     // Frame sync and send all per frame uniform info
     begin_drawing()
 
     // What to draw based on mode
     switch state.mode
     {
-    case .EDIT:
-      draw_editor_gizmos()
-      fallthrough
+    case .EDIT: fallthrough
     case .GAME:
       //
       // Shadow passes
@@ -627,16 +627,32 @@ main :: proc()
         bind_texture("sun_shadow_map", state.sun_depth_buffer.depth_target)
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
+        // Frustum Culling!
+        frustum := make_frustum(state.camera, f32(state.window.w)/f32(state.window.h), state.camera.curr_fov_y, state.z_near, state.z_far)
+        frustum_entities := make([dynamic]^Entity, context.temp_allocator)
+        for &e in state.entities
+        {
+          aabb := entity_world_aabb(e)
+          sphere := make_sphere(aabb)
+
+          if sphere_inside_frustum(sphere, frustum)
+          {
+            append(&frustum_entities, &e)
+          }
+        }
+
         // Go through and draw opque entities, collect transparent entities
         transparent_entities := make([dynamic]^Entity, context.temp_allocator)
-        for &e in state.entities {
-          if entity_has_transparency(e) {
-              append(&transparent_entities, &e)
+        for e in frustum_entities
+        {
+          if entity_has_transparency(e^)
+          {
+              append(&transparent_entities, e)
               continue
           }
 
           // We're good we can just draw opaque entities
-          draw_entity(e, draw_aabbs=state.draw_debug)
+          draw_entity(e^, draw_aabbs=state.draw_debug)
         }
         multi_draw(&state.mds)
 

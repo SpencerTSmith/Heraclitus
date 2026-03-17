@@ -33,17 +33,17 @@ Entity :: struct
 // or fridge thing but...
 
 // NOTE: Automatically sets the aabb of the entity to match the AABB of the model
-make_entity :: proc(model: string,
+make_entity :: proc(model_file: string,
                     flags: bit_set[Entity_Flags] = {.COLLISION, .RENDERABLE},
                     position: vec3 = {0, 0, 0},
                     rotation: vec3 = {0, 0, 0},
                     scale:    vec3 = {1, 1, 1},
                     color:    vec4 = {1, 1, 1, 1}) -> (entity: Entity)
 {
-  model, ok := load_model(model)
+  model, ok := load_model(model_file)
   if !ok
   {
-    log.warnf("Entity failed to load model: %v", model)
+    log.warnf("Entity failed to load model: %v", model_file)
   }
 
   assert(.STATIC not_in flags || .COLLISION in flags, "Static entities must have collsion")

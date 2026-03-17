@@ -96,6 +96,7 @@ length     :: glsl.length
 
 cos :: glsl.cos
 sin :: glsl.sin
+tan :: glsl.tan
 radians :: glsl.radians
 
 vmin :: glsl.min

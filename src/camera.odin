@@ -294,7 +294,7 @@ get_camera_perspective :: proc(camera: Camera, z_far: f32 = state.z_far) -> (per
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3)
 {
   forward = get_camera_forward(camera)
-  up = WORLD_UP
-  right = normalize(cross(forward, up))
+  right   = normalize(cross(forward, WORLD_UP))
+  up      = normalize(cross(right, forward))
   return forward, up, right
 }
