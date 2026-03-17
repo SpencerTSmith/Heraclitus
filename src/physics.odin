@@ -52,12 +52,12 @@ Frustum_Face :: enum
 Frustum :: distinct [Frustum_Face]Plane
 
 // NOTE: w/h aspect ratio.
-make_frustum :: proc(camera: Camera, aspect_ratio, fov_y, z_near, z_far: f32) -> (frustum: Frustum)
+make_frustum :: proc(camera: Camera, aspect_ratio, z_near, z_far: f32) -> (frustum: Frustum)
 {
   forward, up, right := get_camera_axes(camera)
 
   // Half the width of the vertical axis of view
-  half_v_side := z_far * tan(fov_y * 0.5)
+  half_v_side := z_far * tan(camera.curr_fov_y * 0.5)
   // Half the width of the horizontal axis of view
   half_h_side := aspect_ratio * half_v_side
 
@@ -282,7 +282,7 @@ sphere_intersects_aabb :: proc(sphere: Sphere, aabb: AABB) -> bool
 
   dist := closest_point - sphere.center
 
-  return dot(dist, dist) <= sphere.radius * sphere.radius
+  return dot(dist, dist) < sphere.radius * sphere.radius
 }
 
 // Factored out into a generic function since we use it elsewhere

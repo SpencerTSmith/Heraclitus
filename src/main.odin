@@ -575,6 +575,7 @@ main :: proc()
         begin_render_pass(SUN_SHADOW_PASS, state.sun_depth_buffer)
         bind_shader(.SUN_DEPTH)
 
+        // TODO: Can do frustum culling on the sun's view point too!
         for e in state.entities
         {
           draw_entity(e)
@@ -610,6 +611,7 @@ main :: proc()
                 center = l.position,
                 radius = l.radius,
               }
+              when ODIN_DEBUG {immediate_sphere(light_sphere.center, light_sphere.radius, l.color)}
               for e in state.entities
               {
                 if sphere_intersects_aabb(light_sphere, entity_world_aabb(e))
@@ -648,7 +650,7 @@ main :: proc()
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
         // Frustum Culling!
-        frustum := make_frustum(state.camera, f32(state.window.w)/f32(state.window.h), state.camera.curr_fov_y, state.z_near, state.z_far)
+        frustum := make_frustum(state.camera, f32(state.window.w)/f32(state.window.h), state.z_near, state.z_far)
         frustum_entities := make([dynamic]^Entity, context.temp_allocator)
         for &e in state.entities
         {

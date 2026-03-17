@@ -1,10 +1,11 @@
 package main
 
-import "core:log"
+// import "core:log"
+import "base:runtime"
 
 import gl "vendor:OpenGL"
 
-MAX_IMMEDIATE_VERTEX_COUNT :: 4096 * 4
+MAX_IMMEDIATE_VERTEX_COUNT :: 4096 * 32
 
 Immediate_Vertex :: struct
 {
@@ -20,7 +21,6 @@ Immediate_Primitive :: enum
 {
   TRIANGLES,
   LINES,
-  LINE_STRIPS,
 }
 
 Immediate_Space :: enum
@@ -62,7 +62,7 @@ Immediate_Batch :: struct
 @(private="file")
 immediate: Immediate_State
 
-init_immediate_renderer :: proc(allocator := context.allocator) -> (ok: bool)
+init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 {
   assert(state.gl_initialized)
 
@@ -134,30 +134,31 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
   assert(state.gl_initialized)
   assert(gpu_buffer_is_mapped(immediate.vertex_buffer), "Uninitialized Immediate State")
 
-  if immediate.vertex_count + 1 >= MAX_IMMEDIATE_VERTEX_COUNT
+  if immediate.vertex_count + 1 < MAX_IMMEDIATE_VERTEX_COUNT
   {
-    log.errorf("Too many (%v) immediate vertices!!!!!!\n", immediate.vertex_count)
-    return
-  }
+    vertex: Immediate_Vertex =
+    {
+      position = position,
+      uv       = uv,
+      color    = color,
+    }
 
-  vertex: Immediate_Vertex =
+    vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
+
+    // Write into the current batch.
+    offset := immediate.curr_batch.vertex_base + immediate.curr_batch.vertex_count
+
+    // To the gpu buffer!
+    vertex_ptr[offset] = vertex
+    immediate.vertex_count += 1
+
+    // And remember to add to the current batches count.
+    immediate.curr_batch.vertex_count += 1
+  }
+  else
   {
-    position = position,
-    uv       = uv,
-    color    = color,
+    // log.errorf("Too many (%v) immediate vertices!!!!!!\n", immediate.vertex_count)
   }
-
-  vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
-
-  // Write into the current batch.
-  offset := immediate.curr_batch.vertex_base + immediate.curr_batch.vertex_count
-
-  // To the gpu buffer!
-  vertex_ptr[offset] = vertex
-  immediate.vertex_count += 1
-
-  // And remember to add to the current batches count.
-  immediate.curr_batch.vertex_count += 1
 }
 
 immediate_quad :: proc {
@@ -422,10 +423,18 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
                          longitude_rings := 16,
                          depth_test: Depth_Test_Mode = .LESS)
 {
-  wish_primitive := Immediate_Primitive.LINE_STRIPS
+  wish_primitive := Immediate_Primitive.LINES
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
   immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
+
+  point :: proc(theta, phi, radius: f32, center: vec3) -> vec3
+  {
+    // Just a rotation matrix basically based on theta and phi, then translating by the center
+    return {(cos(phi) * sin(theta) * radius) + center.x,
+            (cos(theta) * radius) + center.y,
+            (sin(phi) * sin(theta) * radius) + center.z}
+  }
 
   // Draw the horizontal rings
   for r in 1..<latitude_rings
@@ -436,12 +445,10 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
     // The individual line segemnts that make up the ring
     for s in 0..=longitude_rings
     {
-      phi := f32(s) / f32(longitude_rings) * PI * 2.0
+      phi_a := f32(s) / f32(longitude_rings) * PI * 2.0
+      phi_b := f32(s + 1) / f32(longitude_rings) * PI * 2.0
 
-      // Just a rotation matrix basically based on theta and phi, then translating by the center
-      immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
-                        (cos(theta) * radius) + center.y,
-                        (sin(phi) * sin(theta) * radius) + center.z}, color)
+      immediate_line(point(theta, phi_a, radius, center), point(theta, phi_b, radius, center), color)
     }
   }
 
@@ -454,18 +461,12 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
     // The individual line segemnts that make up the ring
     for r in 0..=latitude_rings
     {
-      theta := f32(r) / f32(latitude_rings) * PI
+      theta_a := f32(r) / f32(latitude_rings) * PI
+      theta_b := f32(r + 1) / f32(latitude_rings) * PI
 
-      // Just a rotation matrix basically based on theta and phi, then translating by the center
-      immediate_vertex({(cos(phi) * sin(theta) * radius) + center.x,
-                        (cos(theta) * radius) + center.y,
-                        (sin(phi) * sin(theta) * radius) + center.z}, color)
+      immediate_line(point(theta_a, phi, radius, center), point(theta_b, phi, radius, center), color)
     }
   }
-
-  // So that if another line strip batch follows immediately after
-  // it doesn't get connected to this
-  immediate_begin_force()
 }
 
 immediate_plane :: proc(plane: Plane, color := WHITE)
@@ -538,8 +539,6 @@ immediate_flush :: proc(flush_world := true, flush_screen := true)
           gl.DrawArrays(gl.TRIANGLES, first_vertex, vertex_count)
         case .LINES:
           gl.DrawArrays(gl.LINES, first_vertex, vertex_count)
-        case .LINE_STRIPS:
-          gl.DrawArrays(gl.LINE_STRIP, first_vertex, vertex_count)
         }
       }
     }

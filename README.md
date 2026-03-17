@@ -36,18 +36,19 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
     - Will only load assets once, keeps hashes of file paths to check
     - Handle system, no hashing needed once the asset is loaded to retrieve it
 - Cool GLSL metaprogramming
-    - Generates GLSL code that needs to match up with host code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
+    - Generates GLSL code that needs to match up with odin code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
 - AABB basic collision detection and response
-- Quake-like player-movement (Bunny-hopping, wall-running, strafe-jumping)
+- Quake-style player-movement
 - AZDO OpenGL techniques:
     - Multi-draw indirect
     - Frames in flight sync, tripled-up persistently mapped buffers
     - Bindless textures for model materials (Still doing traditional binding api for less commonly bound textures like shadow maps, skybox, etc)
+    - ALL mesh data in one big buffer
 - Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
     - AABB, sphere, and vector debug visuals
     - Text rendering
 - Point light shadow mapping
-    - Cube map array render target... pretty efficient storage, and can minimize draw calls with instanced rendering (6 instances for each map side)
+    - Cube map array render target... pretty efficient storage, and can minimize draw calls with instanced rendering (6 instances, one for each map side)
     - Culls entities if not intersecting light radius sphere
     - Configurable, can have cheaper non shadow casting point lights
         - These are stored together on CPU in the same array (just a bool to distinguish) but are uploaded separately to GPU... Little less branchy in shader.
@@ -57,4 +58,4 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 - Full blinn-phong shading model
 - Menu... press ESC
 - Zoom... scroll wheel
-- GLTF model loading (works as far as I can tell, obviously not even close to all the features)
+- GLTF model loading (obviously not even close to all the features)
