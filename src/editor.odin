@@ -467,7 +467,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 }
 
 // Eh, should this go in editor? This is useful even when testing in game mode
-draw_debug_stats :: proc()
+draw_editor_stats :: proc()
 {
   text := fmt.aprintf(
 `FPS: %0.4v

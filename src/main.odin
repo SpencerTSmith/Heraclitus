@@ -201,7 +201,7 @@ init_state :: proc() -> (ok: bool)
   // Make the meta shader
   gen_glsl_code()
 
-  state.perm_mem = make([]byte, mem.Megabyte * 1)
+  state.perm_mem = make([]byte, mem.Megabyte * 256)
   mem.arena_init(&state.perm, state.perm_mem)
   state.perm_alloc = mem.arena_allocator(&state.perm)
 
@@ -215,7 +215,7 @@ init_state :: proc() -> (ok: bool)
     aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},},
   }
 
-  MAX_ENTITY_COUNT :: 10000
+  MAX_ENTITY_COUNT :: 100000
   state.entities = make([dynamic]Entity, state.perm_alloc)
   reserve(&state.entities, MAX_ENTITY_COUNT)
 
@@ -304,7 +304,7 @@ init_state :: proc() -> (ok: bool)
 
   init_menu() or_return
 
-  state.draw_debug = true
+  state.draw_debug = false
 
   state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
 
@@ -351,6 +351,26 @@ main :: proc()
     return
   }
   defer free_state()
+
+
+  GRID_SIZE :: 20
+  GRID_SPACING :: 5
+  for x in 0..<GRID_SIZE
+  {
+    for y in 0..<GRID_SIZE
+    {
+      for z in 0..<GRID_SIZE
+      {
+        pos := vec3{
+          f32(x) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
+          f32(y) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2),
+          f32(z) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) - 100,
+        }
+        block := make_entity("cube/BoxTextured.gltf", flags={.RENDERABLE}, position=pos)
+        append(&state.entities, block)
+      }
+    }
+  }
 
   for pos in DEFAULT_MODEL_POSITIONS
   {
@@ -753,9 +773,9 @@ main :: proc()
         set_shader_uniform("exposure", f32(0.5))
         draw_screen_quad()
 
-        if state.draw_debug
+        if state.mode == .EDIT
         {
-          draw_debug_stats()
+          draw_editor_stats()
         }
 
         draw_ui()
