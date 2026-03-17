@@ -30,7 +30,7 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
             - Could also look into mapped staging buffers... need pbo for textures, but vertex geometry should be very simple... write into the mapped buffer from threads and issue the copy to gpu memory from main thread at the beginning of frame...
 
 # Complete:
-- Multi-draw indirect
+- Frustum culling
 - Shader hot-reloading
 - Asset system basics:
     - Will only load assets once, keeps hashes of file paths to check
@@ -40,7 +40,8 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 - AABB basic collision detection and response
 - Quake-like player-movement (Bunny-hopping, wall-running, strafe-jumping)
 - AZDO OpenGL techniques:
-    - Frames in flight sync, triple-up persistently mapped buffers
+    - Multi-draw indirect
+    - Frames in flight sync, tripled-up persistently mapped buffers
     - Bindless textures for model materials (Still doing traditional binding api for less commonly bound textures like shadow maps, skybox, etc)
 - Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
     - AABB, sphere, and vector debug visuals
