@@ -7,9 +7,6 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 # To Do:
 - Separate samplers and textures
 - Big rewrite to replace gl backend with vulkan
-- Immediate rendering system needs rework, immediate_begin should only be called by user code, not internally unless absolutely necessary...
-    - Will simplify internals, and make it easier to add functionality without changing every single immediate call
-    - Complete for drawing quads
 - More sophisticated UI Layout system
     - Will probably need to do caching and multiple passes
     - Probably builder code should only add widgets to list, build the tree links, and perhaps do input
