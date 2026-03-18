@@ -436,7 +436,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 
         immediate_begin(.TRIANGLES, {}, .WORLD, .ALWAYS)
         for p in sort_info {
-          immediate_quad(p.position, p.normal, 1, 1, p.color)
+          draw_quad(p.position, p.normal, 1, 1, p.color)
         }
       }
     }

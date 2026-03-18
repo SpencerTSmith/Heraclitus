@@ -1,6 +1,6 @@
 package main
 
-// import "core:log"
+import "core:log"
 import "base:runtime"
 
 import gl "vendor:OpenGL"
@@ -38,10 +38,10 @@ Immediate_State :: struct
   vertex_count:  int, // ALL vertices for current frame
 
   shader:        Shader_Program,
-  white_texture: Texture,
+  white_texture: Texture_Handle,
 
-  curr_batch: ^Immediate_Batch,
-  batches:    Array(Immediate_Batch, 256),
+  batches:    [256]Immediate_Batch,
+  curr_batch: int,
 }
 
 // Just a view into the main vertex buffer
@@ -53,7 +53,7 @@ Immediate_Batch :: struct
   vertex_count: int, // How many vertices in batch
 
   primitive: Immediate_Primitive,
-  texture:   Texture,
+  texture:   Texture_Handle,
   space:     Immediate_Space,
   depth:     Depth_Test_Mode,
 }
@@ -72,7 +72,7 @@ init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 
   immediate.shader, ok = make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc)
 
-  immediate.white_texture = get_texture_by_name("white.png")^
+  immediate.white_texture = load_texture("white.png")
 
   return ok
 }
@@ -80,60 +80,40 @@ init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 immediate_frame_reset :: proc()
 {
   immediate.vertex_count = 0
-  array_clear(&immediate.batches)
-  immediate.curr_batch = nil
-}
-
-// Returns the pointer to the new batch in the batches dynamic array.
-@(private="file")
-start_new_batch :: proc(mode: Immediate_Primitive, texture: Texture,
-                        space: Immediate_Space,
-                        depth: Depth_Test_Mode,
-                        ) -> (batch_pointer: ^Immediate_Batch)
-{
-  array_add(&immediate.batches, Immediate_Batch {
-    vertex_base = immediate.vertex_count, // Always on the end.
-
-    primitive = mode,
-    texture = texture,
-    space = space,
-    depth = depth,
-  })
-
-  return &immediate.batches.v[immediate.batches.count - 1]
+  immediate.curr_batch = 0
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
+immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
 {
-  if immediate.curr_batch == nil || // Should short circuit and not do any nil dereferences
-     immediate.curr_batch.primitive != wish_primitive ||
-     immediate.curr_batch.space     != wish_space     ||
-     immediate.curr_batch.texture   != wish_texture   ||
-     immediate.curr_batch.depth     != wish_depth
+  current := immediate.batches[immediate.curr_batch]
+  if  current.primitive != wish_primitive ||
+      current.space     != wish_space     ||
+      current.texture   != wish_texture   ||
+      current.depth     != wish_depth
   {
-    immediate.curr_batch = start_new_batch(wish_primitive, wish_texture, wish_space, wish_depth)
+    if immediate.curr_batch + 1 < len(immediate.batches)
+    {
+      immediate.curr_batch += 1
+      immediate.batches[immediate.curr_batch] =
+      {
+        vertex_base = immediate.vertex_count,
+        primitive   = wish_primitive,
+        texture     = wish_texture,
+        space       = wish_space,
+        depth       = wish_depth,
+      }
+    }
+    else
+    {
+      log.errorf("Too many immediate draw batches.")
+    }
   }
-}
-
-// Forces the creation of a new batch
-immediate_begin_force :: proc()
-{
-  immediate.curr_batch = start_new_batch(immediate.curr_batch.primitive, immediate.curr_batch.texture, immediate.curr_batch.space, immediate.curr_batch.depth)
-}
-
-free_immediate_renderer :: proc()
-{
-  free_gpu_buffer(&immediate.vertex_buffer)
-  free_shader_program(&immediate.shader)
 }
 
 // NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right
 immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0.0})
 {
-  assert(state.gl_initialized)
-  assert(gpu_buffer_is_mapped(immediate.vertex_buffer), "Uninitialized Immediate State")
-
   if immediate.vertex_count + 1 < MAX_IMMEDIATE_VERTEX_COUNT
   {
     vertex: Immediate_Vertex =
@@ -145,33 +125,110 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
 
     vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
 
+    current := &immediate.batches[immediate.curr_batch]
+
     // Write into the current batch.
-    offset := immediate.curr_batch.vertex_base + immediate.curr_batch.vertex_count
+    offset := current.vertex_base + current.vertex_count
 
     // To the gpu buffer!
     vertex_ptr[offset] = vertex
     immediate.vertex_count += 1
 
     // And remember to add to the current batches count.
-    immediate.curr_batch.vertex_count += 1
+    current.vertex_count += 1
   }
   else
   {
-    // log.errorf("Too many (%v) immediate vertices!!!!!!\n", immediate.vertex_count)
+    // log.errorf("Too many immediate vertices", immediate.vertex_count)
   }
 }
 
-immediate_quad :: proc {
-  immediate_quad_2D,
-  immediate_quad_3D,
+// NOTE: Can control if flushing world space immediates, screen space immediates, or both
+// This is used to draw any world space immediates in the main pass, allowing them to recive MSAA and to sample
+// the main scene's depth buffer if they wish
+// TODO: Maybe consider just having two different immediate systems, one for things that should be flushed in the main pass
+// And others that ought to be flushed in the overlay/ui pass
+immediate_flush :: proc(flush_world := false, flush_screen := false)
+{
+  assert(state.began_drawing, "Tried to flush immediate vertex info before we have begun drawing this frame.")
+
+  if immediate.vertex_count > 0
+  {
+    bind_shader_program(immediate.shader)
+
+    bind_vertex_buffer(immediate.vertex_buffer)
+    defer unbind_vertex_buffer()
+
+    // Transforms
+    orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far)
+    perspective  := get_camera_perspective(state.camera) * get_camera_view(state.camera)
+
+    gl.Disable(gl.CULL_FACE)
+
+    frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
+    for batch in immediate.batches[:immediate.curr_batch + 1]
+    {
+      if batch.vertex_count > 0
+      {
+        // TODO: Again make this a more generalizable thing probably
+        depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
+        defer gl.DepthFunc(u32(depth_func_before))
+
+        gl_depth_map: [Depth_Test_Mode]u32 =
+        {
+          .DISABLED   = gl.ALWAYS,
+          .ALWAYS     = gl.ALWAYS,
+          .LESS       = gl.LESS,
+          .LESS_EQUAL = gl.LEQUAL,
+        }
+
+        gl.DepthFunc(gl_depth_map[batch.depth])
+
+        switch batch.space
+        {
+        case .SCREEN:
+          if !flush_screen { continue } // We shouldn't flush screen immediates
+
+          set_shader_uniform("transform", orthographic)
+        case .WORLD:
+          if !flush_world { continue } // We shouldn't flush world immediates
+
+          set_shader_uniform("transform", perspective)
+        }
+
+        bind_texture("tex", get_texture(batch.texture)^)
+
+        first_vertex := i32(frame_base + batch.vertex_base)
+        vertex_count := i32(batch.vertex_count)
+
+        gl_primitive_map: [Immediate_Primitive]u32 =
+        {
+          .TRIANGLES = gl.TRIANGLES,
+          .LINES     = gl.LINES,
+        }
+
+        gl.DrawArrays(gl_primitive_map[batch.primitive], first_vertex, vertex_count)
+      }
+    }
+  }
 }
 
-immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
-                          top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
-                          texture: Texture = immediate.white_texture)
+free_immediate_renderer :: proc()
 {
-  assert(immediate.curr_batch != nil)
-  immediate_begin(immediate.curr_batch.primitive, texture, immediate.curr_batch.space, immediate.curr_batch.depth)
+  free_gpu_buffer(&immediate.vertex_buffer)
+  free_shader_program(&immediate.shader)
+}
+
+draw_quad :: proc {
+  draw_quad_screen,
+  draw_quad_world,
+}
+
+draw_quad_screen :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
+                         top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
+                         texture: Texture_Handle = immediate.white_texture)
+{
+  immediate_begin(.TRIANGLES, texture, .SCREEN, .ALWAYS)
 
   top_left: Immediate_Vertex =
   {
@@ -207,13 +264,12 @@ immediate_quad_2D :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHIT
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
 }
 
-immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
-                          uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
-                          texture: Texture = immediate.white_texture)
+draw_quad_world :: proc(center, normal: vec3, w, h: f32, color := WHITE,
+                        uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
+                        texture: Texture_Handle = immediate.white_texture, depth_test: Depth_Test_Mode = .LESS)
 {
-  // NOTE: Only switch texture, other batch parameters should be declared by user before calling
-  assert(immediate.curr_batch != nil)
-  immediate_begin(immediate.curr_batch.primitive, texture, immediate.curr_batch.space, immediate.curr_batch.depth)
+  // FIXME:
+  immediate_begin(.TRIANGLES, texture, .WORLD, depth_test)
 
   norm := normalize(normal) // Just in case
   right, up := orthonormal_axes(norm)
@@ -256,138 +312,122 @@ immediate_quad_3D :: proc(center, normal: vec3, w, h: f32, color := WHITE,
 }
 
 // TODO: These should not be immediate... should be draw_line
-immediate_line :: proc
+draw_line :: proc
 {
-  immediate_line_2D,
-  immediate_line_3D,
+  draw_line_screen,
+  draw_line_world,
 }
 
 // NOTE: A 2d line so takes in screen coordinates!
-immediate_line_2D :: proc(xy0, xy1: vec2, rgba := WHITE,
+draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE,
                           depth_test: Depth_Test_Mode = .ALWAYS)
 {
-  wish_primitive := Immediate_Primitive.LINES
-  wish_space     := Immediate_Space.SCREEN
-  wish_texture   := immediate.white_texture
-
-  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
+  immediate_begin(.LINES, immediate.white_texture, .SCREEN, depth_test)
 
   immediate_vertex({xy0.x, xy0.y, -state.z_near}, color=rgba)
   immediate_vertex({xy1.x, xy1.y, -state.z_near}, color=rgba)
 }
 
 // NOTE: 3d line
-immediate_line_3D :: proc(xyz0, xyz1: vec3, color := WHITE,
+draw_line_world :: proc(xyz0, xyz1: vec3, color := WHITE,
                           depth_test: Depth_Test_Mode = .LESS)
 {
-  wish_primitive := Immediate_Primitive.LINES
-  wish_space     := Immediate_Space.WORLD
-  wish_texture   := immediate.white_texture
-
-  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
+  immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
 
   immediate_vertex(xyz0, color=color)
   immediate_vertex(xyz1, color=color)
 }
 
-immediate_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
-                           depth_test: Depth_Test_Mode = .LESS)
-{
-  corners := box_corners(xyz_min, xyz_max)
-
-  wish_primitive := Immediate_Primitive.TRIANGLES
-  wish_space     := Immediate_Space.WORLD
-  wish_texture   := immediate.white_texture
-
-  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
-
-  immediate_vertex(corners[0], color)
-  immediate_vertex(corners[1], color)
-  immediate_vertex(corners[2], color)
-
-  immediate_vertex(corners[3], color)
-  immediate_vertex(corners[2], color)
-  immediate_vertex(corners[0], color)
-
-  immediate_vertex(corners[0], color)
-  immediate_vertex(corners[3], color)
-  immediate_vertex(corners[4], color)
-
-  immediate_vertex(corners[5], color)
-  immediate_vertex(corners[0], color)
-  immediate_vertex(corners[4], color)
-
-  immediate_vertex(corners[3], color)
-  immediate_vertex(corners[2], color)
-  immediate_vertex(corners[7], color)
-
-  immediate_vertex(corners[4], color)
-  immediate_vertex(corners[3], color)
-  immediate_vertex(corners[7], color)
-
-  immediate_vertex(corners[0], color)
-  immediate_vertex(corners[5], color)
-  immediate_vertex(corners[6], color)
-
-  immediate_vertex(corners[1], color)
-  immediate_vertex(corners[0], color)
-  immediate_vertex(corners[6], color)
-
-  immediate_vertex(corners[1], color)
-  immediate_vertex(corners[6], color)
-  immediate_vertex(corners[7], color)
-
-  immediate_vertex(corners[2], color)
-  immediate_vertex(corners[1], color)
-  immediate_vertex(corners[7], color)
-
-  immediate_vertex(corners[5], color)
-  immediate_vertex(corners[4], color)
-  immediate_vertex(corners[7], color)
-
-  immediate_vertex(corners[6], color)
-  immediate_vertex(corners[5], color)
-  immediate_vertex(corners[7], color)
-}
-
-immediate_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
+draw_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
                       depth_test: Depth_Test_Mode = .LESS)
 {
   corners := box_corners(xyz_min, xyz_max)
 
-  wish_primitive := Immediate_Primitive.LINES
-  wish_space     := Immediate_Space.WORLD
-  wish_texture   := immediate.white_texture
-  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
-
-  // Back
-  immediate_line(corners[0], corners[1], color)
-  immediate_line(corners[1], corners[2], color)
-  immediate_line(corners[2], corners[3], color)
-  immediate_line(corners[3], corners[0], color)
-
-  // Front
-  immediate_line(corners[4], corners[5], color)
-  immediate_line(corners[5], corners[6], color)
-  immediate_line(corners[6], corners[7], color)
-  immediate_line(corners[7], corners[4], color)
-
-  // Left
-  immediate_line(corners[4], corners[3], color)
-  immediate_line(corners[5], corners[0], color)
-
-  // Right
-  immediate_line(corners[7], corners[2], color)
-  immediate_line(corners[6], corners[1], color)
-}
-
-immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
-                          depth_test: Depth_Test_Mode = .LESS)
-{
   wish_primitive := Immediate_Primitive.TRIANGLES
   wish_space     := Immediate_Space.WORLD
   wish_texture   := immediate.white_texture
+
   immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
+
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[2], color)
+
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[2], color)
+  immediate_vertex(corners[0], color)
+
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[4], color)
+
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[4], color)
+
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[2], color)
+  immediate_vertex(corners[7], color)
+
+  immediate_vertex(corners[4], color)
+  immediate_vertex(corners[3], color)
+  immediate_vertex(corners[7], color)
+
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[6], color)
+
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[0], color)
+  immediate_vertex(corners[6], color)
+
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[6], color)
+  immediate_vertex(corners[7], color)
+
+  immediate_vertex(corners[2], color)
+  immediate_vertex(corners[1], color)
+  immediate_vertex(corners[7], color)
+
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[4], color)
+  immediate_vertex(corners[7], color)
+
+  immediate_vertex(corners[6], color)
+  immediate_vertex(corners[5], color)
+  immediate_vertex(corners[7], color)
+}
+
+draw_box :: proc(corners: [8]vec3, color := WHITE,
+                 depth_test: Depth_Test_Mode = .LESS)
+{
+  immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
+
+  // Back
+  draw_line(corners[0], corners[1], color)
+  draw_line(corners[1], corners[2], color)
+  draw_line(corners[2], corners[3], color)
+  draw_line(corners[3], corners[0], color)
+
+  // Front
+  draw_line(corners[4], corners[5], color)
+  draw_line(corners[5], corners[6], color)
+  draw_line(corners[6], corners[7], color)
+  draw_line(corners[7], corners[4], color)
+
+  // Left
+  draw_line(corners[4], corners[3], color)
+  draw_line(corners[5], corners[0], color)
+
+  // Right
+  draw_line(corners[7], corners[2], color)
+  draw_line(corners[6], corners[1], color)
+}
+
+draw_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
+                     depth_test: Depth_Test_Mode = .LESS)
+{
+  immediate_begin(.TRIANGLES, immediate.white_texture, .WORLD, depth_test)
 
   // Triangle sides
   immediate_vertex(tip, color)
@@ -416,17 +456,12 @@ immediate_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
   immediate_vertex(base3, color)
 }
 
-// Only wire frame for now
-// TODO: Filled in option too
-immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
-                         latitude_rings := 16,
-                         longitude_rings := 16,
-                         depth_test: Depth_Test_Mode = .LESS)
+draw_sphere :: proc(center: vec3, radius: f32, color := WHITE,
+                    latitude_rings := 16,
+                    longitude_rings := 16,
+                    depth_test: Depth_Test_Mode = .LESS)
 {
-  wish_primitive := Immediate_Primitive.LINES
-  wish_space     := Immediate_Space.WORLD
-  wish_texture   := immediate.white_texture
-  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
+  immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
 
   point :: proc(theta, phi, radius: f32, center: vec3) -> vec3
   {
@@ -448,7 +483,7 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
       phi_a := f32(s) / f32(longitude_rings) * PI * 2.0
       phi_b := f32(s + 1) / f32(longitude_rings) * PI * 2.0
 
-      immediate_line(point(theta, phi_a, radius, center), point(theta, phi_b, radius, center), color)
+      draw_line(point(theta, phi_a, radius, center), point(theta, phi_b, radius, center), color)
     }
   }
 
@@ -464,83 +499,86 @@ immediate_sphere :: proc(center: vec3, radius: f32, color := WHITE,
       theta_a := f32(r) / f32(latitude_rings) * PI
       theta_b := f32(r + 1) / f32(latitude_rings) * PI
 
-      immediate_line(point(theta_a, phi, radius, center), point(theta_b, phi, radius, center), color)
+      draw_line(point(theta_a, phi, radius, center), point(theta_b, phi, radius, center), color)
     }
   }
 }
 
-immediate_plane :: proc(plane: Plane, color := WHITE)
+draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE)
 {
-  center := plane.normal * plane.d_origin
-  immediate_quad(center, plane.normal, 500, 500, color)
-}
+  range_cast := f32(range)
 
-// NOTE: Can control if flushing world space immediates, screen space immediates, or both
-// This is used to draw any world space immediates in the main pass, allowing them to recive MSAA and to sample
-// the main scene's depth buffer if they wish
-// TODO: Maybe consider just having two different immediate systems, one for things that should be flushed in the main pass
-// And others that ought to be flushed in the overlay/ui pass
-immediate_flush :: proc(flush_world := true, flush_screen := true)
-{
-  assert(state.began_drawing, "Tried to flush immediate vertex info before we have begun drawing this frame.")
+  // Red cube at the origin
+  draw_fill_box({-0.1,-0.1,-0.1}, {0.1,0.1,0.1}, RED)
 
-  if immediate.vertex_count > 0
+  for z := -range; z <= range; z += spacing
   {
-    bind_shader_program(immediate.shader)
-
-    bind_vertex_buffer(immediate.vertex_buffer)
-    defer unbind_vertex_buffer()
-
-    // Transforms
-    orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far)
-    perspective  := get_camera_perspective(state.camera) * get_camera_view(state.camera)
-
-    gl.Disable(gl.CULL_FACE)
-
-    frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
-    for batch in array_slice(&immediate.batches)
+    z_cast := f32(z)
+    for x := -range; x <= range; x += spacing
     {
-      if batch.vertex_count > 0
-      {
-        // TODO: Again make this a more generalizable thing probably
-        depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
-        defer gl.DepthFunc(u32(depth_func_before))
+      x_cast := f32(x)
+      draw_line(vec3{x_cast, -range_cast, z_cast}, vec3{x_cast, range_cast, z_cast}, color)
+    }
 
-        gl_depth_map: [Depth_Test_Mode]u32 =
-        {
-          .DISABLED   = 0,
-          .ALWAYS     = gl.ALWAYS,
-          .LESS       = gl.LESS,
-          .LESS_EQUAL = gl.LEQUAL,
-        }
-
-        gl.DepthFunc(gl_depth_map[batch.depth])
-
-        switch batch.space
-        {
-        case .SCREEN:
-          if !flush_screen { continue } // We shouldn't flush screen immediates
-
-          set_shader_uniform("transform", orthographic)
-        case .WORLD:
-          if !flush_world { continue } // We shouldn't flush world immediates
-
-          set_shader_uniform("transform", perspective)
-        }
-
-        bind_texture("tex", batch.texture)
-
-        first_vertex := i32(frame_base + batch.vertex_base)
-        vertex_count := i32(batch.vertex_count)
-
-        switch batch.primitive
-        {
-        case .TRIANGLES:
-          gl.DrawArrays(gl.TRIANGLES, first_vertex, vertex_count)
-        case .LINES:
-          gl.DrawArrays(gl.LINES, first_vertex, vertex_count)
-        }
-      }
+    for y := -range; y <= range; y += spacing
+    {
+      y_cast := f32(y)
+      draw_line(vec3{-range_cast, y_cast, z_cast}, vec3{range_cast, y_cast, z_cast}, color)
     }
   }
+
+  for y := -range; y <= range; y += spacing
+  {
+    y_cast := f32(y)
+    for x := -range; x <= range; x += spacing
+    {
+      x_cast := f32(x)
+      draw_line(vec3{x_cast, y_cast, -range_cast}, vec3{x_cast, y_cast, range_cast}, color)
+    }
+
+    for z := -range; z <= range; z += spacing
+    {
+      z_cast := f32(z)
+      draw_line(vec3{-range_cast, y_cast, z_cast}, vec3{range_cast, y_cast, z_cast}, color)
+    }
+  }
+}
+
+// TODO: Rewrite immediate line to take in a radius for line, will probably no longer have to have immediate line primitive... just a  line is ugly
+draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025, depth_test: Depth_Test_Mode = .LESS)
+{
+  end := origin + direction
+  draw_line(origin, end, color, depth_test=depth_test)
+
+  // Need the space relative to the direction of the vector
+  // To draw the pyramid tip
+  forward := normalize(direction)
+  right, up := orthonormal_axes(forward)
+
+  tip   := end
+
+  base0 := end + right * tip_bounds
+  base0 += up * tip_bounds
+  base0 -= forward * tip_bounds * 4
+
+  base1 := end + right * tip_bounds
+  base1 -= up * tip_bounds
+  base1 -= forward * tip_bounds * 4
+
+  base2 := end - right * tip_bounds
+  base2 += up * tip_bounds
+  base2 -= forward * tip_bounds * 4
+
+  base3 := end - right * tip_bounds
+  base3 -= up * tip_bounds
+  base3 -= forward * tip_bounds * 4
+
+  draw_pyramid(tip, base0, base1, base2, base3, color,
+                    depth_test=depth_test)
+}
+
+draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN)
+{
+  corners := box_corners(aabb.min, aabb.max)
+  draw_box(corners, color)
 }

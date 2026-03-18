@@ -68,10 +68,12 @@ push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_U
     // Draw Command
     {
       command := command
+
       // NOTE: Using this to index into the total buffer. As we have to do multiple
       // multidraws per frame due to shadow mapping,
       // gl_DrawID no longer works perfectly to index
       command.base_instance = cast(u32)mds.draw_count
+      command.first_index += cast(u32)mds.vertex_buffer.index_offset/4
 
       offset := size_of(Draw_Command) * mds.draw_count
       write_gpu_buffer_frame(mds.draw_commands, offset, size_of(command), &command)
@@ -114,13 +116,4 @@ reset_multi_draw :: proc(mds: ^Multi_Draw_State)
 {
   mds.draw_count = 0
   mds.draw_head  = 0
-}
-
-// NOTE: Returns the byte offset.
-// maybe useless but might as well pull this out in case change it later.
-multi_draw_index_offset :: proc(mds: Multi_Draw_State, add_offset: uintptr) -> (final_offset: uintptr)
-{
-  final_offset = uintptr(mds.vertex_buffer.index_offset) + add_offset
-
-  return final_offset
 }

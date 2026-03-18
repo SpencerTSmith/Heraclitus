@@ -219,46 +219,6 @@ ray_intersects_plane :: proc(ray: Ray, plane: Plane) -> (intersects: bool, t: f3
   return intersects, t, pos
 }
 
-draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE)
-{
-  range_cast := f32(range)
-
-  // Red cube at the origin
-  immediate_fill_box({-0.1,-0.1,-0.1}, {0.1,0.1,0.1}, RED)
-
-  for z := -range; z <= range; z += spacing
-  {
-    z_cast := f32(z)
-    for x := -range; x <= range; x += spacing
-    {
-      x_cast := f32(x)
-      immediate_line(vec3{x_cast, -range_cast, z_cast}, vec3{x_cast, range_cast, z_cast}, color)
-    }
-
-    for y := -range; y <= range; y += spacing
-    {
-      y_cast := f32(y)
-      immediate_line(vec3{-range_cast, y_cast, z_cast}, vec3{range_cast, y_cast, z_cast}, color)
-    }
-  }
-
-  for y := -range; y <= range; y += spacing
-  {
-    y_cast := f32(y)
-    for x := -range; x <= range; x += spacing
-    {
-      x_cast := f32(x)
-      immediate_line(vec3{x_cast, y_cast, -range_cast}, vec3{x_cast, y_cast, range_cast}, color)
-    }
-
-    for z := -range; z <= range; z += spacing
-    {
-      z_cast := f32(z)
-      immediate_line(vec3{-range_cast, y_cast, z_cast}, vec3{range_cast, y_cast, z_cast}, color)
-    }
-  }
-}
-
 // From real-time collision detection
 closest_point_on_aabb :: proc(point: vec3, aabb: AABB) -> vec3
 {
@@ -463,42 +423,4 @@ orthonormal_axes :: proc(forward: vec3) -> (right, up: vec3)
   up    = normalize(cross(right, forw))
 
   return right, up
-}
-
-// TODO: Rewrite immediate line to take in a radius for line, will probably no longer have to have immediate line primitive... just a  line is ugly
-draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025, depth_test: Depth_Test_Mode = .LESS)
-{
-  end := origin + direction
-  immediate_line(origin, end, color, depth_test=depth_test)
-
-  // Need the space relative to the direction of the vector
-  // To draw the pyramid tip
-  forward := normalize(direction)
-  right, up := orthonormal_axes(forward)
-
-  tip   := end
-
-  base0 := end + right * tip_bounds
-  base0 += up * tip_bounds
-  base0 -= forward * tip_bounds * 4
-
-  base1 := end + right * tip_bounds
-  base1 -= up * tip_bounds
-  base1 -= forward * tip_bounds * 4
-
-  base2 := end - right * tip_bounds
-  base2 += up * tip_bounds
-  base2 -= forward * tip_bounds * 4
-
-  base3 := end - right * tip_bounds
-  base3 -= up * tip_bounds
-  base3 -= forward * tip_bounds * 4
-
-  immediate_pyramid(tip, base0, base1, base2, base3, color,
-                    depth_test=depth_test)
-}
-
-draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN)
-{
-  immediate_box(aabb.min, aabb.max, color)
 }

@@ -60,8 +60,8 @@ make_model :: proc
 
 // Takes in all vertices and all indices.. then a slice of the materials and a slice of the meshes
 make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
-  materials: []Material, meshes: []Mesh,
-  allocator := context.allocator) -> (model: Model, ok: bool)
+                             materials: []Material, meshes: []Mesh,
+                             allocator: runtime.Allocator) -> (model: Model, ok: bool)
 {
   vertex_offset, index_offset := push_vertices(&state.mds, vertices, indices)
 
@@ -512,14 +512,14 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
   {
     material := material_uniform(model.materials[mesh.material_index])
 
-    true_offset := multi_draw_index_offset(state.mds, uintptr(model.index_offset + mesh.index_offset) * size_of(Mesh_Index))
+    true_offset := model.index_offset + mesh.index_offset
 
     command: Draw_Command =
     {
       count          = cast(u32)mesh.index_count,
       base_vertex    = cast(u32)model.vertex_offset,
       instance_count = cast(u32)instances,
-      first_index    = cast(u32)true_offset / 4,
+      first_index    = cast(u32)true_offset,
       base_instance  = 0, // We set this in push_draw, as it will know what that ought to be.
     }
 

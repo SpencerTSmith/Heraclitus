@@ -41,7 +41,7 @@ Font :: struct
   line_height: f32, // Scaled
 
   glyphs: [FONT_CHAR_COUNT]Font_Glyph,
-  atlas:  Texture,
+  atlas:  Texture_Handle,
 }
 
 Text_Alignment :: enum
@@ -100,11 +100,13 @@ make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool
         }
       }
 
-      font.atlas = make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
+      atlas_texture := make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
 
       // Make R show up as alpha
       swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED}
-      gl.TextureParameteriv(font.atlas.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
+      gl.TextureParameteriv(atlas_texture.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
+
+      font.atlas = register_texture(atlas_texture)
     }
     else
     {
@@ -193,14 +195,10 @@ text_draw_height :: proc(text: string, font: Font) -> f32
 
 draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, align: Text_Alignment = .LEFT)
 {
-  assert(font.atlas.id != 0, "Tried to use uninitialized font")
-
   x_start := align_text_start_x(text, font, x, align)
 
   x_cursor := x_start
   y_cursor := y
-
-  immediate_begin(.TRIANGLES, font.atlas, .SCREEN, .ALWAYS)
 
   for c in text
   {
@@ -220,7 +218,7 @@ draw_text :: proc(text: string, font: Font, x, y: f32, text_color := WHITE, alig
     char_uv0 := vec2{glyph.x0, glyph.y0}
     char_uv1 := vec2{glyph.x1, glyph.y1}
 
-    immediate_quad(char_xy, char_w, char_h, text_color, char_uv0, char_uv1, font.atlas)
+    draw_quad(char_xy, char_w, char_h, text_color, char_uv0, char_uv1, font.atlas)
 
     x_cursor += glyph.advance
   }
@@ -243,7 +241,7 @@ draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_colo
 
   immediate_begin(.TRIANGLES, {}, .SCREEN, .ALWAYS)
 
-  immediate_quad(vec2{l, t}, w, h, background_color)
+  draw_quad(vec2{l, t}, w, h, background_color)
   draw_text(text, font, x, y, text_color, align)
 
   left   = l
@@ -252,10 +250,4 @@ draw_text_with_background :: proc(text: string, font: Font, x, y: f32, text_colo
   right  = r + padding * 2
 
   return left, top, bottom, right
-}
-
-free_font :: proc(font: ^Font)
-{
-  free_texture(&font.atlas)
-  font^ = {}
 }

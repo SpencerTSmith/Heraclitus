@@ -45,13 +45,13 @@ init_assets :: proc(allocator := context.allocator) -> (ok: bool)
   reserve(&assets.texture_catalog.assets, EXPECTED_TEXTURE_ASSET_COUNT)
 
   // Probably will want these so might as well load them now
-  _, ok = load_texture("white.png")
-  _, ok = load_texture("black.png")
-  _, ok = load_texture("flat_normal.png")
+  load_texture("white.png")
+  load_texture("black.png")
+  load_texture("flat_normal.png")
 
   // In case we can't load something have these fallbacks
-  _, ok = load_texture(FALLBACK_TEXTURE)
-  _, ok = load_model(FALLBACK_MODEL) // Index 0 will always be loaded and is a 1x1 cube
+  load_texture(FALLBACK_TEXTURE)
+  _, ok = load_model(FALLBACK_MODEL)
 
   return ok
 }
@@ -130,20 +130,18 @@ get_model :: proc(handle: Model_Handle) -> ^Model
 }
 
 load_texture :: proc(name: string, nonlinear_color: bool = false,
-                     in_texture_dir: bool = true) -> (handle: Texture_Handle, ok: bool)
+                     in_texture_dir: bool = true) -> (handle: Texture_Handle)
 {
   path := join_file_path({TEXTURE_DIR, name}, context.temp_allocator) if in_texture_dir else name
 
   // Already loaded
   if path in assets.texture_catalog.path_map
   {
-    ok = true
     handle = assets.texture_catalog.path_map[path]
   }
   else
   {
-    texture: Texture
-    texture, ok = make_texture(path, nonlinear_color)
+    texture, ok := make_texture(path, nonlinear_color)
 
     if !ok
     {
@@ -152,8 +150,7 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
     }
     else
     {
-      handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
-      append(&assets.texture_catalog.assets, texture)
+      handle = register_texture(texture)
 
       // Save the path for checking later, but only the first time.
       path = strings.clone(path, state.perm_alloc)
@@ -162,7 +159,16 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
     }
   }
 
-  return handle, ok
+  return handle
+}
+
+// Sometimes want to add a texture without going through load texture path.
+register_texture :: proc(texture: Texture) -> (handle: Texture_Handle)
+{
+  handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
+  append(&assets.texture_catalog.assets, texture)
+
+  return handle
 }
 
 get_texture :: proc
@@ -189,16 +195,8 @@ get_texture_by_name :: proc(name: string) -> (texture: ^Texture)
   {
     log.infof("Loading Texture %v", name)
     // Load it if not already
-    handle, ok := load_texture(name)
-    if ok
-    {
-      texture = get_texture(handle)
-    }
-    else
-    {
-      log.errorf("Unable to load texture by name.")
-      texture = get_texture(fallback_texture_handle())
-    }
+    handle := load_texture(name)
+    texture = get_texture(handle)
   }
 
   return texture

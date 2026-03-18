@@ -611,7 +611,6 @@ main :: proc()
                 center = l.position,
                 radius = l.radius,
               }
-              when ODIN_DEBUG {immediate_sphere(light_sphere.center, light_sphere.radius, l.color)}
               for e in state.entities
               {
                 if sphere_intersects_aabb(light_sphere, entity_world_aabb(e))
@@ -709,8 +708,7 @@ main :: proc()
             w: f32 = 1.0
             h: f32 = 1.0
             normal := normalize(l.position - state.camera.position) // Billboard it!
-            immediate_begin(.TRIANGLES, get_texture("point_light.png")^, .WORLD, .LESS)
-            immediate_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=get_texture("point_light.png")^)
+            draw_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
           }
         }
 

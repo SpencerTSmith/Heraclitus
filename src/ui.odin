@@ -222,7 +222,7 @@ draw_ui :: proc()
 
   for d in array_slice(&ui.draws)
   {
-    immediate_quad(d.quad.top_left, d.quad.width, d.quad.height, d.quad_color)
+    draw_quad(d.quad.top_left, d.quad.width, d.quad.height, d.quad_color)
     draw_text(d.text, state.default_font, d.text_pos.x, d.text_pos.y, d.text_color)
   }
 
