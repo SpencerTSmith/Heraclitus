@@ -49,9 +49,6 @@ State :: struct {
 
   began_drawing: bool,
 
-  z_near: f32,
-  z_far:  f32,
-
   sun: Direction_Light,
 
   flashlight:Spot_Light,
@@ -62,6 +59,8 @@ State :: struct {
 
   // Could maybe replace this but this makes it easier to add them
   shaders: [Shader_Tag]Shader_Program,
+
+  samplers: [Sampler_Preset]u32,
 
   skybox: Skybox,
 
@@ -209,6 +208,8 @@ init_state :: proc() -> (ok: bool)
   {
     sensitivity  = 0.2,
     yaw          = 270.0,
+    z_near       = 0.1,
+    z_far        = 1000.0,
     position     = {0.0, 0.0, 5.0},
     curr_fov_y   = 90.0,
     target_fov_y = 90.0,
@@ -225,9 +226,6 @@ init_state :: proc() -> (ok: bool)
 
   state.running = true
 
-  state.z_near = 0.1
-  state.z_far  = 1000.0
-
   state.shaders[.PHONG]       = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
   state.shaders[.SKYBOX]      = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
   state.shaders[.RESOLVE_HDR] = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
@@ -235,6 +233,8 @@ init_state :: proc() -> (ok: bool)
   state.shaders[.POINT_DEPTH] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
   state.shaders[.GAUSSIAN]    = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
   state.shaders[.GET_BRIGHT]  = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
+
+  state.samplers = make_samplers()
 
   state.sun =
   {
@@ -502,7 +502,7 @@ main :: proc()
     {
       move_camera_game(&state.camera, dt_s)
       state.flashlight.position  = state.camera.position
-      state.flashlight.direction = get_camera_forward(state.camera)
+      state.flashlight.direction = camera_forward(state.camera)
 
       //
       // Collision
@@ -649,7 +649,7 @@ main :: proc()
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
         // Frustum Culling!
-        frustum := make_frustum(state.camera, f32(state.window.w)/f32(state.window.h), state.z_near, state.z_far)
+        frustum := make_frustum(state.camera, f32(state.window.w)/f32(state.window.h), state.camera.z_near, state.camera.z_far)
         frustum_entities := make([dynamic]^Entity, context.temp_allocator)
         for &e in state.entities
         {

@@ -160,8 +160,8 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
     defer unbind_vertex_buffer()
 
     // Transforms
-    orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far)
-    perspective  := get_camera_perspective(state.camera) * get_camera_view(state.camera)
+    orthographic := camera_orthographic(state.camera, state.window.w, state.window.h)
+    perspective  := camera_perspective(state.camera, window_aspect_ratio(state.window)) * camera_view(state.camera)
 
     gl.Disable(gl.CULL_FACE)
 
@@ -232,25 +232,25 @@ draw_quad_screen :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE
 
   top_left: Immediate_Vertex =
   {
-    position = {top_left_position.x, top_left_position.y, -state.z_near},
+    position = {top_left_position.x, top_left_position.y, -state.camera.z_near},
     uv       = top_left_uv,
     color    = color,
   }
   top_right: Immediate_Vertex =
   {
-    position = {top_left_position.x + w, top_left_position.y, -state.z_near},
+    position = {top_left_position.x + w, top_left_position.y, -state.camera.z_near},
     uv       = {bottom_right_uv.x, top_left_uv.y},
     color    = color,
   }
   bottom_left: Immediate_Vertex =
   {
-    position = {top_left_position.x, top_left_position.y + h, -state.z_near},
+    position = {top_left_position.x, top_left_position.y + h, -state.camera.z_near},
     uv       = {top_left_uv.x, bottom_right_uv.y},
     color    = color,
   }
   bottom_right: Immediate_Vertex =
   {
-    position = {top_left_position.x + w, top_left_position.y + h, -state.z_near},
+    position = {top_left_position.x + w, top_left_position.y + h, -state.camera.z_near},
     uv       = bottom_right_uv,
     color    = color,
   }
@@ -268,7 +268,6 @@ draw_quad_world :: proc(center, normal: vec3, w, h: f32, color := WHITE,
                         uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
                         texture: Texture_Handle = immediate.white_texture, depth_test: Depth_Test_Mode = .LESS)
 {
-  // FIXME:
   immediate_begin(.TRIANGLES, texture, .WORLD, depth_test)
 
   norm := normalize(normal) // Just in case
@@ -324,8 +323,8 @@ draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE,
 {
   immediate_begin(.LINES, immediate.white_texture, .SCREEN, depth_test)
 
-  immediate_vertex({xy0.x, xy0.y, -state.z_near}, color=rgba)
-  immediate_vertex({xy1.x, xy1.y, -state.z_near}, color=rgba)
+  immediate_vertex({xy0.x, xy0.y, -state.camera.z_near}, color=rgba)
+  immediate_vertex({xy1.x, xy1.y, -state.camera.z_near}, color=rgba)
 }
 
 // NOTE: 3d line

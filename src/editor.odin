@@ -112,7 +112,10 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 {
   if mouse_down(.MIDDLE) || key_down(.Q)
   {
-    update_camera_look(camera, dt_s)
+    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
+    x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
+    y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
+    update_camera_look(camera, x_delta, y_delta, dt_s)
   }
   else
   {
@@ -196,7 +199,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   // 3D Editor interactions
   //
   screen_x, screen_y := mouse_position()
-  world_coord := unproject_screen_coord(screen_x, screen_y, get_camera_view(camera^), get_camera_perspective(camera^))
+  world_coord := unproject_screen_coord(screen_x, screen_y, camera_view(camera^), camera_perspective(camera^, window_aspect_ratio(state.window)))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
 
   if !ui_had_interaction()
@@ -213,10 +216,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
         the_gizmo := &editor.gizmos[editor.selected_gizmo]
 
         // Plane should be orthogonal to camera
-        normal := -get_camera_forward(state.camera)
-
-        hit_plane := make_plane(normal, editor.selected_entity.position)
-        the_gizmo.hit_plane = hit_plane
+        the_gizmo.hit_plane = make_plane(-camera_forward, editor.selected_entity.position)
 
         intersect, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
         if intersect && t >= 0.0

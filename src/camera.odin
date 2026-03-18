@@ -7,7 +7,13 @@ Camera :: struct
   position:   vec3,
   velocity:   vec3,
 
-  yaw, pitch:  f32, // Degrees
+  // Degrees
+  yaw:    f32,
+  pitch:  f32,
+
+  z_near: f32,
+  z_far:  f32,
+
   sensitivity: f32,
 
   curr_fov_y:   f32, // Degrees
@@ -20,13 +26,8 @@ Camera :: struct
   aabb: AABB,
 }
 
-update_camera_look :: proc(camera: ^Camera, dt_s: f64)
+update_camera_look :: proc(camera: ^Camera, x_delta, y_delta: f32, dt_s: f64)
 {
-  glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-
-  x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
-  y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
-
   camera.yaw   -= camera.sensitivity * x_delta
   camera.pitch -= camera.sensitivity * y_delta
   camera.pitch = clamp(camera.pitch, -89.0, 89.0)
@@ -39,15 +40,18 @@ update_camera_look :: proc(camera: ^Camera, dt_s: f64)
   {
     camera.target_fov_y += 5.0
   }
-  camera.target_fov_y = clamp(state.camera.target_fov_y, 10.0, 120)
+  camera.target_fov_y = clamp(camera.target_fov_y, 10.0, 120)
 
   CAMERA_ZOOM_SPEED :: 10.0
-  camera.curr_fov_y = lerp(state.camera.curr_fov_y, state.camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
+  camera.curr_fov_y = lerp(camera.curr_fov_y, camera.target_fov_y, CAMERA_ZOOM_SPEED * f32(dt_s))
 }
 
 move_camera_game :: proc(camera: ^Camera, dt_s: f64)
 {
-  update_camera_look(camera, dt_s)
+  glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
+  x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
+  y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
+  update_camera_look(camera, x_delta, y_delta, dt_s)
 
   dt_s := f32(dt_s)
 
@@ -247,9 +251,9 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64)
   camera.position = wish_pos
 }
 
-get_camera_view :: proc(camera: Camera) -> (view: mat4)
+camera_view :: proc(camera: Camera) -> (view: mat4)
 {
-  forward := get_camera_forward(camera)
+  forward := camera_forward(camera)
   // the target is the camera position + the forward direction
   return get_view(camera.position, forward, WORLD_UP)
 }
@@ -271,7 +275,7 @@ camera_world_aabb :: proc(c: Camera) -> AABB
 }
 
 // Returns normalized
-get_camera_forward :: proc(camera: Camera) -> (forward: vec3)
+camera_forward :: proc(camera: Camera) -> (forward: vec3)
 {
   rad_yaw   := radians(camera.yaw)
   rad_pitch := radians(camera.pitch)
@@ -286,14 +290,19 @@ get_camera_forward :: proc(camera: Camera) -> (forward: vec3)
   return forward
 }
 
-get_camera_perspective :: proc(camera: Camera, z_far: f32 = state.z_far) -> (perspective: mat4)
+camera_perspective :: proc(camera: Camera, aspect_ratio: f32) -> (perspective: mat4)
 {
-  return mat4_perspective(radians(camera.curr_fov_y), window_aspect_ratio(state.window), state.z_near, z_far)
+  return mat4_perspective(radians(camera.curr_fov_y), aspect_ratio, camera.z_near, camera.z_far)
+}
+
+camera_orthographic :: proc(camera: Camera, width, height: int) -> (orthographic: mat4)
+{
+  return mat4_orthographic(0, f32(width), f32(height), 0, camera.z_near, camera.z_far)
 }
 
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3)
 {
-  forward = get_camera_forward(camera)
+  forward = camera_forward(camera)
   right   = normalize(cross(forward, WORLD_UP))
   up      = normalize(cross(right, forward))
   return forward, up, right

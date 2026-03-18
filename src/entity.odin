@@ -1,5 +1,4 @@
-package
-main
+package main
 
 import "core:log"
 
@@ -116,7 +115,12 @@ draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aab
 {
   if draw_aabbs
   {
-    draw_aabb(entity_world_aabb(e))
+    MAX_DISTANCE :: 75.0
+    // Don't have to do the sqrt haha
+    if squared_distance(e.position, state.camera.position) < (MAX_DISTANCE * MAX_DISTANCE)
+    {
+      draw_aabb(entity_world_aabb(e))
+    }
   }
 
   if .RENDERABLE in e.flags

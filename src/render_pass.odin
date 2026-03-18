@@ -251,14 +251,7 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
     case .DEPTH:
       assert(depth_target.id == 0) // Only one depth attachment
 
-      depth_target = alloc_texture(._2D, .DEPTH32, .NONE, width, height)
-
-      // Really for shadow mapping... but eh
-      gl.TextureParameteri(depth_target.id, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_BORDER)
-      gl.TextureParameteri(depth_target.id, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_BORDER)
-      border_color := vec4{1.0, 1.0, 1.0, 1.0}
-      gl.TextureParameterfv(depth_target.id, gl.TEXTURE_BORDER_COLOR, &border_color[0])
-
+      depth_target = alloc_texture(._2D, .DEPTH32, .CLAMP_WHITE, width, height)
       gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
 
     case .DEPTH_STENCIL:
@@ -283,7 +276,6 @@ make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int 
   }
 
   gl.NamedFramebufferDrawBuffers(fbo, cast(i32)len(color_targets), raw_data(gl_attachments))
-
 
   if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
   {
@@ -433,17 +425,17 @@ begin_drawing :: proc()
   //
   // Update frame uniform
   //
-  projection := get_camera_perspective(state.camera)
-  view       := get_camera_view(state.camera)
+  projection := camera_perspective(state.camera, window_aspect_ratio(state.window))
+  view       := camera_view(state.camera)
   frame_ubo: Frame_Uniform =
   {
     projection      = projection,
     view            = view,
     proj_view       = projection * view,
-    orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.z_near, state.z_far),
+    orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.camera.z_near, state.camera.z_far),
     camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
-    z_near          = state.z_near,
-    z_far           = state.z_far,
+    z_near          = state.camera.z_near,
+    z_far           = state.camera.z_far,
 
     // And the lights
     sun_light   = direction_light_uniform(state.sun) if state.sun_on else {},

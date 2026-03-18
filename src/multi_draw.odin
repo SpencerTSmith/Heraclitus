@@ -43,8 +43,7 @@ push_vertices :: proc(mds: ^Multi_Draw_State, vertices: []Mesh_Vertex, indices: 
     vertex_offset = cast(i32) mds.vertex_count
 
     vertex_byte_offset := size_of(Mesh_Vertex) * mds.vertex_count
-    write_gpu_buffer(mds.vertex_buffer,
-      vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
+    write_gpu_buffer(mds.vertex_buffer, vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
 
     mds.vertex_count += len(vertices)
 

@@ -49,20 +49,20 @@ Shader_Program :: struct
 // table for glfw input table
 Uniform_Type :: enum i32
 {
-  F32  = gl.FLOAT,
-  I32  = gl.INT,
-  BOOL = gl.BOOL,
+  F32,
+  I32,
+  BOOL,
 
-  VEC3 = gl.FLOAT_VEC3,
-  VEC4 = gl.FLOAT_VEC4,
+  VEC3,
+  VEC4,
 
-  MAT4 = gl.FLOAT_MAT4,
+  MAT4,
 
-  SAMPLER_2D    = gl.SAMPLER_2D,
-  SAMPLER_CUBE  = gl.SAMPLER_CUBE,
-  SAMPLER_2D_MS = gl.SAMPLER_2D_MULTISAMPLE,
+  SAMPLER_2D,
+  SAMPLER_CUBE,
+  SAMPLER_2D_MS,
 
-  SAMPLER_CUBE_ARRAY = gl.SAMPLER_CUBE_MAP_ARRAY,
+  SAMPLER_CUBE_ARRAY,
 }
 
 Uniform :: struct
@@ -74,7 +74,7 @@ Uniform :: struct
   binding:  i32, // For things that are bindable
 }
 
-// TODO: For now will not do recursive includes, but maybe won't be nessecary
+// NOTE: For now will not do recursive includes, but maybe won't be necessary
 make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: Shader, ok: bool)
 {
   ok = true
@@ -247,7 +247,19 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator: runtime.Allo
     type: u32
     gl.GetActiveUniform(program.id, u32(i), 256, &len, &uniform.size, &type, &name_buf[0])
 
-    uniform.type = cast(Uniform_Type)type
+    switch type
+    {
+    case gl.FLOAT:                   uniform.type = .F32
+    case gl.INT:                     uniform.type = .I32
+    case gl.BOOL:                    uniform.type = .BOOL
+    case gl.FLOAT_VEC3:              uniform.type = .VEC3
+    case gl.FLOAT_VEC4:              uniform.type = .VEC4
+    case gl.FLOAT_MAT4:              uniform.type = .MAT4
+    case gl.SAMPLER_2D:              uniform.type = .SAMPLER_2D
+    case gl.SAMPLER_CUBE:            uniform.type = .SAMPLER_CUBE
+    case gl.SAMPLER_2D_MULTISAMPLE:  uniform.type = .SAMPLER_2D_MS
+    case gl.SAMPLER_CUBE_MAP_ARRAY:  uniform.type = .SAMPLER_CUBE_ARRAY
+    }
 
     // Only collect uniforms not in blocks
     uniform.location = gl.GetUniformLocation(program.id, cstring(&name_buf[0]))
@@ -257,14 +269,14 @@ make_shader_uniform_map :: proc(program: Shader_Program, allocator: runtime.Allo
 
       // Check the initial binding point
       // NOTE: will be junk if not actually set in shader
-      // FIXME: should proably be more thorough in checking types that might have
+      // TODO: should proably be more thorough in checking types that might have
       // binding
-      if uniform.type == .SAMPLER_2D   ||
-         uniform.type == .SAMPLER_CUBE ||
+      if uniform.type == .SAMPLER_2D    ||
+         uniform.type == .SAMPLER_CUBE  ||
          uniform.type == .SAMPLER_2D_MS ||
          uniform.type == .SAMPLER_CUBE_ARRAY
       {
-           gl.GetUniformiv(program.id, uniform.location, &uniform.binding)
+        gl.GetUniformiv(program.id, uniform.location, &uniform.binding)
       }
 
       uniforms[uniform.name] = uniform

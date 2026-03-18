@@ -4,7 +4,6 @@ import "core:log"
 import "core:os"
 
 import stbtt "vendor:stb/truetype"
-import gl "vendor:OpenGL"
 
 FONT_DIR :: DATA_DIR + "fonts"
 
@@ -101,11 +100,6 @@ make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool
       }
 
       atlas_texture := make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
-
-      // Make R show up as alpha
-      swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED}
-      gl.TextureParameteriv(atlas_texture.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
-
       font.atlas = register_texture(atlas_texture)
     }
     else

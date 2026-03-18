@@ -162,7 +162,7 @@ gen_glsl_code :: proc()
   // Parse and append uniform structs
   //
 
-  // FIXME: Make sure that if we encounter a structure member, that that structure definition has already been parsed
+  // TODO: Make sure that if we encounter a structure member, that that structure definition has already been parsed
   // Also just other more rigorous things as described in later comments
   to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, allow_vec4: bool = true)
   {

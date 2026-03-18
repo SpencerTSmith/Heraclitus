@@ -17,14 +17,13 @@ Texture_Type :: enum
   CUBE_ARRAY,
 }
 
-// NOTE: Maybe once more complicated sampler setups can move samplers into separate thing, but for
-// now we really only need these combos for everything anyways
-Sampler_Config :: enum
+Sampler_Preset :: enum
 {
   NONE,
   REPEAT_TRILINEAR,
   REPEAT_LINEAR,
   CLAMP_LINEAR,
+  CLAMP_WHITE,
 }
 
 Texture :: struct
@@ -39,7 +38,7 @@ Texture :: struct
   samples: int, // Only for multisampled textures, 0 if not
   depth:   int, // Only for array textures, 0 if not
   format:  Pixel_Format,
-  sampler: Sampler_Config,
+  sampler: Sampler_Preset,
 }
 
 Pixel_Format :: enum u32
@@ -77,6 +76,39 @@ Material :: struct
   shininess: f32,
 
   blend: Material_Blend_Mode,
+}
+
+make_samplers :: proc() -> (samplers: [Sampler_Preset]u32)
+{
+  gl.CreateSamplers(len(samplers), &samplers[.NONE])
+
+  gl.SamplerParameteri(samplers[.REPEAT_TRILINEAR], gl.TEXTURE_WRAP_S,     gl.REPEAT)
+  gl.SamplerParameteri(samplers[.REPEAT_TRILINEAR], gl.TEXTURE_WRAP_T,     gl.REPEAT)
+  gl.SamplerParameteri(samplers[.REPEAT_TRILINEAR], gl.TEXTURE_WRAP_R,     gl.REPEAT)
+  gl.SamplerParameteri(samplers[.REPEAT_TRILINEAR], gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+  gl.SamplerParameteri(samplers[.REPEAT_TRILINEAR], gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+  gl.SamplerParameteri(samplers[.REPEAT_LINEAR], gl.TEXTURE_WRAP_S,     gl.REPEAT)
+  gl.SamplerParameteri(samplers[.REPEAT_LINEAR], gl.TEXTURE_WRAP_T,     gl.REPEAT)
+  gl.SamplerParameteri(samplers[.REPEAT_LINEAR], gl.TEXTURE_WRAP_R,     gl.REPEAT)
+  gl.SamplerParameteri(samplers[.REPEAT_LINEAR], gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.SamplerParameteri(samplers[.REPEAT_LINEAR], gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+  gl.SamplerParameteri(samplers[.CLAMP_LINEAR], gl.TEXTURE_WRAP_S,     gl.CLAMP_TO_EDGE)
+  gl.SamplerParameteri(samplers[.CLAMP_LINEAR], gl.TEXTURE_WRAP_T,     gl.CLAMP_TO_EDGE)
+  gl.SamplerParameteri(samplers[.CLAMP_LINEAR], gl.TEXTURE_WRAP_R,     gl.CLAMP_TO_EDGE)
+  gl.SamplerParameteri(samplers[.CLAMP_LINEAR], gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.SamplerParameteri(samplers[.CLAMP_LINEAR], gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+  border_color := WHITE
+  gl.SamplerParameteri(samplers[.CLAMP_WHITE], gl.TEXTURE_WRAP_S,     gl.CLAMP_TO_BORDER)
+  gl.SamplerParameteri(samplers[.CLAMP_WHITE], gl.TEXTURE_WRAP_T,     gl.CLAMP_TO_BORDER)
+  gl.SamplerParameteri(samplers[.CLAMP_WHITE], gl.TEXTURE_WRAP_R,     gl.CLAMP_TO_BORDER)
+  gl.SamplerParameteri(samplers[.CLAMP_WHITE], gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.SamplerParameteri(samplers[.CLAMP_WHITE], gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  gl.SamplerParameterfv(samplers[.CLAMP_WHITE], gl.TEXTURE_BORDER_COLOR, &border_color[0])
+
+  return samplers
 }
 
 make_material :: proc
@@ -227,6 +259,7 @@ bind_texture_slot :: proc(slot: u32, texture: Texture)
   {
     state.bound_textures[slot] = texture
     gl.BindTextureUnit(slot, texture.id)
+    gl.BindSampler(slot, state.samplers[texture.sampler])
   }
 }
 
@@ -270,7 +303,7 @@ gl_texture_type_table: [Texture_Type]u32 =
 }
 
 
-alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Config,
+alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                       width, height: int, samples: int = 0, array_depth: int = 0) -> (texture: Texture)
 {
   assert(width > 0 && height > 0)
@@ -315,34 +348,6 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
     gl.TextureStorage3D(texture.id, mip_level, gl_internal, i32(width), i32(height), i32(cube_depth))
   }
 
-  if samples == 0
-  {
-    // Only non multisampling textures can have sampler parameters I believe?
-    // HACK: This sucks... might just separate samplers conceptually from textures?
-    switch sampler
-    {
-    case .NONE: // Nothin'
-    case .REPEAT_TRILINEAR:
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_S,     gl.REPEAT)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_T,     gl.REPEAT)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_R,     gl.REPEAT)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    case .REPEAT_LINEAR:
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_S,     gl.REPEAT)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_T,     gl.REPEAT)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_R,     gl.REPEAT)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    case .CLAMP_LINEAR:
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_S,     gl.CLAMP_TO_EDGE)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_T,     gl.CLAMP_TO_EDGE)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_WRAP_R,     gl.CLAMP_TO_EDGE)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
-      gl.TextureParameteri(texture.id, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-    }
-  }
-
   texture.width   = width
   texture.height  = height
   texture.type    = type
@@ -354,7 +359,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
   return texture
 }
 
-make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Config,
+make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                                datas: []rawptr, width, height: int, samples: int = 0) -> (texture: Texture)
 {
   texture = alloc_texture(type, format, sampler, width, height, samples)
@@ -384,6 +389,13 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
     gl.GenerateTextureMipmap(texture.id)
   }
 
+  // NOTE: Hardcoded siwzzle when just one byte to be opacity
+  if format == .R8
+  {
+    swizzle := []i32{gl.ONE, gl.ONE, gl.ONE, gl.RED}
+    gl.TextureParameteriv(texture.id, gl.TEXTURE_SWIZZLE_RGBA, raw_data(swizzle))
+  }
+
   return texture
 }
 
@@ -391,7 +403,7 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
 make_texture_bindless :: proc(texture: ^Texture)
 {
   if texture.handle == 0 {
-    texture.handle = gl.GetTextureHandleARB(texture.id)
+    texture.handle = gl.GetTextureSamplerHandleARB(texture.id, state.samplers[texture.sampler])
     gl.MakeTextureHandleResidentARB(texture.handle)
 
     assert(state.texture_handles.mapped != nil)
