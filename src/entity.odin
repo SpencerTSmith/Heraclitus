@@ -2,6 +2,8 @@ package main
 
 import "core:log"
 
+// TODO: Handles
+
 Entity_Flags :: enum
 {
   COLLISION,
@@ -86,20 +88,39 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
   return entity
 }
 
-duplicate_entity :: proc(entity: Entity) -> (duplicate: Entity)
+duplicate_entity :: proc(entity: Entity) -> (duplicate: ^Entity)
 {
-  duplicate = entity
+  copy := entity
+  append(&state.entities, copy)
+
+  duplicate = &state.entities[len(state.entities) - 1]
 
   // Need to make a new point light, model handle is fine to be copied as that's already handled by asset system
   if duplicate.point_light != nil
   {
-    pl_copy := duplicate.point_light^
+    pl_copy := copy.point_light^
 
     append(&state.point_lights, pl_copy)
     duplicate.point_light = &state.point_lights[len(state.point_lights) - 1]
   }
 
   return duplicate
+}
+
+get_entity :: proc(index: uint) -> (entity: ^Entity)
+{
+  if index < len(state.entities)
+  {
+    entity = &state.entities[index]
+  }
+
+  return entity
+}
+
+remove_entity :: proc(index: uint)
+{
+  unordered_remove(&state.entities, index)
+  log.infof("Removed entity at index %v", index)
 }
 
 entity_has_transparency :: proc(e: Entity) -> bool

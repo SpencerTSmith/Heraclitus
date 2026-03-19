@@ -311,15 +311,15 @@ hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator: runt
     if needs_reload
     {
       hot, ok := make_shader_program(s.files[.VERT].name, s.files[.FRAG].name, allocator)
-      if !ok
-      {
-        log.errorf("Unable to hot reload shader %v, keeping the old", tag)
-      }
-      else
+      if ok
       {
         free_shader_program(&s)
         s = hot
         log.infof("Hot reloaded shader %v", tag)
+      }
+      else
+      {
+        log.errorf("Unable to hot reload shader %v, keeping the old", tag)
       }
     }
   }

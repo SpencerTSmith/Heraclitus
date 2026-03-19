@@ -318,10 +318,9 @@ draw_line :: proc
 }
 
 // NOTE: A 2d line so takes in screen coordinates!
-draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE,
-                          depth_test: Depth_Test_Mode = .ALWAYS)
+draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE)
 {
-  immediate_begin(.LINES, immediate.white_texture, .SCREEN, depth_test)
+  immediate_begin(.LINES, immediate.white_texture, .SCREEN, .ALWAYS)
 
   immediate_vertex({xy0.x, xy0.y, -state.camera.z_near}, color=rgba)
   immediate_vertex({xy1.x, xy1.y, -state.camera.z_near}, color=rgba)
@@ -329,7 +328,7 @@ draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE,
 
 // NOTE: 3d line
 draw_line_world :: proc(xyz0, xyz1: vec3, color := WHITE,
-                          depth_test: Depth_Test_Mode = .LESS)
+                        depth_test: Depth_Test_Mode = .LESS)
 {
   immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
 
@@ -544,7 +543,8 @@ draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE)
 }
 
 // TODO: Rewrite immediate line to take in a radius for line, will probably no longer have to have immediate line primitive... just a  line is ugly
-draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32 = 0.025, depth_test: Depth_Test_Mode = .LESS)
+draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, thickness: f32 = 0.025,
+                   depth_test: Depth_Test_Mode = .LESS)
 {
   end := origin + direction
   draw_line(origin, end, color, depth_test=depth_test)
@@ -556,24 +556,23 @@ draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, tip_bounds: f32
 
   tip   := end
 
-  base0 := end + right * tip_bounds
-  base0 += up * tip_bounds
-  base0 -= forward * tip_bounds * 4
+  base0 := end + right * thickness
+  base0 += up * thickness
+  base0 -= forward * thickness * 4
 
-  base1 := end + right * tip_bounds
-  base1 -= up * tip_bounds
-  base1 -= forward * tip_bounds * 4
+  base1 := end + right * thickness
+  base1 -= up * thickness
+  base1 -= forward * thickness * 4
 
-  base2 := end - right * tip_bounds
-  base2 += up * tip_bounds
-  base2 -= forward * tip_bounds * 4
+  base2 := end - right * thickness
+  base2 += up * thickness
+  base2 -= forward * thickness * 4
 
-  base3 := end - right * tip_bounds
-  base3 -= up * tip_bounds
-  base3 -= forward * tip_bounds * 4
+  base3 := end - right * thickness
+  base3 -= up * thickness
+  base3 -= forward * thickness * 4
 
-  draw_pyramid(tip, base0, base1, base2, base3, color,
-                    depth_test=depth_test)
+  draw_pyramid(tip, base0, base1, base2, base3, color, depth_test=depth_test)
 }
 
 draw_aabb :: proc(aabb: AABB, color: vec4 = GREEN)

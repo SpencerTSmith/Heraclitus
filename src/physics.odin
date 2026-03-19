@@ -51,13 +51,12 @@ Frustum_Face :: enum
 }
 Frustum :: distinct [Frustum_Face]Plane
 
-// NOTE: w/h aspect ratio.
 make_frustum :: proc(camera: Camera, aspect_ratio, z_near, z_far: f32) -> (frustum: Frustum)
 {
   forward, up, right := get_camera_axes(camera)
 
   // Half the width of the vertical axis of view
-  half_v_side := z_far * tan(camera.curr_fov_y * 0.5)
+  half_v_side := z_far * tan(radians(camera.curr_fov_y) * 0.5)
   // Half the width of the horizontal axis of view
   half_h_side := aspect_ratio * half_v_side
 

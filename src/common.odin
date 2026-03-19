@@ -93,6 +93,7 @@ cross      :: glsl.cross
 normalize  :: glsl.normalize
 normalize0 :: linalg.normalize0
 length     :: glsl.length
+sign       :: glsl.sign
 
 cos :: glsl.cos
 sin :: glsl.sin

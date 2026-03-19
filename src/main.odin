@@ -304,7 +304,7 @@ init_state :: proc() -> (ok: bool)
 
   init_menu() or_return
 
-  state.draw_debug = false
+  state.draw_debug = true
 
   state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
 
@@ -649,7 +649,7 @@ main :: proc()
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
         // Frustum Culling!
-        frustum := make_frustum(state.camera, f32(state.window.w)/f32(state.window.h), state.camera.z_near, state.camera.z_far)
+        frustum := make_frustum(state.camera, window_aspect_ratio(state.window), state.camera.z_near, state.camera.z_far)
         frustum_entities := make([dynamic]^Entity, context.temp_allocator)
         for &e in state.entities
         {
@@ -770,7 +770,7 @@ main :: proc()
         bind_shader(.RESOLVE_HDR)
         bind_texture("screen_texture", state.post_buffer.color_targets[0])
         bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
-        set_shader_uniform("exposure", f32(0.5))
+        set_shader_uniform("exposure", f32(0.2))
         draw_screen_quad()
 
         if state.mode == .EDIT

@@ -26,10 +26,10 @@ Camera :: struct
   aabb: AABB,
 }
 
-update_camera_look :: proc(camera: ^Camera, x_delta, y_delta: f32, dt_s: f64)
+update_camera_look :: proc(camera: ^Camera, delta: vec2, dt_s: f64)
 {
-  camera.yaw   -= camera.sensitivity * x_delta
-  camera.pitch -= camera.sensitivity * y_delta
+  camera.yaw   -= camera.sensitivity * delta.x
+  camera.pitch -= camera.sensitivity * delta.y
   camera.pitch = clamp(camera.pitch, -89.0, 89.0)
 
   if mouse_scrolled_up()
@@ -49,9 +49,7 @@ update_camera_look :: proc(camera: ^Camera, x_delta, y_delta: f32, dt_s: f64)
 move_camera_game :: proc(camera: ^Camera, dt_s: f64)
 {
   glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-  x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
-  y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
-  update_camera_look(camera, x_delta, y_delta, dt_s)
+  update_camera_look(camera, mouse_position_delta(), dt_s)
 
   dt_s := f32(dt_s)
 

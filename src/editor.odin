@@ -4,41 +4,37 @@ import "core:fmt"
 import "core:mem"
 import "core:math/rand"
 import "core:log"
-import "core:slice"
+// import "core:slice"
 
 import "vendor:glfw"
 
-AXIS_GIZMO_LENGTH :: 10.0
-
-Editor_Gizmo :: enum
+Editor_Gizmo_Kind :: enum
 {
-  NONE,
-  X_AXIS,
-  Y_AXIS,
-  Z_AXIS,
-  XY_PLANE,
-  XZ_PLANE,
-  YZ_PLANE,
+  AXIS,
+  PLANE,
+  ROTATE,
 }
 
 // Could probably store a 'mask' of what directions this gizmo is allowed to move things in instead of the enum
-Editor_Gizmo_Info :: struct
+Editor_Gizmo :: struct
 {
-  hitbox: AABB,
+  kind:   Editor_Gizmo_Kind,
+  color:  vec4,
+  basis:  [2]vec3,
+  size:   f32,
+  offset: f32,
+}
+
+Editor_State :: struct
+{
+  selected_entity: uint,
+
+  selected_gizmo: uint,
 
   // For manipulating entities
   hit_plane:         Plane,
   anchor_plane_hit:  vec3,
   anchor_entity_pos: vec3,
-}
-
-Editor_State :: struct
-{
-  selected_entity: ^Entity,
-  selected_entity_idx: int,
-
-  selected_gizmo: Editor_Gizmo,
-  gizmos: [Editor_Gizmo]Editor_Gizmo_Info,
 }
 
 @(private="file")
@@ -47,19 +43,69 @@ editor: Editor_State
 EDITOR_GIZMO_OPACITY :: 0.9
 EDITOR_SELECTED_GIZMO_COLOR :: vec4 {WHITE.r, WHITE.g, WHITE.b, EDITOR_GIZMO_OPACITY}
 
-// NOTE: UGLY!
-@(private="file")
-DEFAULT_GIZMO_COLORS :: [Editor_Gizmo]vec4 {
-  .NONE     = {0,0,0,0},
-  .X_AXIS   = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
-  .Y_AXIS   = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
-  .Z_AXIS   = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
-  .XY_PLANE = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
-  .XZ_PLANE = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
-  .YZ_PLANE = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
+AXIS_SIZE    :: 5
+PLANE_SIZE   :: 2
+PLANE_OFFSET :: 2
+
+EDITOR_GIZMOS := []Editor_Gizmo {
+  // Empty
+  {},
+  // X axis
+  {
+    kind  = .AXIS,
+    basis = {WORLD_RIGHT, {}},
+    color = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
+    size  = AXIS_SIZE,
+  },
+  // Y axis
+  {
+    kind  = .AXIS,
+    basis = {WORLD_UP, {}},
+    color = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
+    size  = AXIS_SIZE,
+  },
+  // Z axis
+  {
+    kind  = .AXIS,
+    basis = {WORLD_FORWARD, {}},
+    color = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
+    size  = AXIS_SIZE,
+  },
+  // XY plane
+  {
+    kind   = .PLANE,
+    basis  = {WORLD_RIGHT, WORLD_UP},
+    color  = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
+    size   = PLANE_SIZE,
+    offset = PLANE_OFFSET,
+  },
+  // XZ plane
+  {
+    kind   = .PLANE,
+    basis  = {WORLD_RIGHT, WORLD_FORWARD},
+    color  = {GREEN.r, GREEN.g, GREEN.b, EDITOR_GIZMO_OPACITY},
+    size   = PLANE_SIZE,
+    offset = PLANE_OFFSET,
+  },
+  // YZ plane
+  {
+    kind   = .PLANE,
+    basis  = {WORLD_UP, WORLD_FORWARD},
+    color  = {BLUE.r, BLUE.g, BLUE.b, EDITOR_GIZMO_OPACITY},
+    size   = PLANE_SIZE,
+    offset = PLANE_OFFSET,
+  },
+  // XY Rotation
+  {
+    kind   = .ROTATE,
+    basis  = {WORLD_RIGHT, WORLD_UP},
+    color  = {RED.r, RED.g, RED.b, EDITOR_GIZMO_OPACITY},
+    size   = PLANE_SIZE,
+    offset = PLANE_OFFSET,
+  },
 }
 
-pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int)
+pick_entity :: proc(ray: Ray) -> (index: uint)
 {
   closest_t := F32_MAX
   for &e, idx in state.entities
@@ -71,29 +117,102 @@ pick_entity :: proc(ray: Ray, camera: Camera) -> (entity: ^Entity, index: int)
       if t_min < closest_t
       {
         closest_t = t_min
-        entity = &e
-        index = idx
+        index = uint(idx)
       }
     }
   }
 
-  return entity, index
+  return index
 }
 
-pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo)
+get_selected_entity_center :: proc() -> (center: vec3)
 {
-  gizmo = .NONE
+  selected_entity := get_entity(editor.selected_entity)
+  entity_aabb := entity_world_aabb(selected_entity^)
+  center = aabb_center(entity_aabb)
+
+  return center
+}
+
+calc_axis_gizmo_visual :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: vec3) -> (position, direction: vec3)
+{
+  // Flip around the visual position based on camera location
+  visual_sign := sign(dot(camera_pos - center_around, gizmo.basis[0]))
+
+  direction = gizmo.basis[0] * visual_sign
+  position  = center_around + direction * gizmo.offset
+
+  return position, direction
+}
+
+calc_plane_gizmo_visual :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: vec3) -> (center, normal: vec3)
+{
+  // Flip around the visual positions based on camera location
+  sign_0 := sign(dot(camera_pos - center_around, gizmo.basis[0]))
+  sign_1 := sign(dot(camera_pos - center_around, gizmo.basis[1]))
+  // Nestled in between respective axes
+  normal = cross(gizmo.basis[0], gizmo.basis[1])
+  center = center_around + ((sign_0 * gizmo.basis[0] + sign_1 * gizmo.basis[1])  * gizmo.offset)
+
+  return center, normal
+}
+
+make_gizmo_hitbox :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: vec3) -> (hitbox: AABB)
+{
+  switch gizmo.kind
+  {
+  case .AXIS:
+    position, direction := calc_axis_gizmo_visual(gizmo, center_around, camera_pos)
+    start := position
+    stop  := position + (direction * gizmo.size)
+    hitbox =
+    {
+      min = start - 0.25,
+      max = stop  + 0.25,
+    }
+  case .PLANE:
+    center, _ := calc_plane_gizmo_visual(gizmo, center_around, camera_pos)
+    size_vector := (gizmo.basis[0] + gizmo.basis[1]) * (gizmo.size * 0.5)
+    hitbox =
+    {
+      min = center - size_vector,
+      max = center + size_vector,
+    }
+  case .ROTATE:
+  }
+
+  return hitbox
+}
+
+draw_gizmo :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: vec3, color: vec4)
+{
+  switch gizmo.kind
+  {
+  case .AXIS:
+    position, direction := calc_axis_gizmo_visual(gizmo, center_around, camera_pos)
+    draw_vector(position, direction * gizmo.size, color, thickness=0.25, depth_test = .ALWAYS)
+  case .PLANE:
+    center, normal := calc_plane_gizmo_visual(gizmo, center_around, camera_pos)
+    draw_quad(center, normal, gizmo.size, gizmo.size, color, depth_test = .ALWAYS)
+  case .ROTATE:
+  }
+}
+
+pick_gizmo :: proc(ray: Ray, center_around: vec3, camera_pos: vec3) -> (gizmo: uint)
+{
+  gizmo = 0
 
   closest_t := F32_MAX
-  for info, g in editor.gizmos
+  for g, i in EDITOR_GIZMOS
   {
-    if yes, t_min, _ := ray_intersects_aabb(ray, info.hitbox); yes
+    hitbox := make_gizmo_hitbox(g, center_around, camera_pos)
+    if yes, t_min, _ := ray_intersects_aabb(ray, hitbox); yes
     {
       // Get the closest gizmo
       if t_min < closest_t
       {
         closest_t = t_min
-        gizmo = g
+        gizmo = uint(i)
       }
     }
   }
@@ -104,18 +223,15 @@ pick_gizmo :: proc(ray: Ray, camera: Camera) -> (gizmo: Editor_Gizmo)
 @(private="file")
 clear_editor_selected_entity :: proc()
 {
-  editor.selected_entity = nil
-  editor.selected_entity_idx = -1
+  editor.selected_entity = ~uint(0)
 }
 
-do_editor :: proc(camera: ^Camera, dt_s: f64)
+move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
 {
   if mouse_down(.MIDDLE) || key_down(.Q)
   {
     glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    x_delta := f32(state.input.mouse.curr_pos.x - state.input.mouse.prev_pos.x)
-    y_delta := f32(state.input.mouse.curr_pos.y - state.input.mouse.prev_pos.y)
-    update_camera_look(camera, x_delta, y_delta, dt_s)
+    update_camera_look(camera, mouse_position_delta(), dt_s)
   }
   else
   {
@@ -126,7 +242,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 
   input_direction: vec3
 
-  camera_forward, camera_up, camera_right := get_camera_axes(camera^)
+  camera_forward, _, camera_right := get_camera_axes(camera^)
 
   // Z, forward
   if key_down(.W)
@@ -141,11 +257,11 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   // Y, vertical
   if key_down(.SPACE)
   {
-    input_direction += camera_up
+    input_direction += WORLD_UP
   }
   if key_down(.LEFT_CONTROL)
   {
-    input_direction -= camera_up
+    input_direction -= WORLD_UP
   }
 
   // X, strafe
@@ -157,6 +273,16 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   {
     input_direction -= camera_right
   }
+
+  FREECAM_SPEED :: 35.0
+  camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
+  camera.velocity  = {0,0,0}
+  camera.on_ground = false
+}
+
+editor_ui :: proc() -> (had_interaction: bool)
+{
+  selected_entity := get_entity(editor.selected_entity)
 
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
   ui_push_parent(ui_panel(panel_pos, 300, 100))
@@ -170,14 +296,12 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 
     if ui_button("Dupe Entity").clicked
     {
-      if editor.selected_entity != nil
+      if selected_entity != nil
       {
-        dupe := duplicate_entity(editor.selected_entity^)
+        dupe := duplicate_entity(selected_entity^)
         dupe.position += (rand.float32() * 2.0) - 1.0
-        append(&state.entities, dupe)
-        // Should it auto select the copy?
 
-        log.infof("Copied entity at index %v", editor.selected_entity_idx)
+        log.infof("Copied entity at index %v", editor.selected_entity)
       }
     }
 
@@ -185,15 +309,22 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
     // specifically when that entity has an attached point light, does not get removed.
     if ui_button("Delete Entity").clicked
     {
-      if editor.selected_entity != nil
+      if selected_entity != nil
       {
-        unordered_remove(&state.entities, editor.selected_entity_idx)
-        log.infof("Removed entity at index %v", editor.selected_entity_idx)
-
+        remove_entity(editor.selected_entity)
         clear_editor_selected_entity()
       }
     }
   }
+
+  return ui_had_interaction()
+}
+
+do_editor :: proc(camera: ^Camera, dt_s: f64)
+{
+  move_camera_editor(camera, dt_s)
+
+  had_ui_interaction := editor_ui()
 
   //
   // 3D Editor interactions
@@ -202,268 +333,107 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   world_coord := unproject_screen_coord(screen_x, screen_y, camera_view(camera^), camera_perspective(camera^, window_aspect_ratio(state.window)))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
 
-  if !ui_had_interaction()
+  // Find out if clicked on gizmo or entity
+  if !had_ui_interaction && mouse_pressed(.LEFT)
   {
-    // Pick entity or gizmo only if not doing ui
-    if mouse_pressed(.LEFT)
-    {
+    selected_entity := get_entity(editor.selected_entity)
 
-      // If we can select a gizmo
-      if editor.selected_entity != nil
+    // Try to select a gizmo
+    if selected_entity != nil
+    {
+      picked_gizmo := pick_gizmo(mouse_ray, get_selected_entity_center(), state.camera.position)
+
+      // Try picking a gizmo first, if not, then try picking an entity
+      if picked_gizmo != 0
       {
-        // Preferentially pick gizmo first
-        editor.selected_gizmo  = pick_gizmo(mouse_ray, camera^)
-        the_gizmo := &editor.gizmos[editor.selected_gizmo]
+        editor.selected_gizmo = picked_gizmo
 
         // Plane should be orthogonal to camera
-        the_gizmo.hit_plane = make_plane(-camera_forward, editor.selected_entity.position)
+        editor.hit_plane = make_plane(-camera_forward(camera^), selected_entity.position)
 
-        intersect, t, hit_point := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
+        intersect, t, hit_point := ray_intersects_plane(mouse_ray, editor.hit_plane)
         if intersect && t >= 0.0
         {
-          the_gizmo.anchor_plane_hit = hit_point
-          the_gizmo.anchor_entity_pos = editor.selected_entity.position
+          editor.anchor_plane_hit = hit_point
+          editor.anchor_entity_pos = selected_entity.position
         }
       }
+    }
 
-      // If we didn't select a gizmo
-      if editor.selected_gizmo == .NONE
-      {
-        editor.selected_entity, editor.selected_entity_idx = pick_entity(mouse_ray, camera^)
-      }
+    // Pick an entity if no gizmo
+    if editor.selected_gizmo == 0
+    {
+      editor.selected_entity = pick_entity(mouse_ray)
     }
   }
 
-  // Move with the gizmo
-  if editor.selected_gizmo != .NONE && mouse_down(.LEFT)
+  selected_entity := get_entity(editor.selected_entity)
+
+  if selected_entity != nil
   {
-    the_gizmo := editor.gizmos[editor.selected_gizmo]
+    hovered_gizmo := pick_gizmo(mouse_ray, get_selected_entity_center(), state.camera.position)
 
-    intersect, _, hit_now := ray_intersects_plane(mouse_ray, the_gizmo.hit_plane)
-    if intersect
+    // Draw the gizmos
+    for gizmo, i in EDITOR_GIZMOS
     {
-      delta_plane := hit_now - the_gizmo.anchor_plane_hit
-
-      basis_0, basis_1: vec3
-      switch editor.selected_gizmo
+      color := gizmo.color
+      if uint(i) == editor.selected_gizmo
       {
-      case .NONE:
-        assert(false, "What da")
-      case .X_AXIS:
-        basis_0 = WORLD_RIGHT
-      case .Y_AXIS:
-        basis_0 = WORLD_UP
-      case .Z_AXIS:
-        basis_0 = -WORLD_FORWARD
-      case .XY_PLANE:
-        basis_0 = WORLD_RIGHT
-        basis_1 = WORLD_UP
-      case .XZ_PLANE:
-        basis_0 = WORLD_RIGHT
-        basis_1 = -WORLD_FORWARD
-      case .YZ_PLANE:
-        basis_0 = WORLD_UP
-        basis_1 = -WORLD_FORWARD
+        // Selected is flashing
+        t := cast(f32)cos(seconds_since_start() * 8.0)
+        flashing_color := lerp_colors(t, color, EDITOR_SELECTED_GIZMO_COLOR)
+        color = flashing_color
+      }
+      else if uint(i) == hovered_gizmo
+      {
+        // Hovered is brightened
+        color.rgb *= 3.0
       }
 
-      // Now project the move in the plane into the world
-      move_0 := dot(delta_plane, basis_0) * basis_0
-      move_1 := dot(delta_plane, basis_1) * basis_1
-      delta_in_world := move_0 + move_1
+      draw_gizmo(gizmo, get_selected_entity_center(), state.camera.position, color)
+    }
 
-      editor.selected_entity.position = the_gizmo.anchor_entity_pos + delta_in_world
+    // Move with the gizmo
+    if editor.selected_gizmo != 0 && mouse_down(.LEFT)
+    {
+      the_gizmo := EDITOR_GIZMOS[editor.selected_gizmo]
 
-      // Visualize the movement
-      move_direction := editor.selected_entity.position - the_gizmo.anchor_entity_pos
-      move_component_0 := move_direction * basis_0
-      move_component_1 := move_direction * basis_1
-      draw_vector(the_gizmo.anchor_entity_pos, move_direction, YELLOW)
-      draw_vector(the_gizmo.anchor_entity_pos, move_component_0, YELLOW)
-      draw_vector(the_gizmo.anchor_entity_pos + move_component_0, move_component_1, YELLOW)
+      intersect, _, hit_now := ray_intersects_plane(mouse_ray, editor.hit_plane)
+      if intersect
+      {
+
+        delta_plane := hit_now - editor.anchor_plane_hit
+
+        basis := the_gizmo.basis
+
+        // Now project the move in the plane onto the basis vectors
+        move_0 := dot(delta_plane, basis[0]) * basis[0]
+        move_1 := dot(delta_plane, basis[1]) * basis[1]
+        delta_in_world := move_0 + move_1
+
+        selected_entity.position = editor.anchor_entity_pos + delta_in_world
+
+        // Visualize the movement
+        move_direction := selected_entity.position - editor.anchor_entity_pos
+        move_component_0 := move_direction * basis[0]
+        move_component_1 := move_direction * basis[1]
+        draw_vector(editor.anchor_entity_pos, move_direction, YELLOW, depth_test = .ALWAYS)
+        draw_vector(editor.anchor_entity_pos, move_component_0, YELLOW, depth_test = .ALWAYS)
+        draw_vector(editor.anchor_entity_pos + move_component_0, move_component_1, YELLOW, depth_test = .ALWAYS)
+      }
     }
   }
 
   // Unselect gizmo when not held down
   if mouse_released(.LEFT)
   {
-    editor.selected_gizmo = .NONE
+    editor.selected_gizmo = 0
   }
 
   if mouse_pressed(.RIGHT)
   {
     clear_editor_selected_entity()
   }
-
-  // Manipulate picked entity
-  if editor.selected_entity != nil
-  {
-    EDITOR_PICKED_MOVE_SPEED :: 10.0
-
-    // TODO: Think about if these should be relative to the camera's axes or to the world axes?
-    // But won't matter as much once we get more sophisticated widgets and ui
-
-    if key_down(.LEFT)
-    {
-      editor.selected_entity.position.x -= EDITOR_PICKED_MOVE_SPEED * dt_s
-    }
-    if key_down(.RIGHT)
-    {
-      editor.selected_entity.position.x += EDITOR_PICKED_MOVE_SPEED * dt_s
-    }
-
-    if key_down(.LEFT_SHIFT)
-    {
-      if key_down(.UP)
-      {
-        editor.selected_entity.position.z -= EDITOR_PICKED_MOVE_SPEED * dt_s
-      }
-      if key_down(.DOWN)
-      {
-        editor.selected_entity.position.z += EDITOR_PICKED_MOVE_SPEED * dt_s
-      }
-    }
-    else
-    {
-      if key_down(.UP)
-      {
-        editor.selected_entity.position.y += EDITOR_PICKED_MOVE_SPEED * dt_s
-      }
-      if key_down(.DOWN)
-      {
-        editor.selected_entity.position.y -= EDITOR_PICKED_MOVE_SPEED * dt_s
-      }
-    }
-
-    // Create gizmos
-    {
-      e := editor.selected_entity^
-      entity_aabb := entity_world_aabb(e)
-      entity_center := aabb_center(entity_aabb)
-
-      make_axis_hitbox :: proc(axis_index: int, entity_center: vec3) -> (hitbox: AABB)
-      {
-        BOUNDING_RANGE :: 0.5
-
-        // Since not all world directions in my coordinate space are in the positive direction
-        world_axes := WORLD_AXES
-        axis_add   := AXIS_GIZMO_LENGTH * world_axes[axis_index]
-
-        hitbox =
-        {
-          min = entity_center - BOUNDING_RANGE,
-          max = entity_center + BOUNDING_RANGE,
-        }
-
-        hitbox.max += axis_add
-
-        return hitbox
-      }
-
-      make_plane_hitbox :: proc(position: vec3) -> (hitbox: AABB)
-      {
-        BOUNDING_RANGE :: 0.5
-
-        hitbox =
-        {
-          min = position - BOUNDING_RANGE,
-          max = position + BOUNDING_RANGE,
-        }
-
-        return hitbox
-      }
-
-      editor.gizmos[.X_AXIS].hitbox = make_axis_hitbox(0, entity_center)
-      editor.gizmos[.Y_AXIS].hitbox = make_axis_hitbox(1, entity_center)
-      editor.gizmos[.Z_AXIS].hitbox = make_axis_hitbox(2, entity_center)
-
-      xy_pos := entity_center
-      xy_pos.z = entity_aabb.max.z + 2.0
-      editor.gizmos[.XY_PLANE].hitbox = make_plane_hitbox(xy_pos)
-
-      xz_pos := entity_center
-      xz_pos.y = entity_aabb.min.y - 2.0
-      editor.gizmos[.XZ_PLANE].hitbox = make_plane_hitbox(xz_pos)
-
-      yz_pos := entity_center
-      yz_pos.x = entity_aabb.min.x - 2.0
-      editor.gizmos[.YZ_PLANE].hitbox = make_plane_hitbox(yz_pos)
-
-      // Copy of the original colors
-      current_colors := DEFAULT_GIZMO_COLORS
-
-      // Quickly flash the currently selected gizmos color
-      if editor.selected_gizmo != .NONE
-      {
-        t := cast(f32)cos(seconds_since_start() * 8.0)
-        flashing_color := lerp_colors(t, current_colors[editor.selected_gizmo], EDITOR_SELECTED_GIZMO_COLOR)
-        current_colors[editor.selected_gizmo] = flashing_color
-      }
-      else
-      {
-        // Brighten the currently hovered gizmos color if we aren't already selecting one
-        hovered_gizmo := pick_gizmo(mouse_ray, camera^)
-        current_colors[hovered_gizmo].rgb *= 3.0
-      }
-
-      // TODO: Sort draw calls so  that closest to camera gizmos draw last
-      draw_vector(entity_center, WORLD_RIGHT * AXIS_GIZMO_LENGTH,
-        current_colors[.X_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
-      draw_vector(entity_center, WORLD_UP * AXIS_GIZMO_LENGTH,
-        current_colors[.Y_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
-      draw_vector(entity_center, WORLD_FORWARD * AXIS_GIZMO_LENGTH,
-        current_colors[.Z_AXIS], tip_bounds=0.25, depth_test = .ALWAYS)
-
-      // FIXME: The gizmos should store more info about themselves so don't have to hardcode it terribly
-      {
-        Plane_Info :: struct
-        {
-          position: vec3,
-          normal:   vec3,
-          color:    vec4,
-        }
-        sort_info: []Plane_Info =
-        {
-          {xy_pos, WORLD_FORWARD, current_colors[.XY_PLANE]},
-          {xz_pos, WORLD_UP,      current_colors[.XZ_PLANE]},
-          {yz_pos, WORLD_RIGHT,   current_colors[.YZ_PLANE]},
-        }
-
-        slice.sort_by(sort_info, proc(a, b: Plane_Info) -> bool {
-          da := squared_distance(a.position, state.camera.position)
-          db := squared_distance(b.position, state.camera.position)
-          return da > db
-        })
-
-        immediate_begin(.TRIANGLES, {}, .WORLD, .ALWAYS)
-        for p in sort_info {
-          draw_quad(p.position, p.normal, 1, 1, p.color)
-        }
-      }
-    }
-
-    {
-      entity_text := fmt.tprintf("%v", editor.selected_entity^)
-
-      x := f32(state.window.w) * 0.5
-      y := f32(state.window.h) - f32(state.window.h) * 0.05
-
-      draw_text_with_background(entity_text, state.default_font, x, y, YELLOW * 2.0, align=.CENTER, padding=10.0)
-    }
-  }
-  else
-  {
-    // No active entity then clear out the gizmos
-    editor.selected_gizmo = .NONE
-
-    for &giz in editor.gizmos {
-      giz = {}
-    }
-  }
-
-  FREECAM_SPEED :: 35.0
-  camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
-  camera.velocity  = {0,0,0}
-  camera.on_ground = false
 }
 
 // Eh, should this go in editor? This is useful even when testing in game mode
