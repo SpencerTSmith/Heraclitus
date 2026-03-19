@@ -66,10 +66,6 @@ State :: struct {
 
   frame_uniforms: GPU_Buffer,
 
-  // TODO: Consider moving to multidraw state
-  texture_handles:       GPU_Buffer,
-  texture_handles_count: int,
-
   mds: Multi_Draw_State,
 
   // TODO: Maybe these should be pointers and not copies
@@ -278,10 +274,6 @@ init_state :: proc() -> (ok: bool)
   state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
   state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), flags = {.PERSISTENT, .FRAME_BUFFERED})
-
-  // For bindless textures!
-  state.texture_handles = make_gpu_buffer(.STORAGE, size_of(u64) * MAX_TEXTURE_HANDLES, flags = {.PERSISTENT})
-  bind_gpu_buffer_base(state.texture_handles, .TEXTURES)
 
   cube_map_sides: [6]string =
   {
@@ -644,7 +636,6 @@ main :: proc()
         {
           bind_texture("skybox", {})
         }
-
         bind_texture("sun_shadow_map", state.sun_depth_buffer.depth_target)
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
 
@@ -675,29 +666,25 @@ main :: proc()
           // We're good we can just draw opaque entities
           draw_entity(e^, draw_aabbs=state.draw_debug)
         }
+        // multi_draw(&state.mds)
+
+        // Transparent models
+        bind_shader(.PHONG)
+        // Sort so that further entities get drawn first
+        slice.sort_by(transparent_entities[:], proc(a, b: ^Entity) -> bool {
+          da := squared_distance(a.position, state.camera.position)
+          db := squared_distance(b.position, state.camera.position)
+          return da > db
+        })
+        for e in transparent_entities
+        {
+          draw_entity(e^)
+        }
         multi_draw(&state.mds)
 
         // Skybox here so it is seen behind transparent objects, binds its own shader
         if state.sun_on {
           draw_skybox(state.skybox)
-        }
-
-        // Transparent models
-        bind_shader(.PHONG)
-        {
-          // Sort so that further entities get drawn first
-          slice.sort_by(transparent_entities[:], proc(a, b: ^Entity) -> bool {
-            da := squared_distance(a.position, state.camera.position)
-            db := squared_distance(b.position, state.camera.position)
-            return da > db
-          })
-
-          for e in transparent_entities
-          {
-            draw_entity(e^)
-          }
-
-          multi_draw(&state.mds)
         }
 
         // Draw point light billboards
@@ -711,7 +698,6 @@ main :: proc()
             draw_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
           }
         }
-
 
         if state.draw_debug
         {
@@ -773,9 +759,9 @@ main :: proc()
         set_shader_uniform("exposure", f32(0.2))
         draw_screen_quad()
 
-        if state.mode == .EDIT
+        if state.draw_debug
         {
-          draw_editor_stats()
+          draw_debug_stats()
         }
 
         draw_ui()

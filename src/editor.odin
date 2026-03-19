@@ -150,6 +150,7 @@ calc_plane_gizmo_visual :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: 
   // Flip around the visual positions based on camera location
   sign_0 := sign(dot(camera_pos - center_around, gizmo.basis[0]))
   sign_1 := sign(dot(camera_pos - center_around, gizmo.basis[1]))
+
   // Nestled in between respective axes
   normal = cross(gizmo.basis[0], gizmo.basis[1])
   center = center_around + ((sign_0 * gizmo.basis[0] + sign_1 * gizmo.basis[1])  * gizmo.offset)
@@ -414,12 +415,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
         selected_entity.position = editor.anchor_entity_pos + delta_in_world
 
         // Visualize the movement
-        move_direction := selected_entity.position - editor.anchor_entity_pos
-        move_component_0 := move_direction * basis[0]
-        move_component_1 := move_direction * basis[1]
-        draw_vector(editor.anchor_entity_pos, move_direction, YELLOW, depth_test = .ALWAYS)
-        draw_vector(editor.anchor_entity_pos, move_component_0, YELLOW, depth_test = .ALWAYS)
-        draw_vector(editor.anchor_entity_pos + move_component_0, move_component_1, YELLOW, depth_test = .ALWAYS)
+        draw_vector(editor.anchor_entity_pos, delta_in_world, YELLOW, depth_test = .ALWAYS)
       }
     }
   }
@@ -436,8 +432,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   }
 }
 
-// Eh, should this go in editor? This is useful even when testing in game mode
-draw_editor_stats :: proc()
+draw_debug_stats :: proc()
 {
   text := fmt.aprintf(
 `FPS: %0.4v

@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 19-03-2026 (12:47:27 am)
+// NOTE: This code was generated on 19-03-2026 (10:32:00 pm)
 
 #extension GL_ARB_bindless_texture : require
 
@@ -39,17 +39,17 @@ struct Point_Light_Uniform {
 };
 
 struct Material_Uniform {
-  int diffuse_idx;
-  int specular_idx;
-  int emissive_idx;
-  int normal_idx;
+  sampler2D diffuse;
+  sampler2D specular;
+  sampler2D emissive;
+  sampler2D normal;
   float shininess;
 };
 
 struct Draw_Uniform {
   mat4 model;
-  Material_Uniform material;
   vec4 mul_color;
+  int material_index;
   int light_index;
 };
 
@@ -84,7 +84,7 @@ struct Immediate_Vertex {
 };
 
 #define FRAME_BINDING 0
-#define TEXTURES_BINDING 1
+#define MATERIALS_BINDING 1
 #define DRAW_UNIFORMS_BINDING 2
 #define MESH_VERTICES_BINDING 3
 #define IMM_VERTICES_BINDING 4
@@ -93,8 +93,8 @@ layout(binding = FRAME_BINDING, std140) uniform Frame_Uniform_UBO {
   Frame_Uniform frame;
 };
 
-layout(binding = TEXTURES_BINDING, std430) readonly buffer Texture_Handles {
-  sampler2D textures[];
+layout(binding = MATERIALS_BINDING, std430) readonly buffer Mesh_Materials {
+  Material_Uniform materials[];
 };
 
 layout(binding = DRAW_UNIFORMS_BINDING, std430) readonly buffer Draw_Uniforms {
@@ -109,11 +109,6 @@ layout(binding = IMM_VERTICES_BINDING, std430) readonly buffer Immediate_Vertice
   Immediate_Vertex immediate_vertices[];
 };
 
-
-vec4 bindless_sample(int index, vec2 uv)
-{
-  return texture(textures[index], uv);
-}
 
 vec3 mesh_vertex_position(int index)
 {

@@ -26,8 +26,6 @@ TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
 GL_MAJOR :: 4
 GL_MINOR :: 6
 
-MAX_TEXTURE_HANDLES :: 512
-
 Program_Mode :: enum {
   GAME,
   MENU,

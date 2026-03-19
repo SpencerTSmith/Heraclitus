@@ -12,7 +12,7 @@ import "core:time"
 UBO_Bind :: enum u32
 {
   FRAME         = 0,
-  TEXTURES      = 1,
+  MATERIALS     = 1,
   DRAW_UNIFORMS = 2,
   MESH_VERTICES = 3,
   IMM_VERTICES  = 4,
@@ -71,13 +71,13 @@ Spot_Light_Uniform :: struct #align(16)
   outer_cutoff: f32,
 }
 
-Material_Uniform :: struct #align(16)
+Material_Uniform :: struct
 {
-  // Indexes into bindless textures buffer.
-  diffuse_idx:  i32,
-  specular_idx: i32,
-  emissive_idx: i32,
-  normal_idx:   i32,
+  // Handles
+  diffuse:  u64,
+  specular: u64,
+  emissive: u64,
+  normal:   u64,
 
   shininess: f32,
 }
@@ -116,12 +116,10 @@ Draw_Command :: struct
 Draw_Uniform :: struct
 {
   model:     mat4,
-
-  material:  Material_Uniform,
-
   mul_color: vec4,
 
-  light_index: u32, // Here for point light shader
+  material_index: u32,
+  light_index:    u32, // Here for point light shader
 }
 
 
@@ -153,6 +151,8 @@ gen_glsl_code :: proc()
       s = "int"
     case i32:
       s = "int"
+    case u64:
+      s = "sampler2D" // HACK: !!!
     }
 
     return s
@@ -255,9 +255,9 @@ gen_glsl_code :: proc()
   fmt.sbprintf(&b, "  %v frame;\n", typeid_of(Frame_Uniform))
   fmt.sbprintf(&b, "};\n\n")
 
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Texture_Handles {{\n",
-               bind_names[.TEXTURES])
-  fmt.sbprintf(&b, "  sampler2D textures[];\n")
+  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Materials {{\n",
+               bind_names[.MATERIALS])
+  fmt.sbprintf(&b, "  Material_Uniform materials[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
   fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Draw_Uniforms {{\n",
@@ -277,11 +277,6 @@ gen_glsl_code :: proc()
 
   // TODO: Can probably generate these instead of hard coding, might not be worth the effort...
   append_always := `
-vec4 bindless_sample(int index, vec2 uv)
-{
-  return texture(textures[index], uv);
-}
-
 vec3 mesh_vertex_position(int index)
 {
   return vec3(mesh_vertices[index].position[0],
@@ -451,3 +446,38 @@ point_light_projviews :: proc(light: Point_Light) -> [6]mat4
 
   return projviews
 }
+
+material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
+{
+  diffuse  := get_texture(material.diffuse)
+  specular := get_texture(material.specular)
+  emissive := get_texture(material.emissive)
+  normal   := get_texture(material.normal)
+
+  // NOTE: Only send over the info if all the textures have been loaded
+  if diffuse  != nil &&
+     specular != nil &&
+     emissive != nil &&
+     normal   != nil
+  {
+     // NOTE: We are bindless with materials now!
+     // So we just send over indexes
+
+     uniform.diffuse  = diffuse.handle
+     uniform.specular = specular.handle
+     uniform.emissive = emissive.handle
+     uniform.normal   = normal.handle
+
+     uniform.shininess = material.shininess
+  }
+  else
+  {
+    // TODO: Maybe consider having the missing purple texture always
+    // present at a specific index in the texture_handles ssbo
+    // so that can be set instead,
+    log.warnf("Tried to set material with unloaded material")
+  }
+
+  return uniform
+}
+

@@ -63,7 +63,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
                              materials: []Material, meshes: []Mesh,
                              allocator: runtime.Allocator) -> (model: Model, ok: bool)
 {
-  vertex_offset, index_offset := push_vertices(&state.mds, vertices, indices)
+  vertex_offset, index_offset := upload_vertices(&state.mds, vertices, indices)
 
   //
   // Compute AABB
@@ -99,6 +99,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
 
     aabb = aabb,
   }
+  upload_materials(&state.mds, &model.materials)
 
   return model, ok
 }
@@ -510,7 +511,6 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
 
   for mesh in model.meshes
   {
-    material := material_uniform(model.materials[mesh.material_index])
 
     true_offset := model.index_offset + mesh.index_offset
 
@@ -523,12 +523,15 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       base_instance  = 0, // We set this in push_draw, as it will know what that ought to be.
     }
 
+    material := model.materials[mesh.material_index]
+
     uniform: Draw_Uniform =
     {
       model     = model_mat,
-      material  = material,
       mul_color = mul_color,
-      light_index = light_index,
+
+      material_index = material.buffer_index,
+      light_index    = light_index,
     }
 
     push_draw(&state.mds, command, uniform)
@@ -566,7 +569,7 @@ make_skybox :: proc(file_paths: [6]string) -> (skybox: Skybox, ok: bool)
   return skybox, ok
 }
 
-// Remember... binds the skybox shader
+// FIXME: Make this
 draw_skybox :: proc(skybox: Skybox)
 {
   bind_shader(.SKYBOX)

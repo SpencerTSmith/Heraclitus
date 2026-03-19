@@ -30,7 +30,6 @@ Texture :: struct
 {
   id:     u32,
   handle: u64,
-  index:  int, // Into the texture_handles gpu_buffer
 
   type:    Texture_Type,
   width:   int,
@@ -59,19 +58,23 @@ Pixel_Format :: enum u32
   DEPTH24_STENCIL8,
 }
 
-Material_Blend_Mode :: enum
+Material_Blend_Mode :: enum u32
 {
   OPAQUE = 0,
   BLEND,
   MASK,
 }
 
+// TODO: Considering this more deeply, the 'Material' struct is, after some refactors, a very intermediate result
+// It is not stored anywhere, with the *_Uniform containing everything gpu needs to know and *_Info for cpu.
 Material :: struct
 {
-  diffuse:   Texture_Handle,
-  specular:  Texture_Handle,
-  emissive:  Texture_Handle,
-  normal:    Texture_Handle,
+  buffer_index: u32, // Filled out upon upload
+
+  diffuse:  Texture_Handle,
+  specular: Texture_Handle,
+  emissive: Texture_Handle,
+  normal:   Texture_Handle,
 
   shininess: f32,
 
@@ -131,7 +134,6 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
                                  in_texture_dir: bool = false) -> (material: Material, ok: bool)
 {
   // HACK: Quite ugly but I think this makes it a nicer interface
-  // But always remember too much VOOODOO?!
   resolve_path :: proc(argument, default: string, argument_in_dir: bool) -> (resolved: string, in_texture_dir: bool)
   {
     if argument == "" || argument == default {
@@ -154,19 +156,9 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
   material.specular = load_texture(specular, in_texture_dir = specular_in_dir)
   material.emissive = load_texture(emissive, in_texture_dir = emissive_in_dir)
   material.normal   = load_texture(normal, in_texture_dir = normal_in_dir)
-
-  p_diffuse  := get_texture(material.diffuse)
-  p_specular := get_texture(material.specular)
-  p_emissive := get_texture(material.emissive)
-  p_normal   := get_texture(material.normal)
-
-  make_texture_bindless(p_diffuse)
-  make_texture_bindless(p_specular)
-  make_texture_bindless(p_emissive)
-  make_texture_bindless(p_normal)
-
   material.shininess = shininess
   material.blend = blend
+
   return material, ok
 }
 
@@ -181,42 +173,6 @@ free_material :: proc(material: ^Material)
   free_texture(specular)
   free_texture(emissive)
   free_texture(normal)
-}
-
-material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
-{
-  assert(state.current_shader.id != 0)
-
-  diffuse  := get_texture(material.diffuse)
-  specular := get_texture(material.specular)
-  emissive := get_texture(material.emissive)
-  normal   := get_texture(material.normal)
-
-  // NOTE: Only send over the info if all the textures have been loaded
-  if diffuse  != nil &&
-     specular != nil &&
-     emissive != nil &&
-     normal   != nil
-  {
-     // NOTE: We are bindless with materials now!
-     // So we just send over indexes
-
-     uniform.diffuse_idx  = cast(i32)diffuse.index
-     uniform.specular_idx = cast(i32)specular.index
-     uniform.emissive_idx = cast(i32)emissive.index
-     uniform.normal_idx   = cast(i32)normal.index
-
-     uniform.shininess = material.shininess
-  }
-  else
-  {
-    // TODO: Maybe consider having the missing purple texture always
-    // present at a specific index in the texture_handles ssbo
-    // so that can be set instead,
-    log.warnf("Tried to set material with unloaded material")
-  }
-
-  return uniform
 }
 
 make_texture :: proc
@@ -405,19 +361,6 @@ make_texture_bindless :: proc(texture: ^Texture)
   if texture.handle == 0 {
     texture.handle = gl.GetTextureSamplerHandleARB(texture.id, state.samplers[texture.sampler])
     gl.MakeTextureHandleResidentARB(texture.handle)
-
-    assert(state.texture_handles.mapped != nil)
-
-    // Write handle to ssbo
-    handles := cast([^]u64) state.texture_handles.mapped
-
-    texture.index = state.texture_handles_count
-    assert(texture.index < MAX_TEXTURE_HANDLES)
-
-    handles[texture.index] = texture.handle
-
-    // For now we only ever append, believe this means we don't need to sync?
-    state.texture_handles_count += 1
   }
   else
   {

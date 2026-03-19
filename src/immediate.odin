@@ -502,6 +502,11 @@ draw_sphere :: proc(center: vec3, radius: f32, color := WHITE,
   }
 }
 
+draw_torus :: proc(center: vec3)
+{
+
+}
+
 draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE)
 {
   range_cast := f32(range)

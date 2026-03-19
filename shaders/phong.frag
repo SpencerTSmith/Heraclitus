@@ -257,14 +257,14 @@ void main()
 {
   vec3 result = vec3(0.0);
 
-  Material_Uniform material = draw_uniforms[fs_in.draw_id].material;
+  Material_Uniform material = materials[draw_uniforms[fs_in.draw_id].material_index];
   vec4 mul_color = draw_uniforms[fs_in.draw_id].mul_color;
 
-  float alpha = texture(textures[material.diffuse_idx], fs_in.uv).a;
-  vec3 diffuse_sample  = vec3(bindless_sample(material.diffuse_idx,  fs_in.uv));
-  vec3 specular_sample = vec3(bindless_sample(material.specular_idx, fs_in.uv));
-  vec3 emissive_sample = vec3(bindless_sample(material.emissive_idx, fs_in.uv));
-  vec3 normal_sample   = vec3(bindless_sample(material.normal_idx,   fs_in.uv));
+  float alpha = texture(material.diffuse, fs_in.uv).a;
+  vec3 diffuse_sample  = vec3(texture(material.diffuse,  fs_in.uv));
+  vec3 specular_sample = vec3(texture(material.specular, fs_in.uv));
+  vec3 emissive_sample = vec3(texture(material.emissive, fs_in.uv));
+  vec3 normal_sample   = vec3(texture(material.normal,   fs_in.uv));
 
   // Textures are in range 0 -> 1
   vec3 normal_map = normal_sample;

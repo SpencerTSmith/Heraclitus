@@ -5,15 +5,19 @@ import "core:mem"
 
 import gl "vendor:OpenGL"
 
-MAX_DRAWS    :: 1  * mem.Megabyte
-MAX_VERTICES :: 4  * mem.Megabyte
-MAX_INDICES  :: 16 * mem.Megabyte
+MAX_DRAWS     :: 1  * mem.Megabyte
+MAX_VERTICES  :: 4  * mem.Megabyte
+MAX_INDICES   :: 16 * mem.Megabyte
+MAX_MATERIALS :: 512
 
 Multi_Draw_State :: struct
 {
   vertex_buffer: GPU_Buffer,
   vertex_count:  int,
   index_count:   int,
+
+  material_buffer: GPU_Buffer,
+  material_count:  int,
 
   // All triple buffered
   draw_commands: GPU_Buffer,
@@ -27,6 +31,9 @@ init_multi_draw :: proc() -> (mds: Multi_Draw_State)
   mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
   bind_gpu_buffer_base(mds.vertex_buffer, .MESH_VERTICES)
 
+  mds.material_buffer = make_gpu_buffer(.STORAGE, size_of(Material_Uniform) * MAX_MATERIALS)
+  bind_gpu_buffer_base(mds.material_buffer, .MATERIALS)
+
   mds.draw_commands = make_gpu_buffer(.STORAGE, size_of(Draw_Command) * MAX_DRAWS,
                                       flags = {.PERSISTENT, .FRAME_BUFFERED})
   mds.draw_uniforms = make_gpu_buffer(.STORAGE, size_of(Draw_Uniform) * MAX_DRAWS,
@@ -35,29 +42,56 @@ init_multi_draw :: proc() -> (mds: Multi_Draw_State)
   return mds
 }
 
-push_vertices :: proc(mds: ^Multi_Draw_State, vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
+upload_vertices :: proc(mds: ^Multi_Draw_State, vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: i32)
 {
   if mds.vertex_count + len(vertices) < MAX_VERTICES &&
      mds.index_count + len(indices)   < MAX_INDICES
   {
     vertex_offset = cast(i32) mds.vertex_count
 
-    vertex_byte_offset := size_of(Mesh_Vertex) * mds.vertex_count
-    write_gpu_buffer(mds.vertex_buffer, vertex_byte_offset, size_of(Mesh_Vertex) * len(vertices), raw_data(vertices))
+    vertex_byte_offset := size_of(vertices[0]) * mds.vertex_count
+    write_gpu_buffer(mds.vertex_buffer, vertex_byte_offset, size_of(vertices[0]) * len(vertices), raw_data(vertices))
 
     mds.vertex_count += len(vertices)
 
     index_offset = cast(i32) mds.index_count
-    index_byte_offset := mds.vertex_buffer.index_offset + size_of(Mesh_Index) * mds.index_count
-    write_gpu_buffer(mds.vertex_buffer, index_byte_offset, size_of(Mesh_Index) * len(indices), raw_data(indices))
+    index_byte_offset := mds.vertex_buffer.index_offset + size_of(indices[0]) * mds.index_count
+    write_gpu_buffer(mds.vertex_buffer, index_byte_offset, size_of(indices[0]) * len(indices), raw_data(indices))
     mds.index_count += len(indices)
   }
   else
   {
-    log.errorf("Cannot push any more vertices to mega buffer");
+    log.errorf("Cannot push any more vertices to mega buffer.")
   }
 
   return vertex_offset, index_offset
+}
+
+upload_materials :: proc(mds: ^Multi_Draw_State, materials: ^[]Material)
+{
+  if (mds.material_count + len(materials)) < MAX_MATERIALS
+  {
+    uniforms := make([]Material_Uniform, len(materials), context.temp_allocator)
+    write_offset := mds.material_count * size_of(uniforms[0])
+
+    for &material, idx in materials
+    {
+      make_texture_bindless(get_texture(material.diffuse))
+      make_texture_bindless(get_texture(material.specular))
+      make_texture_bindless(get_texture(material.emissive))
+      make_texture_bindless(get_texture(material.normal))
+
+      uniforms[idx] = material_uniform(material)
+      material.buffer_index = u32(mds.material_count)
+      mds.material_count += 1
+    }
+
+    write_gpu_buffer(mds.material_buffer, write_offset, len(uniforms) * size_of(uniforms[0]), raw_data(uniforms))
+  }
+  else
+  {
+    log.errorf("Cannot push materials to mega buffer.")
+  }
 }
 
 push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_Uniform)
