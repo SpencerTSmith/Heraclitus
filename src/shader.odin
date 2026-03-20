@@ -213,14 +213,14 @@ make_shader_program :: proc(vert_name, frag_name: string, allocator: runtime.All
 
   // NOTE: Since we should not be generating new names, all names should just be static strings, so hopefully this is ok
   program.files[.VERT].name = vert_name
-  program.files[.VERT].modify_time, err = os.last_write_time_by_name(vert_path)
+  program.files[.VERT].modify_time, err = os.modification_time_by_path(vert_path)
   if err != nil
   {
     log.errorf("Could not collect modify time for vertex shader: %v... error: %v", vert_name, err)
   }
 
   program.files[.FRAG].name = frag_name
-  program.files[.FRAG].modify_time, err = os.last_write_time_by_name(frag_path)
+  program.files[.FRAG].modify_time, err = os.modification_time_by_path(frag_path)
   if err != nil
   {
     log.errorf("Could not collect modify time for fragment shader: %v... error: %v", frag_name, err)
@@ -302,8 +302,9 @@ hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator: runt
         continue
       }
 
-      if time.diff(new_modify_time, p.modify_time) > 0
+      if time.diff(new_modify_time, p.modify_time) != 0
       {
+        print("%v: %v, %v\n", p.name, p.modify_time, new_modify_time)
         needs_reload = true
       }
     }
@@ -315,7 +316,7 @@ hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator: runt
       {
         free_shader_program(&s)
         s = hot
-        log.infof("Hot reloaded shader %v", tag)
+        log.debugf("Hot reloaded shader %v", tag)
       }
       else
       {

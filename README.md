@@ -39,8 +39,10 @@ odin run src -keep-executable -out:heraclitus -debug -vet -strict-style
 - AZDO OpenGL techniques:
     - Multi-draw indirect
     - Frames in flight sync, tripled-up persistently mapped buffers
-    - Bindless textures for model materials (Still doing traditional binding api for less commonly bound textures like shadow maps, skybox, etc)
+    - Bindless textures for model materials
+        - Still doing traditional binding api for less commonly bound textures like shadow maps, skybox, etc
     - ALL mesh data in one big buffer
+    - Vertex pulling
 - Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
     - AABB, sphere, and vector debug visuals
     - Text rendering
