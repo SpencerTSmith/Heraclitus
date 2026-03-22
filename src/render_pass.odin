@@ -46,6 +46,12 @@ Depth_Test_Mode :: enum
   LESS_EQUAL,
 }
 
+Vertex_Primitive :: enum
+{
+  TRIANGLES,
+  LINES,
+}
+
 // NOTE: Read left to right as src factor and dst factor
 Blend_Mode :: enum
 {
@@ -377,9 +383,9 @@ blit_framebuffers :: proc(from, to: Framebuffer)
     gl_filter)
 }
 
-// TODO: Find a way to assert that the currently bound shader has the to_screen vertex shader
 draw_screen_quad :: proc()
 {
+  assert(state.current_shader.files[.VERT].name == "to_screen.vert")
   gl.BindVertexArray(state.empty_vao)
   gl.DrawArrays(gl.TRIANGLES, 0, 6)
 }
@@ -447,35 +453,30 @@ begin_drawing :: proc()
   {
     for pl in state.point_lights
     {
-      if pl.cast_shadows
+      // Try to add shadow casting to the shadow casting array first
+      if pl.cast_shadows && frame_ubo.shadow_points_count <= MAX_SHADOW_POINT_LIGHTS
       {
-        if frame_ubo.shadow_points_count >= MAX_SHADOW_POINT_LIGHTS
-        {
-          log.errorf("Too many shadow casting point lights! Adding to non shadow casting lights.")
-
-          // FIXME: Doesn't check if this buffer is also full.
-          idx := frame_ubo.points_count
-          frame_ubo.point_lights[idx] = point_light_uniform(pl)
-          frame_ubo.points_count += 1
-        }
-        else
-        {
-          idx := frame_ubo.shadow_points_count
-          frame_ubo.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
-          frame_ubo.shadow_points_count += 1
-        }
+        idx := frame_ubo.shadow_points_count
+        frame_ubo.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
+        frame_ubo.shadow_points_count += 1
       }
       else
       {
-        if frame_ubo.points_count >= MAX_POINT_LIGHTS
+        // If we had too many try to add to the normal point lights
+        if pl.cast_shadows
         {
-          log.errorf("Too many point lights! Ignoring.")
+          log.errorf("Too many shadow casting point lights! Attempting to add to non shadow casting lights.")
         }
-        else
+
+        if frame_ubo.points_count <= MAX_POINT_LIGHTS
         {
           idx := frame_ubo.points_count
           frame_ubo.point_lights[idx] = point_light_uniform(pl)
           frame_ubo.points_count += 1
+        }
+        else
+        {
+          log.errorf("Too many point lights! Ignoring.")
         }
       }
     }

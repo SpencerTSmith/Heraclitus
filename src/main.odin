@@ -62,7 +62,7 @@ State :: struct {
 
   samplers: [Sampler_Preset]u32,
 
-  skybox: Skybox,
+  skybox: Texture_Handle,
 
   frame_uniforms: GPU_Buffer,
 
@@ -143,6 +143,8 @@ init_state :: proc() -> (ok: bool)
     state.input.mouse.delta_scroll.y += dir_y
   })
 
+  GL_MAJOR :: 4
+  GL_MINOR :: 6
   gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
 
   gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
@@ -190,8 +192,6 @@ init_state :: proc() -> (ok: bool)
   }
 
   state.gl_initialized = true
-
-  gl.Enable(gl.MULTISAMPLE)
 
   // Make the meta shader
   gen_glsl_code()
@@ -275,17 +275,6 @@ init_state :: proc() -> (ok: bool)
 
   state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), flags = {.PERSISTENT, .FRAME_BUFFERED})
 
-  cube_map_sides: [6]string =
-  {
-    "skybox/right.jpg",
-    "skybox/left.jpg",
-    "skybox/top.jpg",
-    "skybox/bottom.jpg",
-    "skybox/front.jpg",
-    "skybox/back.jpg",
-  }
-  state.skybox = make_skybox(cube_map_sides) or_return
-
   gl.CreateVertexArrays(1, &state.empty_vao)
 
   state.mds = init_multi_draw()
@@ -299,6 +288,17 @@ init_state :: proc() -> (ok: bool)
   state.draw_debug = true
 
   state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
+
+  cube_map_sides: [6]string =
+  {
+    "skybox/right.jpg",
+    "skybox/left.jpg",
+    "skybox/top.jpg",
+    "skybox/bottom.jpg",
+    "skybox/front.jpg",
+    "skybox/back.jpg",
+  }
+  state.skybox = load_skybox(cube_map_sides) or_return
 
   return true
 }
@@ -343,7 +343,6 @@ main :: proc()
     return
   }
   defer free_state()
-
 
   GRID_SIZE :: 20
   GRID_SPACING :: 5
@@ -630,11 +629,11 @@ main :: proc()
 
         if state.sun_on
         {
-          bind_texture("skybox", state.skybox.texture)
+          bind_texture("skybox", get_texture(state.skybox)^)
         }
         else
         {
-          bind_texture("skybox", {})
+          bind_texture("skybox", Texture{})
         }
         bind_texture("sun_shadow_map", state.sun_depth_buffer.depth_target)
         bind_texture("point_light_shadows", state.point_depth_buffer.depth_target)
@@ -788,8 +787,6 @@ free_state :: proc()
   free_immediate_renderer()
 
   free_assets()
-
-  free_skybox(&state.skybox)
 
   free_gpu_buffer(&state.frame_uniforms)
 

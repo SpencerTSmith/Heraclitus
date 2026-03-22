@@ -304,7 +304,6 @@ hot_reload_shaders :: proc(shaders: ^[Shader_Tag]Shader_Program, allocator: runt
 
       if time.diff(new_modify_time, p.modify_time) != 0
       {
-        print("%v: %v, %v\n", p.name, p.modify_time, new_modify_time)
         needs_reload = true
       }
     }

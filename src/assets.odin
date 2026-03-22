@@ -1,5 +1,6 @@
 package main
 
+import "base:runtime"
 import "core:log"
 import "core:strings"
 
@@ -30,7 +31,7 @@ Assets :: struct
 @(private="file")
 assets: Assets
 
-init_assets :: proc(allocator := context.allocator) -> (ok: bool)
+init_assets :: proc(allocator: runtime.Allocator) -> (ok: bool)
 {
   EXPECTED_MODEL_ASSET_COUNT :: 32
   assets.model_catalog.path_map = make(map[string]Model_Handle, allocator)
@@ -200,4 +201,13 @@ get_texture_by_name :: proc(name: string) -> (texture: ^Texture)
   }
 
   return texture
+}
+
+load_skybox :: proc(file_paths: [6]string) -> (handle: Texture_Handle, ok: bool)
+{
+  texture: Texture
+  texture, ok = make_texture_cube_map(file_paths)
+  handle = register_texture(texture)
+
+  return handle, ok
 }

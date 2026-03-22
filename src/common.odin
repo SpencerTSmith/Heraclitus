@@ -1,5 +1,6 @@
 package main
 
+import "base:runtime"
 import "core:fmt"
 import "core:log"
 import "core:math/linalg"
@@ -7,7 +8,6 @@ import "core:math/linalg/glsl"
 import "core:path/filepath"
 import "core:time"
 import "core:os"
-import "base:runtime"
 
 import gl "vendor:OpenGL"
 import "vendor:glfw"
@@ -22,9 +22,6 @@ DEFAULT_FONT_SIZE :: 25.0
 FRAMES_IN_FLIGHT :: 3
 TARGET_FPS :: 240
 TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
-
-GL_MAJOR :: 4
-GL_MINOR :: 6
 
 Program_Mode :: enum {
   GAME,

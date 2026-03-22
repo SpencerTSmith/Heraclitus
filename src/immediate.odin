@@ -17,12 +17,6 @@ Immediate_Vertex :: struct
 // NOTE: When an immediate_* function takes in a vec2 for position it means its in screen coords
 // When taking in a vec3 for position its in world space
 
-Immediate_Primitive :: enum
-{
-  TRIANGLES,
-  LINES,
-}
-
 Immediate_Space :: enum
 {
   SCREEN,
@@ -52,7 +46,7 @@ Immediate_Batch :: struct
   vertex_base:  int, // First vertex in batch
   vertex_count: int, // How many vertices in batch
 
-  primitive: Immediate_Primitive,
+  primitive: Vertex_Primitive,
   texture:   Texture_Handle,
   space:     Immediate_Space,
   depth:     Depth_Test_Mode,
@@ -84,7 +78,7 @@ immediate_frame_reset :: proc()
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
+immediate_begin :: proc(wish_primitive: Vertex_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
 {
   current := immediate.batches[immediate.curr_batch]
   if  current.primitive != wish_primitive ||
@@ -201,7 +195,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
         first_vertex := i32(frame_base + batch.vertex_base)
         vertex_count := i32(batch.vertex_count)
 
-        gl_primitive_map: [Immediate_Primitive]u32 =
+        gl_primitive_map: [Vertex_Primitive]u32 =
         {
           .TRIANGLES = gl.TRIANGLES,
           .LINES     = gl.LINES,
@@ -341,11 +335,7 @@ draw_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
 {
   corners := box_corners(xyz_min, xyz_max)
 
-  wish_primitive := Immediate_Primitive.TRIANGLES
-  wish_space     := Immediate_Space.WORLD
-  wish_texture   := immediate.white_texture
-
-  immediate_begin(wish_primitive, wish_texture, wish_space, depth_test)
+  immediate_begin(.TRIANGLES, immediate.white_texture, .WORLD, depth_test)
 
   immediate_vertex(corners[0], color)
   immediate_vertex(corners[1], color)

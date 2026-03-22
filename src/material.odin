@@ -205,11 +205,12 @@ free_texture :: proc(texture: ^Texture) {
 
 bind_texture :: proc
 {
-  bind_texture_slot,
-  bind_texture_name,
+  bind_texture_to_slot,
+  bind_texture_to_name,
+  bind_texture_by_asset,
 }
 
-bind_texture_slot :: proc(slot: u32, texture: Texture)
+bind_texture_to_slot :: proc(slot: u32, texture: Texture)
 {
   if state.bound_textures[slot].id != texture.id
   {
@@ -219,13 +220,19 @@ bind_texture_slot :: proc(slot: u32, texture: Texture)
   }
 }
 
-bind_texture_name :: proc(name: string, texture: Texture)
+bind_texture_to_name :: proc(name: string, texture: Texture)
 {
   if name in state.current_shader.uniforms
   {
     slot := state.current_shader.uniforms[name].binding
-    bind_texture_slot(u32(slot), texture)
+    bind_texture_to_slot(u32(slot), texture)
   }
+}
+
+bind_texture_by_asset :: proc(name: string, handle: Texture_Handle)
+{
+  texture := get_texture(handle)^
+  bind_texture_to_name(name, texture)
 }
 
 // First value is the internal format and the second is the logical format
@@ -474,4 +481,21 @@ make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false)
   }
 
   return texture, ok
+}
+
+draw_skybox :: proc(handle: Texture_Handle)
+{
+  bind_shader(.SKYBOX)
+
+  // Get the depth func before and reset after this call
+  // TODO: Do this everywhere, ie push and pop GL state
+  depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
+  gl.DepthFunc(gl.LEQUAL)
+  defer gl.DepthFunc(u32(depth_func_before))
+
+  texture := get_texture(handle)^
+  assert(texture.type == .CUBE)
+  bind_texture("skybox", get_texture(handle)^)
+
+  gl.DrawArrays(gl.TRIANGLES, 0, 36)
 }

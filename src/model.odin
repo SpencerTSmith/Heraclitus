@@ -11,12 +11,6 @@ import gl "vendor:OpenGL"
 
 // TODO: Dump loaded models so can just load them straight without parsing.
 
-// TODO: Remove
-Skybox :: struct
-{
-  texture: Texture,
-}
-
 Mesh_Vertex :: struct
 {
   position: vec3,
@@ -559,35 +553,6 @@ free_model :: proc(model: ^Model)
   {
     free_material(&material)
   }
-}
-
-// TODO: Make this work with the asset system
-make_skybox :: proc(file_paths: [6]string) -> (skybox: Skybox, ok: bool)
-{
-  skybox.texture, ok = make_texture_cube_map(file_paths)
-
-  return skybox, ok
-}
-
-// FIXME: Make this
-draw_skybox :: proc(skybox: Skybox)
-{
-  bind_shader(.SKYBOX)
-
-  // Get the depth func before and reset after this call
-  // TODO: Do this everywhere, ie push and pop GL state
-  depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
-  gl.DepthFunc(gl.LEQUAL)
-  defer gl.DepthFunc(u32(depth_func_before))
-
-  bind_texture("skybox", skybox.texture)
-
-  gl.DrawArrays(gl.TRIANGLES, 0, 36)
-}
-
-free_skybox :: proc(skybox: ^Skybox)
-{
-  free_texture(&skybox.texture)
 }
 
 DEFAULT_TRIANGLE_VERT:: []Mesh_Vertex {
