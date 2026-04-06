@@ -8,8 +8,8 @@ UI_WIDGET_MAX_CHILDREN :: 8
 // TODO: Either need to clear these data structures every frame or hash them some how if we want to cache them
 UI_State :: struct
 {
-  widgets: Array(UI_Widget, UI_MAX_WIDGETS), // Probably want a pool or fridge array generic eventually
-  draws:   Array(UI_Draw, UI_MAX_DRAWS),
+  widgets: [dynamic; 256]UI_Widget, // Probably want a pool or fridge array generic eventually
+  draws:   [dynamic; 512]UI_Draw,
 
   current_parent: ^UI_Widget,
 
@@ -37,7 +37,7 @@ UI_Widget :: struct
   // TODO: Should be fine to do pointers? static array of all widgets, so no pointer invalidation to think about, we will see, may want to have
   // handle with generations
   parent:   ^UI_Widget,
-  children: Array(^UI_Widget, UI_WIDGET_MAX_CHILDREN),
+  children: [dynamic; 8]^UI_Widget,
   child_padding: f32, // Space between children
 }
 
@@ -115,7 +115,7 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
     h = b - t + padding
   }
 
-  the_widget = array_add(&ui.widgets, UI_Widget {
+  append(&ui.widgets, UI_Widget {
     flags    = flags,
     position = relative_pos, // Temporarily, will add parent layout info too
     parent   = ui.current_parent,
@@ -123,11 +123,13 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
     height   = h,
   })
 
+  the_widget = &ui.widgets[len(ui.widgets) - 1]
+
   // Now within the parent's children where does it need to be?
   if ui.current_parent != nil
   {
     layout_cursor: f32
-    for child in array_slice(&ui.current_parent.children)
+    for child in &ui.current_parent.children
     {
       layout_cursor += child.height
       layout_cursor += ui.current_parent.child_padding
@@ -135,7 +137,7 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
 
     the_widget.position.y += layout_cursor
 
-    array_add(&ui.current_parent.children, the_widget)
+    append(&ui.current_parent.children, the_widget)
   }
 
   abs := calc_ui_absolute_position(the_widget^)
@@ -167,7 +169,7 @@ make_ui_widget :: proc(flags: bit_set[UI_Widget_Flags], relative_pos: vec2, widt
 
   // TODO: Lots of stuff not configurable right now
   text_height := text_draw_height(text, state.default_font)
-  array_add(&ui.draws, UI_Draw {
+  append(&ui.draws, UI_Draw {
     text = text,
     text_pos = vec2{abs_l + padding, abs_t + text_height},
     text_color = RED if results.hovered else WHITE,
@@ -220,13 +222,13 @@ draw_ui :: proc()
 {
   immediate_begin(.TRIANGLES, {}, .SCREEN, .ALWAYS)
 
-  for d in array_slice(&ui.draws)
+  for d in ui.draws
   {
     draw_quad(d.quad.top_left, d.quad.width, d.quad.height, d.quad_color)
     draw_text(d.text, state.default_font, d.text_pos.x, d.text_pos.y, d.text_color)
   }
 
-  array_clear(&ui.draws)
-  array_clear(&ui.widgets)
+  clear(&ui.draws)
+  clear(&ui.widgets)
   ui.interaction_this_frame = false
 }

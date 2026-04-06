@@ -125,35 +125,6 @@ join_file_path :: proc(strings: []string, allocator: runtime.Allocator) -> (path
   return path
 }
 
-//
-// Static array that acts like it is dynamic
-//
-Array :: struct($Type: typeid, $Capacity: int)
-{
-  v:  [Capacity]Type,
-  count: int,
-}
-
-array_slice :: proc(array: ^$A/Array($Type, $Capacity)) -> []Type
-{
-  return array.v[:array.count]
-}
-
-array_add :: proc(array: ^$A/Array($Type, $Capacity), item: Type) -> (added: ^Type)
-{
-  assert(array.count < Capacity, "Not enough elements in static array!")
-
-  array.v[array.count] = item
-  array.count += 1
-
-  return &array.v[array.count - 1]
-}
-
-array_clear :: proc(array: ^$A/Array($Type, $Capacity))
-{
-  array.count = 0
-}
-
 // Adds a 1 to the end by default
 vec4_from_3 :: proc(vec: vec3, w: f32 = 1.0) -> vec4
 {

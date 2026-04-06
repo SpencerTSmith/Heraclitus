@@ -34,8 +34,7 @@ Immediate_State :: struct
   shader:        Shader_Program,
   white_texture: Texture_Handle,
 
-  batches:    [256]Immediate_Batch,
-  curr_batch: int,
+  batches:    [dynamic; 256]Immediate_Batch,
 }
 
 // Just a view into the main vertex buffer
@@ -74,31 +73,27 @@ init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 immediate_frame_reset :: proc()
 {
   immediate.vertex_count = 0
-  immediate.curr_batch = 0
+  clear(&immediate.batches)
 }
 
 // Starts a new batch if necessary
 immediate_begin :: proc(wish_primitive: Vertex_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
 {
-  current := immediate.batches[immediate.curr_batch]
-  if  current.primitive != wish_primitive ||
-      current.space     != wish_space     ||
-      current.texture   != wish_texture   ||
-      current.depth     != wish_depth
+  current := immediate.batches[len(immediate.batches) - 1] if len(immediate.batches) > 0 else {}
+  if current.primitive != wish_primitive ||
+     current.space     != wish_space     ||
+     current.texture   != wish_texture   ||
+     current.depth     != wish_depth
   {
-    if immediate.curr_batch + 1 < len(immediate.batches)
-    {
-      immediate.curr_batch += 1
-      immediate.batches[immediate.curr_batch] =
-      {
-        vertex_base = immediate.vertex_count,
-        primitive   = wish_primitive,
-        texture     = wish_texture,
-        space       = wish_space,
-        depth       = wish_depth,
-      }
-    }
-    else
+    appended := append(&immediate.batches, Immediate_Batch {
+      vertex_base = immediate.vertex_count,
+      primitive   = wish_primitive,
+      texture     = wish_texture,
+      space       = wish_space,
+      depth       = wish_depth,
+    })
+
+    if appended == 0
     {
       log.errorf("Too many immediate draw batches.")
     }
@@ -119,7 +114,7 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
 
     vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
 
-    current := &immediate.batches[immediate.curr_batch]
+    current := &immediate.batches[len(immediate.batches) - 1]
 
     // Write into the current batch.
     offset := current.vertex_base + current.vertex_count
@@ -133,7 +128,7 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
   }
   else
   {
-    // log.errorf("Too many immediate vertices", immediate.vertex_count)
+    log.errorf("Too many immediate vertices.", immediate.vertex_count)
   }
 }
 
@@ -160,7 +155,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
     gl.Disable(gl.CULL_FACE)
 
     frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
-    for batch in immediate.batches[:immediate.curr_batch + 1]
+    for batch in immediate.batches
     {
       if batch.vertex_count > 0
       {

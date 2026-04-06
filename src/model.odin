@@ -7,7 +7,6 @@ import "core:path/filepath"
 import "base:runtime"
 
 import "vendor:cgltf"
-import gl "vendor:OpenGL"
 
 // TODO: Dump loaded models so can just load them straight without parsing.
 
