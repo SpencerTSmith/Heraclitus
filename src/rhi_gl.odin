@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:log"
 import "core:strings"
 import "core:math"
+import "core:fmt"
 
 import glfw "vendor:glfw"
 import gl   "vendor:OpenGL"
@@ -13,7 +14,7 @@ GL_MINOR :: 6
 
 init_platform_graphics :: proc(window_width:  int,
                                window_height: int,
-                               window_title: string) -> (window: Window, ok: bool)
+                               window_title:  string) -> (window: Window, ok: bool)
 {
   if glfw.Init() == glfw.TRUE
   {
@@ -22,10 +23,11 @@ init_platform_graphics :: proc(window_width:  int,
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
     glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
     glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
+    glfw.WindowHint(glfw.OPENGL_DEBUG_CONTEXT, glfw.TRUE)
 
     c_title := strings.clone_to_cstring(window_title, context.temp_allocator)
     window.handle = glfw.CreateWindow(i32(window_width), i32(window_height), c_title, nil, nil)
-    if state.window.handle != nil
+    if window.handle != nil
     {
       ok = true
 
@@ -34,50 +36,61 @@ init_platform_graphics :: proc(window_width:  int,
       window.title = window_title
 
       if glfw.RawMouseMotionSupported() {
-        glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-        glfw.SetInputMode(state.window.handle, glfw.RAW_MOUSE_MOTION, 1)
+        glfw.SetInputMode(window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
+        glfw.SetInputMode(window.handle, glfw.RAW_MOUSE_MOTION, 1)
       }
 
-      glfw.MakeContextCurrent(state.window.handle)
+      glfw.MakeContextCurrent(window.handle)
       glfw.SwapInterval(1)
 
-      glfw.SetFramebufferSizeCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
-        {
-          state.window.w = int(width)
-          state.window.h = int(height)
-          state.window.resized = true
-        })
-      glfw.SetScrollCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64)
-        {
-          // Just get the direction
-          dir_x := math.sign(x_scroll)
-          dir_y := math.sign(y_scroll)
+      // Ehh, accessing global state here....
+      glfw.SetFramebufferSizeCallback(window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
+      {
+        state.window.w = int(width)
+        state.window.h = int(height)
+        state.window.resized = true
+      })
+      glfw.SetScrollCallback(window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64)
+      {
+        // Just get the direction
+        dir_x := math.sign(x_scroll)
+        dir_y := math.sign(y_scroll)
 
-          state.input.mouse.delta_scroll.x += dir_x
-          state.input.mouse.delta_scroll.y += dir_y
-        })
+        state.input.mouse.delta_scroll.x += dir_x
+        state.input.mouse.delta_scroll.y += dir_y
+      })
 
       gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
 
-      gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
-        {
-          // Too much voodoo?
-          log_proc: proc(fmt_str: string, args: ..any, location := #caller_location)
-          switch (severity)
-          {
-          case gl.DEBUG_SEVERITY_NOTIFICATION:
-            log_proc = log.debugf
-          case gl.DEBUG_SEVERITY_LOW:
-            log_proc = log.infof
-          case gl.DEBUG_SEVERITY_MEDIUM:
-            log_proc = log.warnf
-          case gl.DEBUG_SEVERITY_HIGH:
-            log_proc = log.errorf
-          }
-          context = runtime.default_context()
 
-          log_proc("GL: %v", string(message))
-        }, nil)
+      gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
+      {
+        context = state.main_context
+        // Too much voodoo?
+        log_proc: proc(fmt_str: string, args: ..any, location := #caller_location)
+        switch (severity)
+        {
+        case gl.DEBUG_SEVERITY_NOTIFICATION:
+          log_proc = log.debugf
+        case gl.DEBUG_SEVERITY_LOW:
+          log_proc = log.infof
+        case gl.DEBUG_SEVERITY_MEDIUM:
+          log_proc = log.warnf
+        case gl.DEBUG_SEVERITY_HIGH:
+          log_proc = log.errorf
+        }
+
+        log_proc("GL: %v", string(message))
+      }, nil)
+
+      gl.Enable(gl.DEBUG_OUTPUT);
+      gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS);
+      gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION,
+                            gl.DEBUG_TYPE_ERROR,
+                            1,
+                            gl.DEBUG_SEVERITY_HIGH,
+                            -1,
+                            "hello");
 
       //
       // Query GL extensions

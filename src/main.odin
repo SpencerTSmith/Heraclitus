@@ -14,7 +14,10 @@ import "vendor:glfw"
 
 // TODO: Probably split game specific things from rendering specific things
 State :: struct {
+  main_context :runtime.Context,
+
   running: bool,
+
   mode: Program_Mode,
 
   gl_initialized:  bool,
@@ -89,6 +92,9 @@ state: State
 init_state :: proc() -> (ok: bool)
 {
   state.start_time = time.now()
+
+  state.main_context = context
+
   state.mode = .EDIT // Edit by default
 
   state.window = init_platform_graphics(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
