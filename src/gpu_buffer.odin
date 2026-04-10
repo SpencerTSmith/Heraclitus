@@ -10,18 +10,13 @@ import gl "vendor:OpenGL"
 // As well as writing to them, at the right index
 
 // Is this even useful anymore? Used to separate buffers more, but seems less useful now.
-GPU_Buffer_Type :: enum
-{
-  NONE,
-  UNIFORM,
-  STORAGE,
-}
 
 GPU_Buffer_Flag :: enum
 {
+  UNIFORM_DATA,
+  VERTEX_DATA,
   PERSISTENT,
   FRAME_BUFFERED,
-  VERTEX_DATA,
 }
 GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
 
@@ -29,7 +24,6 @@ GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
 GPU_Buffer :: struct
 {
   id:         u32,
-  type:       GPU_Buffer_Type,
   flags:      GPU_Buffer_Flags,
 
   mapped:     rawptr,
@@ -53,12 +47,11 @@ align_size_for_gpu :: proc(size: int) -> (aligned: int)
 }
 
 // NOTE: right now not possible to get a buffer you can read from with this interface
-make_gpu_buffer :: proc(type: GPU_Buffer_Type, size: int, data: rawptr = nil, flags: GPU_Buffer_Flags = {}) -> (buffer: GPU_Buffer)
+make_gpu_buffer :: proc(size: int, data: rawptr = nil, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
 {
   is_persistent := .PERSISTENT in flags
   is_buffered   := .FRAME_BUFFERED in flags
 
-  buffer.type = type
   buffer.range_size = align_size_for_gpu(size)
   buffer.total_size = buffer.range_size * FRAMES_IN_FLIGHT if is_buffered else buffer.range_size
 
@@ -73,12 +66,14 @@ make_gpu_buffer :: proc(type: GPU_Buffer_Type, size: int, data: rawptr = nil, fl
     buffer.mapped = gl.MapNamedBufferRange(buffer.id, 0, buffer.total_size, gl_flags)
   }
 
+  buffer.flags = flags
+
   return buffer
 }
 
 gpu_buffer_is_mapped :: proc(buffer: GPU_Buffer) -> bool
 {
-  return buffer.mapped != nil
+  return buffer.mapped != nil && .PERSISTENT in buffer.flags
 }
 
 write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: int, data: rawptr)
@@ -97,27 +92,16 @@ write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: int, data: rawptr)
   }
 }
 
-buffer_type_to_gl: [GPU_Buffer_Type]u32 =
-{
-  .NONE    = 0,
-  .UNIFORM = gl.UNIFORM_BUFFER,
-  .STORAGE = gl.SHADER_STORAGE_BUFFER,
-}
-
 bind_gpu_buffer_base :: proc(buffer: GPU_Buffer, binding: UBO_Bind)
 {
-  assert(buffer.type == .UNIFORM || buffer.type == .STORAGE, "Only Uniform and Storage Buffers may be bound to locations")
-
-  gl_target := buffer_type_to_gl[buffer.type]
+  gl_target: u32 = gl.UNIFORM_BUFFER if .UNIFORM_DATA in buffer.flags else gl.SHADER_STORAGE_BUFFER
 
   gl.BindBufferBase(gl_target, u32(binding), buffer.id)
 }
 
 bind_gpu_buffer_range :: proc(buffer: GPU_Buffer, binding: UBO_Bind, offset, size: int)
 {
-  assert(buffer.type == .UNIFORM || buffer.type == .STORAGE, "Only Uniform and Storage Buffers may be bound to locations")
-
-  gl_target := buffer_type_to_gl[buffer.type]
+  gl_target: u32 = gl.UNIFORM_BUFFER if .UNIFORM_DATA in buffer.flags else gl.SHADER_STORAGE_BUFFER
 
   gl.BindBufferRange(gl_target, u32(binding), buffer.id, offset, size)
 }
@@ -170,19 +154,24 @@ free_gpu_buffer :: proc(buffer: ^GPU_Buffer)
 }
 
 // Now just a fast path for putting vertices and indices into a SSBO.
-make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, index_count: int = 0,
-                           vertex_data: rawptr = nil, index_data: rawptr = nil, flags: GPU_Buffer_Flags = {}) -> (buffer: GPU_Buffer)
+make_vertex_buffer :: proc($vertex_type: typeid,
+                           vertex_count: int,
+                           $index_type:  typeid,
+                           index_count:  int = 0,
+                           vertex_data:  rawptr = nil,
+                           index_data:   rawptr = nil,
+                           flags: GPU_Buffer_Flags = {}) -> (buffer: GPU_Buffer)
 {
 
   vertex_length := vertex_count * size_of(vertex_type)
-  index_length  := index_count  * size_of(Mesh_Index) // FIXME: Hardcoded, but can't pass in compile time known arg defaults
+  index_length  := index_count  * size_of(index_type)
 
   vertex_length_align := align_size_for_gpu(vertex_length)
   index_length_align  := align_size_for_gpu(index_length)
 
   total_size := vertex_length_align + index_length_align
 
-  buffer = make_gpu_buffer(.STORAGE, total_size, flags = flags)
+  buffer = make_gpu_buffer(total_size, flags = flags)
   buffer.flags |= {.VERTEX_DATA}
 
   // Ack

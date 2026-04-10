@@ -1,15 +1,13 @@
 package main
 
-import "core:math"
 import "core:math/rand"
 import "core:mem"
-import "core:strings"
 import "core:time"
 import "core:slice"
 import "core:log"
 import "base:runtime"
-
 import gl "vendor:OpenGL"
+
 import "vendor:glfw"
 
 // TODO: Probably split game specific things from rendering specific things
@@ -20,8 +18,6 @@ State :: struct {
 
   mode: Program_Mode,
 
-  gl_initialized:  bool,
-
   window: Window,
 
   perm_mem:   []byte,
@@ -30,9 +26,9 @@ State :: struct {
 
   camera: Camera,
 
-  entities: [dynamic]Entity,
+  entities: Entities,
 
-  point_lights: [dynamic]Point_Light,
+  point_lights: [dynamic; MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS]Point_Light,
 
   start_time: time.Time,
 
@@ -75,9 +71,6 @@ State :: struct {
   current_shader:   Shader_Program,
   bound_textures:   [16]Texture,
 
-  // NOTE: Needed to make draw calls, even if not using one
-  empty_vao: u32,
-
   input: Input_State,
 
   draw_debug:   bool,
@@ -100,8 +93,6 @@ init_state :: proc() -> (ok: bool)
   state.window = init_platform_graphics(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
                                         WINDOW_DEFAULT_TITLE) or_return
 
-  state.gl_initialized = true
-
   // Make the meta shader
   gen_glsl_code()
 
@@ -121,12 +112,6 @@ init_state :: proc() -> (ok: bool)
     aabb         = {{-1.0, -4.0, -1.0}, {1.0, 1.0, 1.0},},
   }
 
-  MAX_ENTITY_COUNT :: 100000
-  state.entities = make([dynamic]Entity, state.perm_alloc)
-  reserve(&state.entities, MAX_ENTITY_COUNT)
-
-  state.point_lights = make([dynamic]Point_Light, state.perm_alloc)
-  reserve(&state.point_lights, MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS)
   state.point_lights_on = true
 
   state.running = true
@@ -182,13 +167,11 @@ init_state :: proc() -> (ok: bool)
   state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
   state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
-  state.frame_uniforms = make_gpu_buffer(.UNIFORM, size_of(Frame_Uniform), flags = {.PERSISTENT, .FRAME_BUFFERED})
-
-  gl.CreateVertexArrays(1, &state.empty_vao)
+  state.frame_uniforms = make_gpu_buffer(size_of(Frame_Uniform), flags = {.UNIFORM_DATA, .PERSISTENT, .FRAME_BUFFERED})
 
   state.mds = init_multi_draw()
 
-  init_assets(state.perm_alloc) or_return
+  init_assets(state.perm_alloc)
 
   init_immediate_renderer(state.perm_alloc) or_return
 
@@ -208,6 +191,8 @@ init_state :: proc() -> (ok: bool)
     "skybox/back.jpg",
   }
   state.skybox = load_skybox(cube_map_sides) or_return
+
+  init_entities()
 
   return true
 }
@@ -267,46 +252,36 @@ main :: proc()
           f32(z) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) - 100,
         }
         block := make_entity("cube/BoxTextured.gltf", flags={.RENDERABLE}, position=pos)
-        append(&state.entities, block)
       }
     }
   }
 
   for pos in DEFAULT_MODEL_POSITIONS
   {
-    block := make_entity("cube/BoxTextured.gltf", position=pos - {20,0,30})
-    append(&state.entities, block)
+    make_entity("cube/BoxTextured.gltf", position=pos - {20,0,30})
   }
 
-  floor := make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
-  append(&state.entities, floor)
+  make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
 
-  block := make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
-  append(&state.entities, block)
+  make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
 
-  helmet2 := make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
-  append(&state.entities, helmet2)
+  make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
 
-  guitar := make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
-  append(&state.entities, guitar)
+  make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
 
-  lantern := make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
-  append(&state.entities, lantern)
+  make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
 
-  pl := make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
-  append(&state.entities, pl)
+  make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
 
-  pl = make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=true)
-  append(&state.entities, pl)
+  make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=true)
 
-  pl = make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
-  append(&state.entities, pl)
+  make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
 
-  sponza := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
-  append(&state.entities, sponza)
+  sponza_handle := make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
 
   // Sponza lights
   {
+    sponza := get_entity(sponza_handle)
     spacing := 20
     bounds  := 4
     y_bounds := bounds/2
@@ -320,33 +295,32 @@ main :: proc()
         position := vec3{sponza.position.x + f32(x0), sponza.position.y + f32(y0), sponza.position.z}
         color    := vec4{rand.float32() * 10.0, rand.float32() * 10.0, rand.float32() * 10.0, 1.0}
 
-        p := make_point_light_entity(position, color, 10, 1.0, cast_shadows=false)
-        append(&state.entities, p)
+        make_point_light_entity(position, color, 10, 1.0, cast_shadows=false)
       }
     }
   }
 
-  helmet := make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
-  append(&state.entities, helmet)
+  make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
 
-  // chess := make_entity("chess/ABeautifulGame.gltf", position={-20, -4.0, 5.0})
-  // append(&state.entities, chess)
+  make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
 
-  duck1 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
-  append(&state.entities, duck1)
-
-  duck2 := make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
-  append(&state.entities, duck2)
+  make_entity("duck/Duck.gltf", position={5.0, 0.0, -5.0})
 
   // Clean up temp allocator from initialization... fresh for per-frame allocations
   free_all(context.temp_allocator)
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
-  for (!should_close())
+  for (!should_close(state.window))
   {
-    // Resize check
-    if state.window.resized { resize_window() }
+    // Resize check, this
+    if state.window.should_resize
+    {
+      if (!resize_window(&state.window))
+      {
+        break
+      }
+    }
 
     // dt and sleeping
     if (time.tick_since(last_frame_time) < TARGET_FRAME_TIME_NS)
@@ -407,14 +381,14 @@ main :: proc()
       //
       // Collision
       //
-      for &e in state.entities
+      for &e in all_entities()
       {
         if .STATIC in e.flags { continue } // Static things should not be movable
         if .COLLISION not_in e.flags { continue }
 
         entity_aabb := entity_world_aabb(e)
 
-        for &o in state.entities
+        for &o in all_entities()
         {
           if &o == &e { continue } // Same entity
 
@@ -443,7 +417,7 @@ main :: proc()
     //
     // Update entities with point lights, AFTER we do everything else
     //
-    for e in state.entities
+    for e in all_entities()
     {
       if e.point_light != nil
       {
@@ -476,7 +450,7 @@ main :: proc()
         bind_shader(.SUN_DEPTH)
 
         // TODO: Can do frustum culling on the sun's view point too!
-        for e in state.entities
+        for e in all_entities()
         {
           draw_entity(e)
         }
@@ -511,7 +485,7 @@ main :: proc()
                 center = l.position,
                 radius = l.radius,
               }
-              for e in state.entities
+              for e in all_entities()
               {
                 if sphere_intersects_aabb(light_sphere, entity_world_aabb(e))
                 {
@@ -550,7 +524,7 @@ main :: proc()
         // Frustum Culling!
         frustum := make_frustum(state.camera, window_aspect_ratio(state.window), state.camera.z_near, state.camera.z_far)
         frustum_entities := make([dynamic]^Entity, context.temp_allocator)
-        for &e in state.entities
+        for &e in all_entities()
         {
           aabb := entity_world_aabb(e)
           sphere := make_sphere(aabb)

@@ -19,6 +19,10 @@ Framebuffer :: struct
   height: int,
 }
 
+Frame_Info :: struct {
+  fence: gl.sync_t,
+}
+
 DEFAULT_FRAMEBUFFER :: Framebuffer{}
 
 Framebuffer_Attachment :: enum
@@ -88,14 +92,14 @@ Render_Pass :: struct
 }
 
 MAIN_PASS :: Render_Pass {
-  flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
+  flags      = {.CLEAR_FRAMEBUFFER, .USE_WINDOW_VIEWPORT},
   depth_test = .LESS,
   face_cull  = .BACK,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 POST_PASS :: Render_Pass {
-  flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
+  flags      = {.CLEAR_FRAMEBUFFER, .USE_WINDOW_VIEWPORT},
   depth_test = .DISABLED,
   face_cull  = .BACK,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
@@ -386,7 +390,6 @@ blit_framebuffers :: proc(from, to: Framebuffer)
 draw_screen_quad :: proc()
 {
   assert(state.current_shader.files[.VERT].name == "to_screen.vert")
-  gl.BindVertexArray(state.empty_vao)
   gl.DrawArrays(gl.TRIANGLES, 0, 6)
 }
 
@@ -420,11 +423,11 @@ begin_drawing :: proc()
   }
 
   clear := BLACK
-  gl.ClearNamedFramebufferfv(0, gl.COLOR, 0, raw_data(&clear))
-  clear_framebuffer(state.hdr_ms_buffer)
-  clear_framebuffer(state.ping_pong_buffers[0])
-  clear_framebuffer(state.ping_pong_buffers[1])
-  clear_framebuffer(state.post_buffer)
+  clear_framebuffer(DEFAULT_FRAMEBUFFER, clear)
+  clear_framebuffer(state.hdr_ms_buffer, clear)
+  clear_framebuffer(state.post_buffer, clear)
+  clear_framebuffer(state.ping_pong_buffers[0], clear)
+  clear_framebuffer(state.ping_pong_buffers[1], clear)
 
   state.began_drawing = true
 
@@ -448,7 +451,6 @@ begin_drawing :: proc()
     flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
   }
 
-  // FIXME: Terribly ugly, pull stuff out.
   if state.point_lights_on
   {
     for pl in state.point_lights
@@ -481,6 +483,7 @@ begin_drawing :: proc()
       }
     }
   }
+
   write_gpu_buffer_frame(state.frame_uniforms, 0, size_of(frame_ubo), &frame_ubo)
   bind_gpu_buffer_frame_range(state.frame_uniforms, .FRAME)
 
@@ -501,4 +504,46 @@ flush_drawing :: proc()
   reset_multi_draw(&state.mds)
 
   glfw.SwapBuffers(state.window.handle)
+}
+
+resize_window :: proc(window: ^Window) -> (ok: bool)
+{
+  // Reset
+  window.should_resize = false
+
+  state.hdr_ms_buffer, ok = remake_framebuffer(&state.hdr_ms_buffer, window.w, window.h)
+  state.post_buffer, ok = remake_framebuffer(&state.post_buffer, window.w, window.h)
+  state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], window.w, window.h)
+  state.ping_pong_buffers[1], ok = remake_framebuffer(&state.ping_pong_buffers[1], window.w, window.h)
+
+  if !ok
+  {
+    log.fatal("Window has been resized but unable to recreate framebuffers")
+  }
+  else
+  {
+    assert(window.w == state.hdr_ms_buffer.width &&
+           window.h == state.hdr_ms_buffer.height)
+
+    log.infof("Window has resized to %vpx, %vpx", window.w, window.h)
+  }
+
+  return ok
+}
+
+draw_skybox :: proc(handle: Texture_Handle)
+{
+  bind_shader(.SKYBOX)
+
+  // Get the depth func before and reset after this call
+  // TODO: Do this everywhere, ie push and pop GL state
+  depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
+  gl.DepthFunc(gl.LEQUAL)
+  defer gl.DepthFunc(u32(depth_func_before))
+
+  texture := get_texture(handle)^
+  assert(texture.type == .CUBE)
+  bind_texture("skybox", get_texture(handle)^)
+
+  gl.DrawArrays(gl.TRIANGLES, 0, 36)
 }

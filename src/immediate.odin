@@ -57,10 +57,10 @@ immediate: Immediate_State
 
 init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 {
-  assert(state.gl_initialized)
-
-  immediate.vertex_buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT,
+  // Just passing a mesh index even though this system doesn't use indexed rendering.
+  immediate.vertex_buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, Mesh_Index,
                                                flags = {.PERSISTENT, .FRAME_BUFFERED})
+
   bind_gpu_buffer_base(immediate.vertex_buffer, .IMM_VERTICES)
 
   immediate.shader, ok = make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc)
@@ -146,7 +146,6 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
     bind_shader_program(immediate.shader)
 
     bind_vertex_buffer(immediate.vertex_buffer)
-    defer unbind_vertex_buffer()
 
     // Transforms
     orthographic := camera_orthographic(state.camera, state.window.w, state.window.h)

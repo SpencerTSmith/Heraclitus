@@ -11,10 +11,23 @@ Entity_Flags :: enum
   STATIC, // Should never 'move'
 }
 
+Entity_Handle :: struct
+{
+  slot: u32,
+  age:   u32, // At some point will want this once add in free list
+}
+
+Entities :: struct
+{
+  pool: [dynamic; 8192]Entity,
+}
+
 // TODO: Point light should probably be a handle and not a pointer, depends on if we keep the global point light array as dynamic
 Entity :: struct
 {
-  flags:    bit_set[Entity_Flags],
+  age: u32,
+
+  flags: bit_set[Entity_Flags],
 
   position: vec3,
   scale:    vec3,
@@ -26,7 +39,44 @@ Entity :: struct
 
   model: Model_Handle,
 
-  point_light: ^Point_Light, // Optional
+  point_light: ^Point_Light,
+}
+
+init_entities :: proc()
+{
+  // First entity slot is invalid
+  alloc_entity()
+}
+
+all_entities :: proc() -> (entities: []Entity)
+{
+  return state.entities.pool[:]
+}
+
+entity_handle_valid :: proc(handle: Entity_Handle) -> bool
+{
+  return handle != {} && handle.slot < u32(len(state.entities.pool)) && state.entities.pool[handle.slot].age == handle.age
+}
+
+@(private="file")
+alloc_entity :: proc() -> (handle: Entity_Handle)
+{
+  appended := append(&state.entities.pool, Entity{})
+
+  if appended != 0
+  {
+    handle.slot = u32(len(state.entities.pool)) - 1
+
+    state.entities.pool[handle.slot].age += 1
+
+    handle.age  = state.entities.pool[handle.slot].age
+  }
+  else
+  {
+    log.errorf("Attempted to make entity, while entity pool is full.")
+  }
+
+  return handle
 }
 
 // TODO: Maybe these entity creations should just create entities into whatever data structure I decide on instead of creating a single
@@ -34,40 +84,43 @@ Entity :: struct
 // or fridge thing but...
 
 // NOTE: Automatically sets the aabb of the entity to match the AABB of the model
-make_entity :: proc(model_file: string,
+make_entity :: proc(model_file: string = "",
                     flags: bit_set[Entity_Flags] = {.COLLISION, .RENDERABLE},
                     position: vec3 = {0, 0, 0},
                     rotation: vec3 = {0, 0, 0},
                     scale:    vec3 = {1, 1, 1},
-                    color:    vec4 = {1, 1, 1, 1}) -> (entity: Entity)
+                    color:    vec4 = {1, 1, 1, 1}) -> (handle: Entity_Handle)
 {
-  model, ok := load_model(model_file)
-  if !ok
+  handle = alloc_entity()
+
+  if handle != {}
   {
-    log.warnf("Entity failed to load model: %v", model_file)
+    model: Model_Handle
+    if model_file != ""
+    {
+      model, _ = load_model(model_file)
+    }
+
+    assert(.STATIC not_in flags || .COLLISION in flags, "Static entities must have collsion.")
+
+    entity := get_entity(handle)
+    entity.flags    = flags
+    entity.position = position
+    entity.scale    = scale
+    entity.rotation = rotation
+    entity.color    = color
+    entity.model    = model
   }
 
-  assert(.STATIC not_in flags || .COLLISION in flags, "Static entities must have collsion")
-
-  entity =
-  {
-    flags    = flags,
-    position = position,
-    scale    = scale,
-    rotation = rotation,
-    color    = color,
-
-    model    = model,
-  }
-
-  return entity
+  return handle
 }
 
 //
 // Common entity combos
 //
-make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: f32, cast_shadows := false) -> (entity: Entity)
+make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: f32, cast_shadows := false) -> (handle: Entity_Handle)
 {
+  // FIXME
   append(&state.point_lights, Point_Light {
     position  = position,
     color     = color,
@@ -77,50 +130,48 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
     dirty_shadow = true,
   })
 
-  entity =
-  {
-    position = position,
-    scale    = {1, 1, 1},
-    color    = color,
-    point_light = &state.point_lights[len(state.point_lights) - 1],
-  }
+  handle = make_entity(position=position, color=color)
+  get_entity(handle).point_light = &state.point_lights[len(state.point_lights) - 1]
 
-  return entity
+  return handle
 }
 
-duplicate_entity :: proc(entity: Entity) -> (duplicate: ^Entity)
+duplicate_entity :: proc(handle: Entity_Handle) -> (duplicate: Entity_Handle)
 {
-  copy := entity
-  append(&state.entities, copy)
-
-  duplicate = &state.entities[len(state.entities) - 1]
+  e := get_entity(handle)
 
   // Need to make a new point light, model handle is fine to be copied as that's already handled by asset system
-  if duplicate.point_light != nil
+  if e.point_light != nil
   {
-    pl_copy := copy.point_light^
-
-    append(&state.point_lights, pl_copy)
-    duplicate.point_light = &state.point_lights[len(state.point_lights) - 1]
+    pl := e.point_light
+    duplicate = make_point_light_entity(e.position, pl.color, pl.radius, pl.intensity, pl.cast_shadows)
+  }
+  else
+  {
+    // FIXME:
+    duplicate = make_entity("", e.flags, e.position, e.rotation, e.scale, e.color)
   }
 
   return duplicate
 }
 
-get_entity :: proc(index: uint) -> (entity: ^Entity)
+get_entity :: proc(handle: Entity_Handle) -> (entity: ^Entity)
 {
-  if index < len(state.entities)
+  if entity_handle_valid(handle)
   {
-    entity = &state.entities[index]
+    entity = &state.entities.pool[handle.slot]
   }
 
   return entity
 }
 
-remove_entity :: proc(index: uint)
+remove_entity :: proc(handle: Entity_Handle)
 {
-  unordered_remove(&state.entities, index)
-  log.infof("Removed entity at index %v", index)
+  if entity_handle_valid(handle)
+  {
+    unordered_remove(&state.entities.pool, handle.slot)
+    log.infof("Removed entity at slot %v", handle.slot)
+  }
 }
 
 entity_has_transparency :: proc(e: Entity) -> bool
@@ -169,4 +220,25 @@ entity_model_mat4 :: proc(e: Entity) -> (model: mat4) {
 
   model = t * r_y * r_x * r_z * s
   return model
+}
+
+pick_entity :: proc(ray: Ray) -> (handle: Entity_Handle)
+{
+  closest_t := F32_MAX
+  for &e, idx in all_entities()
+  {
+    entity_aabb := entity_world_aabb(e)
+    if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes
+    {
+      // Get the closest entity
+      if t_min < closest_t
+      {
+        closest_t = t_min
+
+        handle = { u32(idx), e.age }
+      }
+    }
+  }
+
+  return handle
 }

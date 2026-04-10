@@ -9,9 +9,6 @@ import "core:path/filepath"
 import "core:time"
 import "core:os"
 
-import gl "vendor:OpenGL"
-import "vendor:glfw"
-
 // NOTE: For everything that doesn't have a home yet
 WINDOW_DEFAULT_TITLE :: "Heraclitus"
 WINDOW_DEFAULT_W :: 1280 * 1.5
@@ -27,10 +24,6 @@ Program_Mode :: enum {
   GAME,
   MENU,
   EDIT,
-}
-
-Frame_Info :: struct {
-  fence: gl.sync_t,
 }
 
 MODEL_UP      :: vec3{0.0, 1.0, 0.0}
@@ -69,7 +62,7 @@ F32_MAX :: max(f32)
 U64_MAX :: max(u64)
 
 // Purely for convenience because I am lazy and don't want to go to top of file to import a module to do a little print debugging
-print :: fmt.printf
+print :: fmt.printfln
 
 // Hmm, good idea? Just hate having to import and prepend for such common operations
 vec2 :: glsl.vec2
@@ -183,49 +176,4 @@ lerp_colors :: proc(t: f32, color_a, color_b: vec4) -> (lerped: vec4)
   lerped = lerp(color_a, color_b, vec4{t, t, t, t})
 
   return lerped
-}
-
-Window :: struct
-{
-  handle:  glfw.WindowHandle,
-  w, h:    int,
-  title:   string,
-  resized: bool,
-}
-
-resize_window :: proc()
-{
-  // Reset
-  state.window.resized = false
-
-  ok: bool
-
-  state.hdr_ms_buffer, ok = remake_framebuffer(&state.hdr_ms_buffer, state.window.w, state.window.h)
-  state.post_buffer, ok = remake_framebuffer(&state.post_buffer, state.window.w, state.window.h)
-  state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], state.window.w, state.window.h)
-  state.ping_pong_buffers[1], ok = remake_framebuffer(&state.ping_pong_buffers[1], state.window.w, state.window.h)
-
-  gl.Viewport(0, 0, cast(i32)state.window.w, cast(i32)state.window.h)
-
-  if !ok
-  {
-    log.fatal("Window has been resized but unable to recreate framebuffers")
-    state.running = false
-  }
-
-  assert(state.window.w == state.hdr_ms_buffer.width &&
-         state.window.h == state.hdr_ms_buffer.height)
-
-  log.infof("Window has resized to %vpx, %vpx", state.window.w, state.window.h)
-}
-
-window_aspect_ratio :: proc(window: Window) -> (aspect: f32)
-{
-  aspect = f32(window.w) / f32(window.h)
-  return aspect
-}
-
-should_close :: proc() -> bool
-{
-  return bool(glfw.WindowShouldClose(state.window.handle)) || !state.running
 }

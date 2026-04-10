@@ -4,13 +4,31 @@ import "base:runtime"
 import "core:log"
 import "core:strings"
 import "core:math"
-import "core:fmt"
 
-import glfw "vendor:glfw"
-import gl   "vendor:OpenGL"
+import "vendor:glfw"
+import gl "vendor:OpenGL"
 
 GL_MAJOR :: 4
 GL_MINOR :: 6
+
+Window :: struct
+{
+  handle: glfw.WindowHandle,
+  w, h:   int,
+  title:  string,
+  should_resize: bool,
+}
+
+window_aspect_ratio :: proc(window: Window) -> (aspect: f32)
+{
+  aspect = f32(window.w) / f32(window.h)
+  return aspect
+}
+
+should_close :: proc(window: Window) -> bool
+{
+  return bool(glfw.WindowShouldClose(window.handle)) || !state.running
+}
 
 init_platform_graphics :: proc(window_width:  int,
                                window_height: int,
@@ -23,7 +41,6 @@ init_platform_graphics :: proc(window_width:  int,
     glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
     glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
     glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
-    glfw.WindowHint(glfw.OPENGL_DEBUG_CONTEXT, glfw.TRUE)
 
     c_title := strings.clone_to_cstring(window_title, context.temp_allocator)
     window.handle = glfw.CreateWindow(i32(window_width), i32(window_height), c_title, nil, nil)
@@ -46,9 +63,12 @@ init_platform_graphics :: proc(window_width:  int,
       // Ehh, accessing global state here....
       glfw.SetFramebufferSizeCallback(window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
       {
+        context = runtime.default_context()
+        assert(state.window.handle == window)
+
         state.window.w = int(width)
         state.window.h = int(height)
-        state.window.resized = true
+        state.window.should_resize = true
       })
       glfw.SetScrollCallback(window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64)
       {
@@ -61,7 +81,6 @@ init_platform_graphics :: proc(window_width:  int,
       })
 
       gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
-
 
       gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
       {
@@ -85,12 +104,6 @@ init_platform_graphics :: proc(window_width:  int,
 
       gl.Enable(gl.DEBUG_OUTPUT);
       gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS);
-      gl.DebugMessageInsert(gl.DEBUG_SOURCE_APPLICATION,
-                            gl.DEBUG_TYPE_ERROR,
-                            1,
-                            gl.DEBUG_SEVERITY_HIGH,
-                            -1,
-                            "hello");
 
       //
       // Query GL extensions

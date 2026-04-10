@@ -8,8 +8,6 @@ in VS_OUT
 layout(binding = 0) uniform sampler2D screen_texture;
 layout(binding = 1) uniform sampler2D bloom_blur;
 
-uniform float exposure = 1.0;
-
 layout(location = 0) out vec4 frag_color;
 
 void main()
@@ -21,9 +19,6 @@ void main()
 
   // Reinhard
   vec3 mapped = hdr_color / (hdr_color + vec3(1.0));
-
-  // Exposure
-  // vec3 mapped = vec3(1.0) - exp(-hdr_color * exposure);
 
   // gamma correct
   const float gamma = 2.2;

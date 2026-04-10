@@ -27,7 +27,7 @@ Editor_Gizmo :: struct
 
 Editor_State :: struct
 {
-  selected_entity: uint,
+  selected_entity: Entity_Handle,
 
   selected_gizmo: uint,
 
@@ -105,27 +105,7 @@ EDITOR_GIZMOS := []Editor_Gizmo {
   },
 }
 
-pick_entity :: proc(ray: Ray) -> (index: uint)
-{
-  closest_t := F32_MAX
-  for &e, idx in state.entities
-  {
-    entity_aabb := entity_world_aabb(e)
-    if yes, t_min, _ := ray_intersects_aabb(ray, entity_aabb); yes
-    {
-      // Get the closest entity
-      if t_min < closest_t
-      {
-        closest_t = t_min
-        index = uint(idx)
-      }
-    }
-  }
-
-  return index
-}
-
-get_selected_entity_center :: proc() -> (center: vec3)
+editor_selected_entity_center :: proc() -> (center: vec3)
 {
   selected_entity := get_entity(editor.selected_entity)
   entity_aabb := entity_world_aabb(selected_entity^)
@@ -224,7 +204,7 @@ pick_gizmo :: proc(ray: Ray, center_around: vec3, camera_pos: vec3) -> (gizmo: u
 @(private="file")
 clear_editor_selected_entity :: proc()
 {
-  editor.selected_entity = ~uint(0)
+  editor.selected_entity = {}
 }
 
 move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
@@ -283,8 +263,6 @@ move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
 
 editor_ui :: proc() -> (had_interaction: bool)
 {
-  selected_entity := get_entity(editor.selected_entity)
-
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
   ui_push_parent(ui_panel(panel_pos, 300, 100))
   {
@@ -297,10 +275,10 @@ editor_ui :: proc() -> (had_interaction: bool)
 
     if ui_button("Dupe Entity").clicked
     {
-      if selected_entity != nil
+      if entity_handle_valid(editor.selected_entity)
       {
-        dupe := duplicate_entity(selected_entity^)
-        dupe.position += (rand.float32() * 2.0) - 1.0
+        dupe := duplicate_entity(editor.selected_entity)
+        get_entity(dupe).position += (rand.float32() * 2.0) - 1.0
 
         log.infof("Copied entity at index %v", editor.selected_entity)
       }
@@ -310,7 +288,7 @@ editor_ui :: proc() -> (had_interaction: bool)
     // specifically when that entity has an attached point light, does not get removed.
     if ui_button("Delete Entity").clicked
     {
-      if selected_entity != nil
+      if entity_handle_valid(editor.selected_entity)
       {
         remove_entity(editor.selected_entity)
         clear_editor_selected_entity()
@@ -342,7 +320,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
     // Try to select a gizmo
     if selected_entity != nil
     {
-      picked_gizmo := pick_gizmo(mouse_ray, get_selected_entity_center(), state.camera.position)
+      picked_gizmo := pick_gizmo(mouse_ray, editor_selected_entity_center(), state.camera.position)
 
       // Try picking a gizmo first, if not, then try picking an entity
       if picked_gizmo != 0
@@ -372,7 +350,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 
   if selected_entity != nil
   {
-    hovered_gizmo := pick_gizmo(mouse_ray, get_selected_entity_center(), state.camera.position)
+    hovered_gizmo := pick_gizmo(mouse_ray, editor_selected_entity_center(), state.camera.position)
 
     // Draw the gizmos
     for gizmo, i in EDITOR_GIZMOS
@@ -391,7 +369,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
         color.rgb *= 3.0
       }
 
-      draw_gizmo(gizmo, get_selected_entity_center(), state.camera.position, color)
+      draw_gizmo(gizmo, editor_selected_entity_center(), state.camera.position, color)
     }
 
     // Move with the gizmo
@@ -457,7 +435,7 @@ Point Lights: %v`,
   state.mds.draw_count,
   state.mds.vertex_count,
   state.perm.offset / mem.Kilobyte,
-  len(state.entities),
+  len(state.entities.pool),
   state.mode,
   state.camera.velocity,
   length(state.camera.velocity),

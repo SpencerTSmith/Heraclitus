@@ -15,36 +15,24 @@ Texture_Handle :: distinct u32
 // As it stands handle is just an index into this array that never changes or shrinks
 
 // TODO: Maybe it should just be name to handle? Not the full relative path?
-Asset_Catalog :: struct($Type, $Handle: typeid)
+Asset_Catalog :: struct($Type, $Handle: typeid, $N: int)
 {
   path_map: map[string]Handle,
-  assets:   [dynamic]Type,
+  assets:   [dynamic; N]Type,
 }
 
 // TODO: Probably should have its own memory arena
 Assets :: struct
 {
-  model_catalog:   Asset_Catalog(Model, Model_Handle),
-  texture_catalog: Asset_Catalog(Texture, Texture_Handle),
+  model_catalog:   Asset_Catalog(Model, Model_Handle, 32),
+  texture_catalog: Asset_Catalog(Texture, Texture_Handle, 256),
 }
 
 @(private="file")
 assets: Assets
 
-init_assets :: proc(allocator: runtime.Allocator) -> (ok: bool)
+init_assets :: proc(allocator: runtime.Allocator)
 {
-  EXPECTED_MODEL_ASSET_COUNT :: 32
-  assets.model_catalog.path_map = make(map[string]Model_Handle, allocator)
-  reserve(&assets.model_catalog.path_map, EXPECTED_MODEL_ASSET_COUNT)
-  assets.model_catalog.assets = make([dynamic]Model, allocator)
-  reserve(&assets.model_catalog.assets, EXPECTED_MODEL_ASSET_COUNT)
-
-  EXPECTED_TEXTURE_ASSET_COUNT :: EXPECTED_MODEL_ASSET_COUNT * 4 // For the 4 textures
-  assets.texture_catalog.path_map = make(map[string]Texture_Handle, allocator)
-  reserve(&assets.texture_catalog.path_map, EXPECTED_TEXTURE_ASSET_COUNT)
-  assets.texture_catalog.assets = make([dynamic]Texture, allocator)
-  reserve(&assets.texture_catalog.assets, EXPECTED_TEXTURE_ASSET_COUNT)
-
   // Probably will want these so might as well load them now
   load_texture("white.png")
   load_texture("black.png")
@@ -52,9 +40,7 @@ init_assets :: proc(allocator: runtime.Allocator) -> (ok: bool)
 
   // In case we can't load something have these fallbacks
   load_texture(FALLBACK_TEXTURE)
-  _, ok = load_model(FALLBACK_MODEL)
-
-  return ok
+  load_model(FALLBACK_MODEL)
 }
 
 FALLBACK_TEXTURE :: "missing.png"
@@ -79,14 +65,12 @@ free_assets :: proc()
     free_model(&model)
   }
   delete(assets.model_catalog.path_map)
-  delete(assets.model_catalog.assets)
 
   for &texture in assets.texture_catalog.assets
   {
     free_texture(&texture)
   }
   delete(assets.texture_catalog.path_map)
-  delete(assets.texture_catalog.assets)
 }
 
 load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool)

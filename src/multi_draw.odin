@@ -28,15 +28,15 @@ Multi_Draw_State :: struct
 
 init_multi_draw :: proc() -> (mds: Multi_Draw_State)
 {
-  mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, MAX_INDICES)
+  mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, Mesh_Index, MAX_INDICES)
   bind_gpu_buffer_base(mds.vertex_buffer, .MESH_VERTICES)
 
-  mds.material_buffer = make_gpu_buffer(.STORAGE, size_of(Material_Uniform) * MAX_MATERIALS)
+  mds.material_buffer = make_gpu_buffer(size_of(Material_Uniform) * MAX_MATERIALS, flags={})
   bind_gpu_buffer_base(mds.material_buffer, .MATERIALS)
 
-  mds.draw_commands = make_gpu_buffer(.STORAGE, size_of(Draw_Command) * MAX_DRAWS,
+  mds.draw_commands = make_gpu_buffer(size_of(Draw_Command) * MAX_DRAWS,
                                       flags = {.PERSISTENT, .FRAME_BUFFERED})
-  mds.draw_uniforms = make_gpu_buffer(.STORAGE, size_of(Draw_Uniform) * MAX_DRAWS,
+  mds.draw_uniforms = make_gpu_buffer(size_of(Draw_Uniform) * MAX_DRAWS,
                                       flags = {.PERSISTENT, .FRAME_BUFFERED})
 
   return mds
