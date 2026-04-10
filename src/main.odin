@@ -89,107 +89,10 @@ state: State
 init_state :: proc() -> (ok: bool)
 {
   state.start_time = time.now()
-
-  if glfw.Init() != glfw.TRUE
-  {
-    log.fatal("Failed to initialize GLFW")
-    return
-  }
-
   state.mode = .EDIT // Edit by default
 
-  glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
-  glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
-  glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-  glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
-  glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
-
-  state.window.handle = glfw.CreateWindow(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H, WINDOW_DEFAULT_TITLE, nil, nil)
-  if state.window.handle == nil
-  {
-    log.fatal("Failed to create GLFW window")
-    return
-  }
-
-  state.window.w     = WINDOW_DEFAULT_W
-  state.window.h     = WINDOW_DEFAULT_H
-  state.window.title = WINDOW_DEFAULT_TITLE
-
-  c_title := strings.clone_to_cstring(state.window.title, allocator=context.temp_allocator)
-
-  glfw.SetWindowTitle(state.window.handle, c_title)
-
-  if glfw.RawMouseMotionSupported() {
-    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    glfw.SetInputMode(state.window.handle, glfw.RAW_MOUSE_MOTION, 1)
-  }
-
-  glfw.MakeContextCurrent(state.window.handle)
-  glfw.SwapInterval(1)
-
-  glfw.SetFramebufferSizeCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
-  {
-    state.window.w = int(width)
-    state.window.h = int(height)
-    state.window.resized = true
-  })
-  glfw.SetScrollCallback(state.window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64)
-  {
-    // Just get the direction
-    dir_x := math.sign(x_scroll)
-    dir_y := math.sign(y_scroll)
-
-    state.input.mouse.delta_scroll.x += dir_x
-    state.input.mouse.delta_scroll.y += dir_y
-  })
-
-  GL_MAJOR :: 4
-  GL_MINOR :: 6
-  gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
-
-  gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
-  {
-    // Too much voodoo?
-    log_proc: proc(fmt_str: string, args: ..any, location := #caller_location)
-    switch (severity)
-    {
-      case gl.DEBUG_SEVERITY_NOTIFICATION:
-        log_proc = log.debugf
-      case gl.DEBUG_SEVERITY_LOW:
-        log_proc = log.infof
-      case gl.DEBUG_SEVERITY_MEDIUM:
-        log_proc = log.warnf
-      case gl.DEBUG_SEVERITY_HIGH:
-        log_proc = log.errorf
-    }
-    context = runtime.default_context()
-
-    log_proc("GL: %v", string(message))
-  }, nil)
-
-  //
-  // Query GL extensions
-  //
-  needed_extensions: []string =
-  {
-    "GL_ARB_shader_viewport_layer_array",
-    "GL_ARB_bindless_texture",
-  }
-
-  extension_count: i32
-  gl.GetIntegerv(gl.NUM_EXTENSIONS, &extension_count)
-  for i in 0..<extension_count
-  {
-    have := gl.GetStringi(gl.EXTENSIONS, u32(i))
-
-    for need in needed_extensions
-    {
-      if string(have) == need
-      {
-        log.infof("Necessary GL extension: %v is supported!", need)
-      }
-    }
-  }
+  state.window = init_platform_graphics(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
+                                        WINDOW_DEFAULT_TITLE) or_return
 
   state.gl_initialized = true
 
