@@ -376,7 +376,7 @@ blit_framebuffers :: proc(from, to: Framebuffer)
   // and they are not the same size
   if from.sample_count > 1 && (from.width != to.width || from.height != to.height)
   {
-    log.info("Blitting with linear filtering, check if that was something you wished to do")
+    log.infof("Blitting with linear filtering, check if that was something you wished to do")
     gl_filter = gl.LINEAR
   }
 

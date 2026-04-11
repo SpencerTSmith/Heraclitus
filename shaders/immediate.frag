@@ -14,6 +14,5 @@ layout(bindless_sampler) uniform sampler2D tex;
 
 void main()
 {
-  // float alpha = texture(tex, fs_in.uv).r * fs_in.color.a;
   frag_color = texture(tex, fs_in.uv) * fs_in.color;
 }

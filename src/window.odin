@@ -92,13 +92,13 @@ make_window :: proc(window_width:  int,
         switch (severity)
         {
         case gl.DEBUG_SEVERITY_NOTIFICATION:
-          log_proc = log.debugf
-        case gl.DEBUG_SEVERITY_LOW:
           log_proc = log.infof
+        case gl.DEBUG_SEVERITY_LOW:
+          log_proc = log.debugf
         case gl.DEBUG_SEVERITY_MEDIUM:
-          log_proc = log.warnf
-        case gl.DEBUG_SEVERITY_HIGH:
           log_proc = log.errorf
+        case gl.DEBUG_SEVERITY_HIGH:
+          log_proc = log.fatalf
         }
 
         log_proc("GL: %v", string(message))
