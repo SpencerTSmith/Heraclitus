@@ -344,11 +344,6 @@ bind_shader_program :: proc(program: Shader_Program)
 free_shader_program :: proc(program: ^Shader_Program)
 {
   gl.DeleteProgram(program.id)
-
-  // for _, uniform in program.uniforms
-  // {
-  //   delete(uniform.name)
-  // }
   delete(program.uniforms)
 }
 
@@ -359,6 +354,7 @@ set_shader_uniform :: proc(name: string, value: $T,
 
   if name in program.uniforms
   {
+    location := program.uniforms[name].location
     when T == i32 || T == int || T == bool
     {
       gl.Uniform1i(program.uniforms[name].location, i32(value))
@@ -386,7 +382,12 @@ set_shader_uniform :: proc(name: string, value: $T,
       length := i32(len(value))
       assert(length <= program.uniforms[name].size)
       gl.UniformMatrix4fv(program.uniforms[name].location, length, gl.FALSE, raw_data(raw_data(copy)))
-    } else {
+    }
+    else when T == u64
+    {
+      glUniformHandleui64ARB(location, value);
+    }
+    else {
 	    log.warn("Unable to match type (%v) to gl call for uniform\n", typeid_of(T))
     }
   }

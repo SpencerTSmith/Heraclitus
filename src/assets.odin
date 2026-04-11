@@ -132,7 +132,7 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
 
     if ok
     {
-      handle = register_texture(texture)
+      handle = register_texture(&texture)
 
       // Save the path for checking later, but only the first time.
       path = strings.clone(path, state.perm_alloc)
@@ -150,10 +150,11 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
 }
 
 // Sometimes want to add a texture without going through load texture path.
-register_texture :: proc(texture: Texture) -> (handle: Texture_Handle)
+register_texture :: proc(texture: ^Texture) -> (handle: Texture_Handle)
 {
+  make_texture_bindless(texture)
   handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
-  append(&assets.texture_catalog.assets, texture)
+  append(&assets.texture_catalog.assets, texture^)
 
   return handle
 }
@@ -193,7 +194,7 @@ load_skybox :: proc(file_paths: [6]string) -> (handle: Texture_Handle, ok: bool)
 {
   texture: Texture
   texture, ok = make_texture_cube_map(file_paths)
-  handle = register_texture(texture)
+  handle = register_texture(&texture)
 
   return handle, ok
 }

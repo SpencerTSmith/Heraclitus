@@ -10,6 +10,7 @@ import gl "vendor:OpenGL"
 
 GL_MAJOR :: 4
 GL_MINOR :: 6
+glUniformHandleui64ARB: proc "c" (location: i32, value: u64)
 
 Window :: struct
 {
@@ -30,9 +31,9 @@ should_close :: proc(window: Window) -> bool
   return bool(glfw.WindowShouldClose(window.handle)) || !state.running
 }
 
-init_platform_graphics :: proc(window_width:  int,
-                               window_height: int,
-                               window_title:  string) -> (window: Window, ok: bool)
+make_window :: proc(window_width:  int,
+                    window_height: int,
+                    window_title:  string) -> (window: Window, ok: bool)
 {
   if glfw.Init() == glfw.TRUE
   {
@@ -81,6 +82,7 @@ init_platform_graphics :: proc(window_width:  int,
       })
 
       gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
+      glfw.gl_set_proc_address(&glUniformHandleui64ARB, "glUniformHandleui64ARB")
 
       gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
       {

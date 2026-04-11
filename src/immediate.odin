@@ -184,7 +184,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
           set_shader_uniform("transform", perspective)
         }
 
-        bind_texture("tex", get_texture(batch.texture)^)
+        set_shader_uniform("tex", get_texture(batch.texture).handle)
 
         first_vertex := i32(frame_base + batch.vertex_base)
         vertex_count := i32(batch.vertex_count)

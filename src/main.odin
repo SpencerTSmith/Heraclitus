@@ -90,8 +90,8 @@ init_state :: proc() -> (ok: bool)
 
   state.mode = .EDIT // Edit by default
 
-  state.window = init_platform_graphics(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
-                                        WINDOW_DEFAULT_TITLE) or_return
+  state.window = make_window(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
+                             WINDOW_DEFAULT_TITLE) or_return
 
   // Make the meta shader
   gen_glsl_code()
@@ -412,7 +412,6 @@ main :: proc()
     {
       do_editor(&state.camera, dt_s)
     }
-
 
     //
     // Update entities with point lights, AFTER we do everything else

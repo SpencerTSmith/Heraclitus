@@ -76,11 +76,6 @@ upload_materials :: proc(mds: ^Multi_Draw_State, materials: ^[]Material)
 
     for &material, idx in materials
     {
-      make_texture_bindless(get_texture(material.diffuse))
-      make_texture_bindless(get_texture(material.specular))
-      make_texture_bindless(get_texture(material.emissive))
-      make_texture_bindless(get_texture(material.normal))
-
       uniforms[idx] = material_uniform(material)
       material.buffer_index = u32(mds.material_count)
       mds.material_count += 1

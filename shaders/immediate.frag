@@ -1,5 +1,7 @@
 #version 460 core
 
+#extension GL_ARB_bindless_texture : require
+
 in VS_OUT
 {
   vec2 uv;
@@ -8,7 +10,7 @@ in VS_OUT
 
 layout(location = 0) out vec4 frag_color;
 
-layout(binding = 0) uniform sampler2D tex;
+layout(bindless_sampler) uniform sampler2D tex;
 
 void main()
 {

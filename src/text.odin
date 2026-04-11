@@ -100,7 +100,7 @@ make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool
       }
 
       atlas_texture := make_texture_from_data(._2D, .R8, .CLAMP_LINEAR, {raw_data(bitmap)}, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT)
-      font.atlas = register_texture(atlas_texture)
+      font.atlas = register_texture(&atlas_texture)
     }
     else
     {

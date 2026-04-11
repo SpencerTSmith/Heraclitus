@@ -282,7 +282,7 @@ make_texture_bindless :: proc(texture: ^Texture)
   }
   else
   {
-    // log.infof("Texture: %v is already bindless.", texture.id)
+    log.infof("Texture: %v is already bindless.", texture.id)
   }
 }
 
