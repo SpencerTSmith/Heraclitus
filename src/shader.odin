@@ -32,7 +32,7 @@ Shader :: distinct u32
 
 Shader_Program :: struct
 {
-  id:       u32,
+  id: u32,
 
   // NOTE: Does not store the full path, just the name
   files: [Shader_Type]struct
@@ -41,7 +41,7 @@ Shader_Program :: struct
     modify_time: time.Time,
   },
 
-  uniforms:  map[string]Uniform,
+  uniforms: map[string]Uniform,
 }
 
 // TODO: Not sure I really like doing this, but I prefer having nice debug info

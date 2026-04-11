@@ -31,17 +31,31 @@ should_close :: proc(window: Window) -> bool
   return bool(glfw.WindowShouldClose(window.handle)) || !state.running
 }
 
+Render_Backend :: enum
+{
+  OPENGL,
+  VULKAN,
+}
+
 make_window :: proc(window_width:  int,
                     window_height: int,
-                    window_title:  string) -> (window: Window, ok: bool)
+                    window_title:  string,
+                    backend: Render_Backend) -> (window: Window, ok: bool)
 {
   if glfw.Init() == glfw.TRUE
   {
     glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
-    glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
-    glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-    glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
-    glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
+
+    switch backend
+    {
+      case .OPENGL:
+        glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
+        glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
+        glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
+      case .VULKAN:
+        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
+    }
 
     c_title := strings.clone_to_cstring(window_title, context.temp_allocator)
     window.handle = glfw.CreateWindow(i32(window_width), i32(window_height), c_title, nil, nil)
@@ -57,9 +71,6 @@ make_window :: proc(window_width:  int,
         glfw.SetInputMode(window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
         glfw.SetInputMode(window.handle, glfw.RAW_MOUSE_MOTION, 1)
       }
-
-      glfw.MakeContextCurrent(window.handle)
-      glfw.SwapInterval(1)
 
       // Ehh, accessing global state here....
       glfw.SetFramebufferSizeCallback(window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
@@ -81,55 +92,6 @@ make_window :: proc(window_width:  int,
         state.input.mouse.delta_scroll.y += dir_y
       })
 
-      gl.load_up_to(GL_MAJOR, GL_MINOR, glfw.gl_set_proc_address)
-      glfw.gl_set_proc_address(&glUniformHandleui64ARB, "glUniformHandleui64ARB")
-
-      gl.DebugMessageCallback(proc "c" (source: u32, type: u32, id: u32, severity: u32, length: i32, message: cstring, userParam: rawptr)
-      {
-        context = state.main_context
-        // Too much voodoo?
-        log_proc: proc(fmt_str: string, args: ..any, location := #caller_location)
-        switch (severity)
-        {
-        case gl.DEBUG_SEVERITY_NOTIFICATION:
-          log_proc = log.infof
-        case gl.DEBUG_SEVERITY_LOW:
-          log_proc = log.debugf
-        case gl.DEBUG_SEVERITY_MEDIUM:
-          log_proc = log.errorf
-        case gl.DEBUG_SEVERITY_HIGH:
-          log_proc = log.fatalf
-        }
-
-        log_proc("GL: %v", string(message))
-      }, nil)
-
-      gl.Enable(gl.DEBUG_OUTPUT);
-      gl.Enable(gl.DEBUG_OUTPUT_SYNCHRONOUS);
-
-      //
-      // Query GL extensions
-      //
-      needed_extensions: []string =
-      {
-        "GL_ARB_shader_viewport_layer_array",
-        "GL_ARB_bindless_texture",
-      }
-
-      extension_count: i32
-      gl.GetIntegerv(gl.NUM_EXTENSIONS, &extension_count)
-      for i in 0..<extension_count
-      {
-        have := gl.GetStringi(gl.EXTENSIONS, u32(i))
-
-        for need in needed_extensions
-        {
-          if string(have) == need
-          {
-            log.infof("Necessary GL extension: %v is supported!", need)
-          }
-        }
-      }
     }
     else
     {

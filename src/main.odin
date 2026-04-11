@@ -82,23 +82,33 @@ State :: struct {
 // NOTE: Global
 state: State
 
+BACKEND :: Render_Backend.VULKAN
+
 init_state :: proc() -> (ok: bool)
 {
   state.start_time = time.now()
 
   state.main_context = context
 
-  state.mode = .EDIT // Edit by default
-
-  state.window = make_window(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
-                             WINDOW_DEFAULT_TITLE) or_return
-
-  // Make the meta shader
-  gen_glsl_code()
-
   state.perm_mem = make([]byte, mem.Megabyte * 256)
   mem.arena_init(&state.perm, state.perm_mem)
   state.perm_alloc = mem.arena_allocator(&state.perm)
+
+  state.mode = .EDIT // Edit by default
+
+  state.window = make_window(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
+                             WINDOW_DEFAULT_TITLE, BACKEND) or_return
+
+  switch BACKEND
+  {
+    case .OPENGL:
+      init_opengl(state.window)
+    case .VULKAN:
+      init_vulkan(state.window)
+  }
+
+  // Make the meta shader
+  gen_glsl_code()
 
   state.camera =
   {
@@ -637,7 +647,6 @@ main :: proc()
         bind_shader(.RESOLVE_HDR)
         bind_texture("screen_texture", state.post_buffer.color_targets[0])
         bind_texture("bloom_blur", state.ping_pong_buffers[0].color_targets[0])
-        set_shader_uniform("exposure", f32(0.2))
         draw_screen_quad()
 
         if state.draw_debug
