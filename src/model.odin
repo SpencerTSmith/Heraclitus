@@ -54,7 +54,7 @@ make_model :: proc
 // Takes in all vertices and all indices.. then a slice of the materials and a slice of the meshes
 make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
                              materials: []Material, meshes: []Mesh,
-                             allocator: runtime.Allocator) -> (model: Model, ok: bool)
+                             allocator: runtime.Allocator) -> (model: Model)
 {
   vertex_offset, index_offset := upload_vertices(&state.mds, vertices, indices)
 
@@ -78,7 +78,6 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
     max = max_v,
   }
 
-  ok = true
   model =
   {
     vertex_offset = vertex_offset,
@@ -94,7 +93,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
   }
   upload_materials(&state.mds, &model.materials)
 
-  return model, ok
+  return model
 }
 
 // TODO: Have a 'make_scene' proc to split nodes 'correctly' if I ever want that
@@ -110,6 +109,7 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
   options: cgltf.options
   data, result := cgltf.parse_file(options, c_path)
 
+  ok = true
   if result == .success && cgltf.load_buffers(options, data, c_path) == .success
   {
     defer cgltf.free(data)
@@ -166,7 +166,7 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
       }
 
       mesh_material: Material
-      mesh_material, ok = make_material(diffuse_path, specular_path, emissive_path, normal_path, blend = blend, in_texture_dir=false)
+      mesh_material = make_material(diffuse_path, specular_path, emissive_path, normal_path, blend = blend, in_texture_dir=false)
       append(&model_materials, mesh_material)
     }
 
@@ -330,18 +330,16 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
           {
             new_vertex: Mesh_Vertex
 
-            ok := cgltf.accessor_read_float(position_access, i, raw_data(&new_vertex.position), len(new_vertex.position))
-            if !ok
+            if !cgltf.accessor_read_float(position_access, i, raw_data(&new_vertex.position), len(new_vertex.position))
             {
               log.warnf("Model: %v Trouble reading vertex position", file_name)
             }
-            ok = cgltf.accessor_read_float(normal_access, i, raw_data(&new_vertex.normal), len(new_vertex.normal))
-            if !ok
+
+            if !cgltf.accessor_read_float(normal_access, i, raw_data(&new_vertex.normal), len(new_vertex.normal))
             {
               log.warnf("Model: %v Trouble reading vertex normal", file_name)
             }
-            ok = cgltf.accessor_read_float(uv_access, i, raw_data(&new_vertex.uv), len(new_vertex.uv))
-            if !ok
+            if !cgltf.accessor_read_float(uv_access, i, raw_data(&new_vertex.uv), len(new_vertex.uv))
             {
               log.warnf("Model: %v Trouble reading vertex uv", file_name)
             }
@@ -349,8 +347,7 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
             // NOTE: Not all meshes will have tangents! That's ok, we can compute our own so everything can go through the same shader!
             if tangent_access != nil
             {
-              ok = cgltf.accessor_read_float(tangent_access, i, raw_data(&new_vertex.tangent), len(new_vertex.tangent))
-              if !ok
+              if !cgltf.accessor_read_float(tangent_access, i, raw_data(&new_vertex.tangent), len(new_vertex.tangent))
               {
                 log.warnf("Model: %v Trouble reading vertex tangent", file_name)
               }
@@ -470,32 +467,36 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
     assert(len(model_verts) == cast(int) model_verts_count)
     assert(len(model_index) == cast(int) model_index_count)
 
-    model, ok = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:], allocator)
+    model = make_model_from_data(model_verts[:], model_index[:], model_materials[:], model_meshes[:], allocator)
   }
   else
   {
     log.errorf("Unable to parse cgltf file \"%v\"\n", file_name)
+    ok = false
   }
 
   return model, ok
 }
 
-make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model, ok: bool)
+make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model)
 {
-  mesh: Mesh =
+  meshes: []Mesh =
   {
-    material_index = 0,
-    index_offset   = 0,
-    index_count    = 36,
+    {
+      material_index = 0,
+      index_offset   = 0,
+      index_count    = 36,
+    }
   }
-  meshes: []Mesh = {mesh}
 
-  materials: [1]Material
-  materials[0], ok = make_material(diffuse_path="missing.png", specular_path="black.png", in_texture_dir=true)
+  materials: []Material =
+  {
+    make_material(diffuse_path="missing.png", specular_path="black.png", in_texture_dir=true)
+  }
 
-  model, ok = make_model_from_data(DEFAULT_CUBE_VERT, DEFAULT_CUBE_INDX, materials[:], meshes, allocator)
+  model = make_model_from_data(DEFAULT_CUBE_VERT, DEFAULT_CUBE_INDX, materials, meshes, allocator)
 
-  return model, ok
+  return model
 }
 
 draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, instances: int = 1, light_index: u32 = 0)

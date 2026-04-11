@@ -73,7 +73,7 @@ free_assets :: proc()
   delete(assets.texture_catalog.path_map)
 }
 
-load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool)
+load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) #optional_ok
 {
   // Start by keeping the string on temp
   path := join_file_path({MODEL_DIR, name}, context.temp_allocator)
@@ -81,28 +81,28 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool)
   // Already loaded
   if path in assets.model_catalog.path_map
   {
-    return assets.model_catalog.path_map[path], true
+    handle = assets.model_catalog.path_map[path]
+    ok = true
   }
   else
   {
     // Save the path for checking later, but only the first time.
     path = strings.clone(path, state.perm_alloc)
-  }
 
-  // NOTE: For now individual assets are always allocated on permanent arena
-  model: Model
-  model, ok = make_model(path, state.perm_alloc)
+    model: Model
+    model, ok = make_model(path, state.perm_alloc)
 
-  if !ok
-  {
-    log.errorf("Model: %v unable to be loaded, using fallback model", path)
-    handle = fallback_model_handle()
-  }
-  else
-  {
-    handle = cast(Model_Handle) len(assets.model_catalog.assets)
-    append(&assets.model_catalog.assets, model)
-    assets.model_catalog.path_map[path] = handle
+    if ok
+    {
+      handle = cast(Model_Handle) len(assets.model_catalog.assets)
+      append(&assets.model_catalog.assets, model)
+      assets.model_catalog.path_map[path] = handle
+    }
+    else
+    {
+      log.errorf("Model: %v unable to be loaded, using fallback model", path)
+      handle = fallback_model_handle()
+    }
   }
 
   return handle, ok
@@ -115,7 +115,7 @@ get_model :: proc(handle: Model_Handle) -> ^Model
 }
 
 load_texture :: proc(name: string, nonlinear_color: bool = false,
-                     in_texture_dir: bool = true) -> (handle: Texture_Handle)
+                     in_texture_dir: bool = true) -> (handle: Texture_Handle, ok: bool) #optional_ok
 {
   path := join_file_path({TEXTURE_DIR, name}, context.temp_allocator) if in_texture_dir else name
 
@@ -123,17 +123,14 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
   if path in assets.texture_catalog.path_map
   {
     handle = assets.texture_catalog.path_map[path]
+    ok = true
   }
   else
   {
-    texture, ok := make_texture(path, nonlinear_color)
+    texture: Texture
+    texture, ok = make_texture(path, nonlinear_color)
 
-    if !ok
-    {
-      log.errorf("Texture: %v unable to be loaded", path)
-      handle = fallback_texture_handle()
-    }
-    else
+    if ok
     {
       handle = register_texture(texture)
 
@@ -142,9 +139,14 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
 
       assets.texture_catalog.path_map[path] = handle
     }
+    else
+    {
+      log.errorf("Texture: %v unable to be loaded", path)
+      handle = fallback_texture_handle()
+    }
   }
 
-  return handle
+  return handle, ok
 }
 
 // Sometimes want to add a texture without going through load texture path.

@@ -6,6 +6,7 @@ import "core:log"
 
 Entity_Flags :: enum
 {
+  UNUSED,
   COLLISION,
   RENDERABLE,
   STATIC, // Should never 'move'
@@ -14,29 +15,29 @@ Entity_Flags :: enum
 Entity_Handle :: struct
 {
   slot: u32,
-  age:   u32, // At some point will want this once add in free list
+  age:  u32,
 }
 
 Entities :: struct
 {
   pool: [dynamic; 8192]Entity,
+  first_free: Entity_Handle,
 }
 
 // TODO: Point light should probably be a handle and not a pointer, depends on if we keep the global point light array as dynamic
 Entity :: struct
 {
   age: u32,
+  next_free: Entity_Handle, // Should be 0 if this is a valid entity
 
   flags: bit_set[Entity_Flags],
 
   position: vec3,
   scale:    vec3,
   rotation: vec3,
-
   velocity: vec3,
 
   color: vec4,
-
   model: Model_Handle,
 
   point_light: ^Point_Light,
@@ -61,19 +62,33 @@ entity_handle_valid :: proc(handle: Entity_Handle) -> bool
 @(private="file")
 alloc_entity :: proc() -> (handle: Entity_Handle)
 {
-  appended := append(&state.entities.pool, Entity{})
-
-  if appended != 0
+  // Try to use free list
+  if state.entities.first_free != {}
   {
-    handle.slot = u32(len(state.entities.pool)) - 1
+    free_slot := get_entity(state.entities.first_free)
+    assert(.UNUSED in free_slot.flags, "An entity in the free list was not unused.")
 
-    state.entities.pool[handle.slot].age += 1
+    handle = state.entities.first_free
 
-    handle.age  = state.entities.pool[handle.slot].age
+    state.entities.first_free = free_slot.next_free
+    free_slot.next_free = {}
+
+    log.infof("Reused entity %v", handle)
   }
   else
   {
-    log.errorf("Attempted to make entity, while entity pool is full.")
+    // Add to end if no free
+    appended := append(&state.entities.pool, Entity{})
+
+    if appended != 0
+    {
+      handle.slot = u32(len(state.entities.pool)) - 1
+      handle.age  = 0
+    }
+    else
+    {
+      log.errorf("Attempted to make entity while entity pool is full.")
+    }
   }
 
   return handle
@@ -130,7 +145,7 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
     dirty_shadow = true,
   })
 
-  handle = make_entity(position=position, color=color)
+  handle = make_entity(position=position, color=color, flags={})
   get_entity(handle).point_light = &state.point_lights[len(state.point_lights) - 1]
 
   return handle
@@ -138,18 +153,23 @@ make_point_light_entity :: proc(position: vec3, color: vec4, radius, intensity: 
 
 duplicate_entity :: proc(handle: Entity_Handle) -> (duplicate: Entity_Handle)
 {
-  e := get_entity(handle)
-
-  // Need to make a new point light, model handle is fine to be copied as that's already handled by asset system
-  if e.point_light != nil
+  if e := get_entity(handle); e != nil
   {
-    pl := e.point_light
-    duplicate = make_point_light_entity(e.position, pl.color, pl.radius, pl.intensity, pl.cast_shadows)
-  }
-  else
-  {
-    // FIXME:
-    duplicate = make_entity("", e.flags, e.position, e.rotation, e.scale, e.color)
+    // Need to make a new point light, model handle is fine to be copied as that's already handled by asset system
+    if e.point_light != nil
+    {
+      pl := e.point_light
+      duplicate = make_point_light_entity(e.position, pl.color, pl.radius, pl.intensity, pl.cast_shadows)
+    }
+    else
+    {
+      // HACK: doesn't sit right with me
+      duplicate = alloc_entity()
+      age := duplicate.age
+      copy_data := e^
+      copy_data.age = duplicate.age
+      get_entity(duplicate)^ = copy_data
+    }
   }
 
   return duplicate
@@ -167,10 +187,16 @@ get_entity :: proc(handle: Entity_Handle) -> (entity: ^Entity)
 
 remove_entity :: proc(handle: Entity_Handle)
 {
-  if entity_handle_valid(handle)
+  if slot := get_entity(handle); slot != nil
   {
-    unordered_remove(&state.entities.pool, handle.slot)
-    log.infof("Removed entity at slot %v", handle.slot)
+    new_age := slot.age + 1
+    slot^ = {}
+    slot.next_free = state.entities.first_free
+    slot.age = new_age
+    slot.flags |= {.UNUSED}
+
+    state.entities.first_free = {handle.slot, new_age}
+    log.infof("Removed entity %v", handle)
   }
 }
 

@@ -108,6 +108,7 @@ EDITOR_GIZMOS := []Editor_Gizmo {
 editor_selected_entity_center :: proc() -> (center: vec3)
 {
   selected_entity := get_entity(editor.selected_entity)
+  assert(selected_entity != nil)
   entity_aabb := entity_world_aabb(selected_entity^)
   center = aabb_center(entity_aabb)
 
@@ -268,27 +269,24 @@ editor_ui :: proc() -> (had_interaction: bool)
   {
     defer ui_pop_parent()
 
-    if ui_button("Clear Entity").clicked
+    if entity_handle_valid(editor.selected_entity)
     {
-      clear_editor_selected_entity()
-    }
+      if ui_button("Clear Entity").clicked
+      {
+        clear_editor_selected_entity()
+      }
 
-    if ui_button("Dupe Entity").clicked
-    {
-      if entity_handle_valid(editor.selected_entity)
+      if ui_button("Dupe Entity").clicked
       {
         dupe := duplicate_entity(editor.selected_entity)
         get_entity(dupe).position += (rand.float32() * 2.0) - 1.0
 
         log.infof("Copied entity at index %v", editor.selected_entity)
       }
-    }
 
-    // TODO: Probably just work on pool strucuture... needs to be done at some point at there are bugs when removing entities right now
-    // specifically when that entity has an attached point light, does not get removed.
-    if ui_button("Delete Entity").clicked
-    {
-      if entity_handle_valid(editor.selected_entity)
+      // TODO: Probably just work on pool strucuture... needs to be done at some point at there are bugs when removing entities right now
+      // specifically when that entity has an attached point light, does not get removed.
+      if ui_button("Delete Entity").clicked
       {
         remove_entity(editor.selected_entity)
         clear_editor_selected_entity()
@@ -315,10 +313,9 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   // Find out if clicked on gizmo or entity
   if !had_ui_interaction && mouse_pressed(.LEFT)
   {
-    selected_entity := get_entity(editor.selected_entity)
 
     // Try to select a gizmo
-    if selected_entity != nil
+    if selected_entity := get_entity(editor.selected_entity); selected_entity != nil
     {
       picked_gizmo := pick_gizmo(mouse_ray, editor_selected_entity_center(), state.camera.position)
 
@@ -346,9 +343,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
     }
   }
 
-  selected_entity := get_entity(editor.selected_entity)
-
-  if selected_entity != nil
+  if selected_entity := get_entity(editor.selected_entity); selected_entity != nil
   {
     hovered_gizmo := pick_gizmo(mouse_ray, editor_selected_entity_center(), state.camera.position)
 
@@ -446,7 +441,7 @@ Point Lights: %v`,
   state.camera.curr_fov_y,
   state.bloom_on,
   state.sun_on,
-  len(state.point_lights) if state.point_lights_on else 0,
+  len(state.point_lights),
   allocator = context.temp_allocator)
 
   x := f32(state.window.w) * 0.025

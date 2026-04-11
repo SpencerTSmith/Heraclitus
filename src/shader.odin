@@ -82,12 +82,6 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
   // Resolve all #includes
   lines := strings.split_lines(source, context.temp_allocator)
 
-  to_gl_type: [Shader_Type]u32 =
-  {
-    .VERT = gl.VERTEX_SHADER,
-    .FRAG = gl.FRAGMENT_SHADER,
-  }
-
   include_builder := strings.builder_make_none(context.temp_allocator)
   for line in lines
   {
@@ -127,6 +121,13 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
     c_str     := strings.clone_to_cstring(with_include, context.temp_allocator)
     c_str_len := i32(len(with_include))
 
+
+    to_gl_type: [Shader_Type]u32 =
+    {
+      .VERT = gl.VERTEX_SHADER,
+      .FRAG = gl.FRAGMENT_SHADER,
+    }
+
     gl_type := to_gl_type[type]
 
     shader =  Shader(gl.CreateShader(gl_type))
@@ -141,7 +142,7 @@ make_shader_from_string :: proc(source: string, type: Shader_Type) -> (shader: S
       info: [512]u8
       length: i32
       gl.GetShaderInfoLog(u32(shader), 512, &length, &info[0])
-      log.errorf("Error compiling shader:\n%s\n", string(info[:length]))
+      log.errorf("Error compiling shader:\n%s", string(info[:length]))
 
       // Have line numbers on the error report so can trace compilation errors
       numbered_build := strings.builder_make_none(context.temp_allocator)
@@ -391,6 +392,6 @@ set_shader_uniform :: proc(name: string, value: $T,
   }
   else
   {
-    // log.warnf("Uniform (\"%v\") not in current shader (id = %v)\n", name, program.id)
+    // log.warnf("Uniform (\"%v\") not in current shader (id = %v)", name, program.id)
   }
 }

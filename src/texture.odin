@@ -180,7 +180,6 @@ gl_texture_type_table: [Texture_Type]u32 =
   .CUBE_ARRAY = gl.TEXTURE_CUBE_MAP_ARRAY,
 }
 
-
 alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                       width, height: int, samples: int = 0, array_depth: int = 0) -> (texture: Texture)
 {
@@ -253,12 +252,9 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
       assert(len(datas) == 1)
       gl.TextureSubImage2D(texture.id, 0, 0, 0, i32(width), i32(height), gl_format, gl.UNSIGNED_BYTE, datas[0])
     case .CUBE:
-      if type == .CUBE
+      for data, face in datas
       {
-        for data, face in datas
-        {
-          gl.TextureSubImage3D(texture.id, 0, 0, 0, i32(face), i32(width), i32(height), 1, gl_format, gl.UNSIGNED_BYTE, data)
-        }
+        gl.TextureSubImage3D(texture.id, 0, 0, 0, i32(face), i32(width), i32(height), 1, gl_format, gl.UNSIGNED_BYTE, data)
       }
     case .CUBE_ARRAY:
       assert(false) // What da?
@@ -315,7 +311,7 @@ get_image_data :: proc(file_path: string) -> (data: rawptr, width, height, chann
 
   if data == nil
   {
-    log.errorf("Could not load texture \"%v\"\n", file_path)
+    log.errorf("Could not load texture \"%v\".", file_path)
   }
 
   width    = cast(int)w
@@ -356,7 +352,7 @@ make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true
     }
     else
     {
-      log.errorf("Could not load %v for cubemap\n", path)
+      log.errorf("Could not load %v for cubemap.", path)
       ok = false
       break
     }
@@ -392,7 +388,7 @@ make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false)
   }
   else
   {
-    log.errorf("Could not load texture \"%v\"\n", file_name)
+    log.errorf("Could make texture \"%v\".", file_name)
   }
 
   return texture, ok

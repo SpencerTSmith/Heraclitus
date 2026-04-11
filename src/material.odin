@@ -1,6 +1,5 @@
 package main
 
-
 Material_Blend_Mode :: enum u32
 {
   OPAQUE, // Opaque by default, zero initialization
@@ -8,8 +7,6 @@ Material_Blend_Mode :: enum u32
   MASK,
 }
 
-// TODO: Considering this more deeply, the 'Material' struct is, after some refactors, a very intermediate result
-// It is not stored anywhere, with the *_Uniform containing everything gpu needs to know and *_Info for cpu.
 Material :: struct
 {
   buffer_index: u32, // Filled out upon upload
@@ -41,7 +38,7 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
                                  normal_path   := NORMAL_DEFAULT,
                                  shininess: f32 = 32.0,
                                  blend: Material_Blend_Mode = .OPAQUE,
-                                 in_texture_dir: bool = false) -> (material: Material, ok: bool)
+                                 in_texture_dir: bool = false) -> (material: Material)
 {
   // HACK: Quite ugly but I think this makes it a nicer interface
   resolve_path :: proc(argument, default: string, argument_in_dir: bool) -> (resolved: string, in_texture_dir: bool)
@@ -69,7 +66,7 @@ make_material_from_files :: proc(diffuse_path  := DIFFUSE_DEFAULT,
   material.shininess = shininess
   material.blend = blend
 
-  return material, ok
+  return material
 }
 
 free_material :: proc(material: ^Material)
