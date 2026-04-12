@@ -14,10 +14,10 @@ VK_Queue_Kind :: enum
   PRESENT,
 }
 
-Swapchain :: struct
+Swapchain :: struct($N: int) // Is this voodoo?
 {
   handle: vk.SwapchainKHR,
-  targets: [dynamic; 3]struct
+  targets: [dynamic; N]struct
   {
     image:     vk.Image,
     view:      vk.ImageView,
@@ -44,9 +44,9 @@ Vulkan_State :: struct
   logical:    vk.Device,
   queues:     [VK_Queue_Kind]vk.Queue,
   surface:    vk.SurfaceKHR,
-  swapchain:  Swapchain,
+  swapchain:  Swapchain(3),
   frames:     [3]Frame_State,
-  curr_frame: int,
+  curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
 }
 
 @(private="file")
@@ -684,7 +684,7 @@ init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
 
 current_frame :: proc(vks: Vulkan_State) -> (frame: Frame_State)
 {
-  return vks.frames[vks.curr_frame]
+  return vks.frames[vks.curr_index[.FRAME]]
 }
 
 begin_draw :: proc(vks: ^Vulkan_State)
@@ -699,15 +699,14 @@ begin_draw :: proc(vks: ^Vulkan_State)
             "Unable to reset vulkan fence.")
 
   // Try to acquire an image, when we do: signal this frames semaphore we can start rendering.
-  image_index: u32
   vk_assert(vk.AcquireNextImageKHR(vks.logical, vks.swapchain.handle, A_SECOND,
-            frame.semaphore, {}, &image_index),
+            frame.semaphore, {}, &vks.curr_index[.TARGET]),
             "Unable to acquire next vulkan swapchain image.")
 
   vk_assert(vk.ResetCommandPool(vks.logical, frame.pool, {}),
             "Unable to reset vulkan command pool.")
 
-  target := vks.swapchain.targets[image_index]
+  target := vks.swapchain.targets[vks.curr_index[.TARGET]]
 
   buffer_info: vk.CommandBufferBeginInfo =
   {
@@ -775,12 +774,12 @@ begin_draw :: proc(vks: ^Vulkan_State)
     swapchainCount     = 1,
     pWaitSemaphores    = &target.semaphore, // Wait for all draws to be done on this target
     waitSemaphoreCount = 1,
-    pImageIndices      = &image_index,
+    pImageIndices      = &vks.curr_index[.TARGET],
   }
   vk_assert(vk.QueuePresentKHR(vks.queues[.PRESENT], &present_info),
             "Unable to submit vulkan image presentation.")
 
-  vks.curr_frame = (vks.curr_frame + 1) % len(vks.frames)
+  vks.curr_index[.TARGET] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
 semaphore_submit_info :: proc(semaphore: vk.Semaphore, stage: vk.PipelineStageFlags2) -> (info: vk.SemaphoreSubmitInfo)
