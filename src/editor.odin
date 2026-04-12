@@ -306,8 +306,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
   //
   // 3D Editor interactions
   //
-  screen_x, screen_y := mouse_position()
-  world_coord := unproject_screen_coord(screen_x, screen_y, camera_view(camera^), camera_perspective(camera^, window_aspect_ratio(state.window)))
+  world_coord := unproject_screen_coord(mouse_position(), camera_view(camera^), camera_perspective(camera^, window_aspect_ratio(state.window)))
   mouse_ray := make_ray(camera.position, world_coord - camera.position)
 
   // Find out if clicked on gizmo or entity

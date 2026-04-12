@@ -69,10 +69,6 @@ vec2 :: glsl.vec2
 vec3 :: glsl.vec3
 vec4 :: glsl.vec4
 
-dvec2 :: glsl.dvec2
-dvec3 :: glsl.dvec3
-dvec4 :: glsl.dvec4
-
 mat3 :: glsl.mat3
 mat4 :: glsl.mat4
 
@@ -126,14 +122,14 @@ vec4_from_3 :: proc(vec: vec3, w: f32 = 1.0) -> vec4
 
 // NOTE: Unprojects the the near plane
 // TODO: Maybe think about caching ray inverses if we are doing this operation a lot
-unproject_screen_coord :: proc(screen_x, screen_y: f32, view, proj: mat4) -> (world_coord: vec3)
+unproject_screen_coord :: proc(screen_coord: vec2, view, proj: mat4) -> (world_coord: vec3)
 {
   screen_width  := cast (f32) state.window.w
   screen_height := cast (f32) state.window.h
 
   // From screen coords to ndc [-1, 1]
-  ndc_x := 2 * (screen_x / screen_width) - 1
-  ndc_y := 1 - 2 * (screen_y / screen_height) // flip y... as screen coords grow down
+  ndc_x := 2 * (screen_coord.x / screen_width) - 1
+  ndc_y := 1 - 2 * (screen_coord.y / screen_height) // flip y... as screen coords grow down
   ndc_z := cast(f32) -1.0 // Because screen is on the near plane
 
   ndc_coord := vec4{ndc_x, ndc_y, ndc_z, 1}

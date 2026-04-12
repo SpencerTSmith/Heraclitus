@@ -85,8 +85,8 @@ make_window :: proc(window_width:  int,
       glfw.SetScrollCallback(window.handle, proc "c" (window: glfw.WindowHandle, x_scroll, y_scroll: f64)
       {
         // Just get the direction
-        dir_x := math.sign(x_scroll)
-        dir_y := math.sign(y_scroll)
+        dir_x := math.sign(f32(x_scroll))
+        dir_y := math.sign(f32(y_scroll))
 
         state.input.mouse.delta_scroll.x += dir_x
         state.input.mouse.delta_scroll.y += dir_y

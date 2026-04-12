@@ -138,10 +138,10 @@ Input_Info :: struct
 
 Mouse_Info :: struct
 {
-  prev_pos:     dvec2,
-  curr_pos:     dvec2,
-  delta_scroll: dvec2,
-  curr_scroll:  dvec2,
+  prev_pos:     vec2,
+  curr_pos:     vec2,
+  delta_scroll: vec2,
+  curr_scroll:  vec2,
 
   buttons: [Mouse_Button]Input_Info,
 }
@@ -178,10 +178,11 @@ poll_input_state :: proc(window: Window, dt_s: f64)
   glfw.PollEvents()
 
   // Fucked up man
-  input.mouse.curr_pos.x, input.mouse.curr_pos.y = glfw.GetCursorPos(window.handle)
+  temp_x, temp_y := glfw.GetCursorPos(window.handle)
+  input.mouse.curr_pos.x, input.mouse.curr_pos.y = f32(temp_x), f32(temp_y)
   xscale, yscale := glfw.GetWindowContentScale(window.handle)
-  input.mouse.curr_pos.x *= f64(xscale)
-  input.mouse.curr_pos.y *= f64(yscale)
+  input.mouse.curr_pos.x *= xscale
+  input.mouse.curr_pos.y *= yscale
 
   // Update mouse buttons
   {
@@ -262,23 +263,24 @@ key_up :: proc(key: Key) -> bool
   return info.curr_status == .RELEASED
 }
 
-key_repeated :: proc(key: Key) -> bool
+key_repeated :: proc(key: Key) -> (repeated: bool)
 {
   // Reference since we need to update here?
   // TODO: Maybe move this into the update_input_state?
   info := &state.input.keys[key]
 
-  if key_pressed(key) {
+  if key_pressed(key)
+  {
     info.next_repeat = INPUT_REPEAT_DELAY
-    return true
+    repeated = true
   }
-
-  if info.time_held > info.next_repeat {
+  else if info.time_held > info.next_repeat
+  {
     info.next_repeat += INPUT_REPEAT_INTERVAL
-    return true
+    repeated = true
   }
 
-  return false
+  return repeated
 }
 
 mouse_in_rect :: proc(left, top, bottom, right: f32) -> bool
@@ -331,23 +333,21 @@ mouse_scrolled_down :: proc() -> bool
   return state.input.mouse.delta_scroll.y < 0
 }
 
-mouse_position :: proc() -> (x, y: f32)
+mouse_position :: proc() -> (position: vec2)
 {
-  return cast(f32) state.input.mouse.curr_pos.x, cast(f32) state.input.mouse.curr_pos.y
+  return state.input.mouse.curr_pos
 }
 
-mouse_position_prev :: proc() -> (x, y: f32)
+mouse_position_prev :: proc() -> (position: vec2)
 {
-  return cast(f32) state.input.mouse.prev_pos.x, cast(f32) state.input.mouse.prev_pos.y
+  return state.input.mouse.prev_pos
 }
 
 // NOTE: Between this and the last frame
 // TODO: Stop collecting input in f64s never use the accuracy anyways and always convert down
 mouse_position_delta :: proc() -> (delta: vec2)
 {
-  delta64 := (state.input.mouse.curr_pos - state.input.mouse.prev_pos)
-
-  delta = {f32(delta64.x), f32(delta64.y)}
+  delta = (state.input.mouse.curr_pos - state.input.mouse.prev_pos)
 
   return delta
 }
