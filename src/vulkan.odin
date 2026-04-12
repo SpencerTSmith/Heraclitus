@@ -21,6 +21,7 @@ Swapchain :: struct
   {
     image:     vk.Image,
     view:      vk.ImageView,
+    // NOTE: grouping the 'render_finished' semaphore with targets, not frames is correct, see: https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
     semaphore: vk.Semaphore,
   },
   format: vk.Format,
@@ -697,6 +698,7 @@ begin_draw :: proc(vks: ^Vulkan_State)
   vk_assert(vk.ResetFences(vks.logical, 1, &frame.fence),
             "Unable to reset vulkan fence.")
 
+  // Try to acquire an image, when we do: signal this frames semaphore we can start rendering.
   image_index: u32
   vk_assert(vk.AcquireNextImageKHR(vks.logical, vks.swapchain.handle, A_SECOND,
             frame.semaphore, {}, &image_index),
@@ -740,7 +742,11 @@ begin_draw :: proc(vks: ^Vulkan_State)
     sType         = .COMMAND_BUFFER_SUBMIT_INFO,
     commandBuffer = frame.buffer,
   }
+
+  // We wait for this frame to acquire an image.
   wait_info   := semaphore_submit_info(frame.semaphore, {.COLOR_ATTACHMENT_OUTPUT})
+
+  // After submitting we signal that this target is ready for presentation.
   signal_info := semaphore_submit_info(target.semaphore, {.ALL_GRAPHICS})
 
   submit_info: vk.SubmitInfo2 =
@@ -754,19 +760,20 @@ begin_draw :: proc(vks: ^Vulkan_State)
     commandBufferInfoCount   = 1,
   }
 
-  // Submit all rendering commands for this frame, waiting on image available semaphore,
-  // and signalling the draw semaphore
+  // Submit all rendering commands for this frame, waiting for the image,
+  // and signalling that we are done rendering
+  // as well as fencing this frame
   vk_assert(vk.QueueSubmit2(vks.queues[.GRAPHICS], 1, &submit_info, frame.fence),
             "Unable to submit vulkan command buffer recording.")
 
-  // Finally submit once all draw commands complete
+  // Finally wait to present until this target is done with rendering.
   swap_handle := vks.swapchain.handle // To take pointer of
   present_info: vk.PresentInfoKHR =
   {
     sType              = .PRESENT_INFO_KHR,
     pSwapchains        = &swap_handle,
     swapchainCount     = 1,
-    pWaitSemaphores    = &target.semaphore, // Wait for all draws to be done.
+    pWaitSemaphores    = &target.semaphore, // Wait for all draws to be done on this target
     waitSemaphoreCount = 1,
     pImageIndices      = &image_index,
   }
