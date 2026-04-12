@@ -152,7 +152,7 @@ Input_State :: struct
   mouse: Mouse_Info,
 }
 
-poll_input_state :: proc(dt_s: f64)
+poll_input_state :: proc(window: Window, dt_s: f64)
 {
   input := &state.input
 
@@ -178,8 +178,8 @@ poll_input_state :: proc(dt_s: f64)
   glfw.PollEvents()
 
   // Fucked up man
-  input.mouse.curr_pos.x, input.mouse.curr_pos.y = glfw.GetCursorPos(state.window.handle)
-  xscale, yscale := glfw.GetWindowContentScale(state.window.handle)
+  input.mouse.curr_pos.x, input.mouse.curr_pos.y = glfw.GetCursorPos(window.handle)
+  xscale, yscale := glfw.GetWindowContentScale(window.handle)
   input.mouse.curr_pos.x *= f64(xscale)
   input.mouse.curr_pos.y *= f64(yscale)
 
@@ -191,7 +191,7 @@ poll_input_state :: proc(dt_s: f64)
 
       if button != .NONE
       {
-        status := glfw.GetMouseButton(state.window.handle, i32(glfw_code))
+        status := glfw.GetMouseButton(window.handle, i32(glfw_code))
 
         switch status
         {
@@ -216,7 +216,7 @@ poll_input_state :: proc(dt_s: f64)
 
     if key != .NONE
     {
-      key_state := glfw.GetKey(state.window.handle, i32(glfw_key))
+      key_state := glfw.GetKey(window.handle, i32(glfw_key))
 
       switch key_state
       {

@@ -14,6 +14,8 @@ import "vendor:glfw"
 State :: struct {
   main_context :runtime.Context,
 
+  vks: Vulkan_State,
+
   running: bool,
 
   mode: Program_Mode,
@@ -88,6 +90,8 @@ init_state :: proc() -> (ok: bool)
 {
   state.start_time = time.now()
 
+  state.running = true
+
   state.main_context = context
 
   state.perm_mem = make([]byte, mem.Megabyte * 256)
@@ -98,17 +102,6 @@ init_state :: proc() -> (ok: bool)
 
   state.window = make_window(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
                              WINDOW_DEFAULT_TITLE, BACKEND) or_return
-
-  switch BACKEND
-  {
-    case .OPENGL:
-      init_opengl(state.window)
-    case .VULKAN:
-      init_vulkan(state.window)
-  }
-
-  // Make the meta shader
-  gen_glsl_code()
 
   state.camera =
   {
@@ -123,18 +116,6 @@ init_state :: proc() -> (ok: bool)
   }
 
   state.point_lights_on = true
-
-  state.running = true
-
-  state.shaders[.PHONG]       = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
-  state.shaders[.SKYBOX]      = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.RESOLVE_HDR] = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.SUN_DEPTH]   = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.POINT_DEPTH] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.GAUSSIAN]    = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
-  state.shaders[.GET_BRIGHT]  = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
-
-  state.samplers = make_samplers()
 
   state.sun =
   {
@@ -165,82 +146,72 @@ init_state :: proc() -> (ok: bool)
   }
   state.flashlight_on = true
 
-  SAMPLES :: 4
-  state.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-
-  state.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-
-  // This will have two attachments so we can collect bright spots
-  state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
-  state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
-
-  state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
-  state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
-
-  state.frame_uniforms = make_gpu_buffer(size_of(Frame_Uniform), flags = {.UNIFORM_DATA, .PERSISTENT, .FRAME_BUFFERED})
-
-  state.mds = init_multi_draw()
-
-  init_assets(state.perm_alloc)
-
-  init_immediate_renderer(state.perm_alloc) or_return
-
-  init_menu() or_return
-
   state.draw_debug = true
 
-  state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
-
-  cube_map_sides: [6]string =
-  {
-    "skybox/right.jpg",
-    "skybox/left.jpg",
-    "skybox/top.jpg",
-    "skybox/bottom.jpg",
-    "skybox/front.jpg",
-    "skybox/back.jpg",
-  }
-  state.skybox = load_skybox(cube_map_sides) or_return
-
   init_entities()
+
+  switch BACKEND
+  {
+    case .OPENGL:
+      init_opengl(state.window)
+
+      // Make the meta shader
+      gen_glsl_code()
+
+      state.shaders[.PHONG]       = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
+      state.shaders[.SKYBOX]      = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
+      state.shaders[.RESOLVE_HDR] = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
+      state.shaders[.SUN_DEPTH]   = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
+      state.shaders[.POINT_DEPTH] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
+      state.shaders[.GAUSSIAN]    = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
+      state.shaders[.GET_BRIGHT]  = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
+
+      state.samplers = make_samplers()
+
+      SAMPLES :: 4
+      state.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+
+      state.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+
+      // This will have two attachments so we can collect bright spots
+      state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
+      state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
+
+      state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
+      state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
+
+      state.frame_uniforms = make_gpu_buffer(size_of(Frame_Uniform), flags = {.UNIFORM_DATA, .PERSISTENT, .FRAME_BUFFERED})
+
+      state.mds = init_multi_draw()
+
+      init_assets(state.perm_alloc)
+
+      init_immediate_renderer(state.perm_alloc) or_return
+
+      init_menu() or_return
+
+      state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
+
+      cube_map_sides: [6]string =
+      {
+        "skybox/right.jpg",
+        "skybox/left.jpg",
+        "skybox/top.jpg",
+        "skybox/bottom.jpg",
+        "skybox/front.jpg",
+        "skybox/back.jpg",
+      }
+      state.skybox = load_skybox(cube_map_sides) or_return
+
+    case .VULKAN:
+      state.vks = init_vulkan(state.window)
+  }
 
   return true
 }
 
-main :: proc()
+old_main :: proc()
 {
-  logger := log.create_console_logger()
-  context.logger = logger
-  defer log.destroy_console_logger(logger)
-
-  when ODIN_DEBUG
-  {
-    track: mem.Tracking_Allocator
-    mem.tracking_allocator_init(&track, context.allocator)
-    context.allocator = mem.tracking_allocator(&track)
-
-    defer
-    {
-      if len(track.allocation_map) > 0
-      {
-        log.errorf("=== %v allocations not freed: ===\n", len(track.allocation_map))
-        for _, entry in track.allocation_map
-        {
-          log.errorf("- %v bytes @ %v\n", entry.size, entry.location)
-        }
-      }
-      if len(track.bad_free_array) > 0
-      {
-        log.errorf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
-        for entry in track.bad_free_array
-        {
-          log.errorf("- %p @ %v\n", entry.memory, entry.location)
-        }
-      }
-      mem.tracking_allocator_destroy(&track)
-    }
-  }
-
   if !init_state()
   {
     log.fatalf("Failed to initialize global state")
@@ -321,7 +292,7 @@ main :: proc()
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
-  for (!should_close(state.window))
+  for !should_close(state.window)
   {
     // Resize check, this
     if state.window.should_resize
@@ -346,7 +317,7 @@ main :: proc()
     state.frame_count += 1
     last_frame_time = time.tick_now()
 
-    poll_input_state(dt_s)
+    poll_input_state(state.window, dt_s)
 
     if key_pressed(.ESCAPE)
     {
@@ -673,17 +644,89 @@ main :: proc()
   }
 }
 
+main :: proc()
+{
+  logger := log.create_console_logger()
+  context.logger = logger
+  defer log.destroy_console_logger(logger)
+
+  when ODIN_DEBUG
+  {
+    track: mem.Tracking_Allocator
+    mem.tracking_allocator_init(&track, context.allocator)
+    context.allocator = mem.tracking_allocator(&track)
+
+    defer
+    {
+      if len(track.allocation_map) > 0
+      {
+        log.errorf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+        for _, entry in track.allocation_map
+        {
+          log.errorf("- %v bytes @ %v\n", entry.size, entry.location)
+        }
+      }
+      if len(track.bad_free_array) > 0
+      {
+        log.errorf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+        for entry in track.bad_free_array
+        {
+          log.errorf("- %p @ %v\n", entry.memory, entry.location)
+        }
+      }
+      mem.tracking_allocator_destroy(&track)
+    }
+  }
+
+  if !init_state()
+  {
+    log.fatalf("Failed to initialize global state")
+    return
+  }
+  defer free_state()
+
+
+  last_frame_time := time.tick_now()
+  dt_s := 0.0
+  for !should_close(state.window)
+  {
+    // dt and sleeping
+    if (time.tick_since(last_frame_time) < TARGET_FRAME_TIME_NS)
+    {
+      time.accurate_sleep(TARGET_FRAME_TIME_NS - time.tick_since(last_frame_time))
+    }
+
+    // New dt after sleeping
+    dt_s = f64(time.tick_since(last_frame_time)) / BILLION
+
+    state.fps = 1.0 / dt_s
+
+    state.frame_count += 1
+    last_frame_time = time.tick_now()
+
+    poll_input_state(state.window, dt_s)
+
+    begin_draw(&state.vks)
+  }
+}
+
 free_state :: proc()
 {
-  free_immediate_renderer()
-
-  free_assets()
-
-  free_gpu_buffer(&state.frame_uniforms)
-
-  for &shader in state.shaders
+  switch BACKEND
   {
-    free_shader_program(&shader)
+    case .OPENGL:
+      free_immediate_renderer()
+
+      free_assets()
+
+      free_gpu_buffer(&state.frame_uniforms)
+
+      for &shader in state.shaders
+      {
+        free_shader_program(&shader)
+      }
+    case .VULKAN:
+      free_vulkan(&state.vks)
   }
 
   glfw.DestroyWindow(state.window.handle)
