@@ -463,10 +463,10 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
      // NOTE: We are bindless with materials now!
      // So we just send over indexes
 
-     uniform.diffuse  = diffuse.handle
-     uniform.specular = specular.handle
-     uniform.emissive = emissive.handle
-     uniform.normal   = normal.handle
+     // uniform.diffuse  = diffuse.handle
+     // uniform.specular = specular.handle
+     // uniform.emissive = emissive.handle
+     // uniform.normal   = normal.handle
 
      uniform.shininess = material.shininess
   }

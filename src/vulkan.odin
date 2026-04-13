@@ -3,12 +3,13 @@ package main
 import "base:runtime"
 import "core:strings"
 import "core:log"
+import "core:mem"
 
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
 
-VK_Queue_Kind :: enum
+Queue_Kind :: enum
 {
   GRAPHICS,
   PRESENT,
@@ -36,20 +37,41 @@ Frame_State :: struct
   semaphore: vk.Semaphore,
 }
 
+Vulkan_Arena_Kind :: enum
+{
+  DEVICE,
+  HOST,
+}
+
+Vulkan_Arena :: struct
+{
+  memory: vk.DeviceMemory,
+  memory_type:   u32,
+  memory_offset: vk.DeviceSize,
+  memory_size:   vk.DeviceSize,
+
+  buffer: vk.Buffer,
+  buffer_offset: vk.DeviceSize,
+  buffer_size:   vk.DeviceSize,
+}
+
 Vulkan_State :: struct
 {
   instance:   vk.Instance,
   messenger:  vk.DebugUtilsMessengerEXT,
   physical:   vk.PhysicalDevice,
   logical:    vk.Device,
-  queues:     [VK_Queue_Kind]vk.Queue,
+  queues:     [Queue_Kind]vk.Queue,
   surface:    vk.SurfaceKHR,
   swapchain:  Swapchain(3),
   frames:     [3]Frame_State,
   curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
+  arenas:     [Vulkan_Arena_Kind]Vulkan_Arena,
 }
 
 @(private="file")
+vks: Vulkan_State
+
 vk_assert :: proc(result: vk.Result, message: string)
 {
   assert(result == .SUCCESS, message)
@@ -135,7 +157,7 @@ check_device_extensions :: proc(device: vk.PhysicalDevice, needed_extensions: []
 
 @(private="file")
 pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, needed_device_features: vk.PhysicalDeviceFeatures2,
-                             needed_device_extensions: []cstring,) -> (physical: vk.PhysicalDevice, queue_indices: [VK_Queue_Kind]union{u32})
+                             needed_device_extensions: []cstring,) -> (physical: vk.PhysicalDevice, queue_indices: [Queue_Kind]union{u32})
 {
   physical_devices: []vk.PhysicalDevice
   {
@@ -183,7 +205,7 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
     }
 
     // Support for all needed queues
-    indices: [VK_Queue_Kind]union{u32}
+    indices: [Queue_Kind]union{u32}
     for family, idx in queue_families
     {
       idx := u32(idx)
@@ -221,6 +243,28 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
   }
 
   return physical, queue_indices
+}
+
+@(private="file")
+pick_memory_type :: proc(physical: vk.PhysicalDevice, needed_requirements: vk.MemoryRequirements,
+                         needed_properties: vk.MemoryPropertyFlags) -> (index: u32, ok: bool)
+{
+  memory_properties: vk.PhysicalDeviceMemoryProperties
+  vk.GetPhysicalDeviceMemoryProperties(physical, &memory_properties)
+
+  for memory_type, idx in memory_properties.memoryTypes[:memory_properties.memoryTypeCount]
+  {
+    idx := u32(idx)
+    if needed_requirements.memoryTypeBits & (1 << idx) != 0 &&
+       memory_type.propertyFlags >= needed_properties // Weird odin syntax for bit sets, means 'is superset'
+    {
+      index = idx
+      ok = true
+      break
+    }
+  }
+
+  return index, ok
 }
 
 @(private="file")
@@ -374,11 +418,10 @@ choose_surface_capabilities :: proc(window: Window, device: vk.PhysicalDevice, s
     image_count = clamp(image_count, capabilities.minImageCount, capabilities.maxImageCount)
   }
 
-
   return extent, image_count, capabilities
 }
 
-init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
+init_vulkan :: proc(window: Window) -> (ok: bool)
 {
   vk.load_proc_addresses_global(rawptr(glfw.GetInstanceProcAddress))
 
@@ -489,7 +532,7 @@ init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
       pNext = &needed_device_features11,
     }
 
-    queue_indices: [VK_Queue_Kind]union{u32}
+    queue_indices: [Queue_Kind]union{u32}
     vks.physical, queue_indices = pick_physical_device(vks.instance, vks.surface, needed_device_features, needed_device_extensions)
 
     if vks.physical != nil
@@ -500,8 +543,8 @@ init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
 
       // Collect only unique queues
       priority: f32 = 1.0
-      queue_infos:  [dynamic; len(VK_Queue_Kind)]vk.DeviceQueueCreateInfo
-      used_indices: [dynamic; len(VK_Queue_Kind)]u32
+      queue_infos:  [dynamic; len(Queue_Kind)]vk.DeviceQueueCreateInfo
+      used_indices: [dynamic; len(Queue_Kind)]u32
       for index in queue_indices
       {
         used_index := false
@@ -557,6 +600,7 @@ init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
       present_mode := choose_present_mode(vks.physical, vks.surface)
       extent, image_count, capabilities := choose_surface_capabilities(window, vks.physical, vks.surface)
 
+      // Finally clamp image count less than defined max targets
       image_count = min(image_count, cap(vks.swapchain.targets))
 
       swapchain_info: vk.SwapchainCreateInfoKHR =
@@ -591,49 +635,47 @@ init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
       vks.swapchain.format = surface_format.format
       vks.swapchain.extent = extent
 
+      actual_image_count: u32
+      vk.GetSwapchainImagesKHR(vks.logical, vks.swapchain.handle, &actual_image_count, nil)
+      assert(actual_image_count <= cap(vks.swapchain.targets) && actual_image_count == image_count)
+      temp_images: [cap(vks.swapchain.targets)]vk.Image
+      vk.GetSwapchainImagesKHR(vks.logical, vks.swapchain.handle, &actual_image_count, raw_data(temp_images[:]))
+
+      resize(&vks.swapchain.targets, actual_image_count)
+      for &target, i in &vks.swapchain.targets
       {
-        image_count: u32
-        vk.GetSwapchainImagesKHR(vks.logical, vks.swapchain.handle, &image_count, nil)
-        assert(image_count <= cap(vks.swapchain.targets))
-        temp_images: [cap(vks.swapchain.targets)]vk.Image
-        vk.GetSwapchainImagesKHR(vks.logical, vks.swapchain.handle, &image_count, raw_data(temp_images[:]))
+        target.image = temp_images[i]
 
-        resize(&vks.swapchain.targets, image_count)
-        for &target, i in &vks.swapchain.targets
+        view_info: vk.ImageViewCreateInfo =
         {
-          target.image = temp_images[i]
-
-          view_info: vk.ImageViewCreateInfo =
+          sType    = .IMAGE_VIEW_CREATE_INFO,
+          image    = target.image,
+          format   = vks.swapchain.format,
+          viewType = .D2,
+          components = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY},
+          subresourceRange =
           {
-            sType    = .IMAGE_VIEW_CREATE_INFO,
-            image    = target.image,
-            format   = vks.swapchain.format,
-            viewType = .D2,
-            components = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY},
-            subresourceRange =
-            {
-              aspectMask     = {.COLOR},
-              baseMipLevel   = 0,
-              levelCount     = 1,
-              baseArrayLayer = 0,
-              layerCount     = 1,
-            },
-          }
-
-          vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &target.view),
-                    "Unable to create vulkan swapchain image view.")
-
-          semaphore_info: vk.SemaphoreCreateInfo =
-          {
-            sType = .SEMAPHORE_CREATE_INFO,
-          }
-          vk_assert(vk.CreateSemaphore(vks.logical, &semaphore_info, nil, &target.semaphore),
-                    "Unable to create vulkan swapchain image semaphore.")
+            aspectMask     = {.COLOR},
+            baseMipLevel   = 0,
+            levelCount     = 1,
+            baseArrayLayer = 0,
+            layerCount     = 1,
+          },
         }
+
+        vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &target.view),
+                  "Unable to create vulkan swapchain image view.")
+
+        semaphore_info: vk.SemaphoreCreateInfo =
+        {
+          sType = .SEMAPHORE_CREATE_INFO,
+        }
+        vk_assert(vk.CreateSemaphore(vks.logical, &semaphore_info, nil, &target.semaphore),
+                  "Unable to create vulkan swapchain image semaphore.")
       }
 
       // // //
-      // Command Stuff
+      // Frame stuff
       // // //
 
       for &frame in vks.frames
@@ -672,26 +714,87 @@ init_vulkan :: proc(window: Window) -> (vks: Vulkan_State)
         vk_assert(vk.CreateSemaphore(vks.logical, &semaphore_info, nil, &frame.semaphore),
                   "Unable to create vulkan frame semaphore")
       }
+
+      // // //
+      // Memory
+      // // //
+      // FIXME: Ok should probably just be a variable.
+      ok: bool
+      vks.arenas[.DEVICE], ok = make_vulkan_arena(vks.logical, vks.physical,
+                                                  256 * mem.Megabyte, {.TRANSFER_DST, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
+                                                  {.DEVICE_LOCAL}, 256 * mem.Megabyte)
+      if !ok { log.fatalf("Unable to create device local vulkan arena.") }
+
+      vks.arenas[.HOST], ok = make_vulkan_arena(vks.logical, vks.physical,
+                                                256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
+                                                {.HOST_VISIBLE, .HOST_COHERENT}, 256 * mem.Megabyte)
+      if !ok { log.fatalf("Unable to create host vulkan arena.") }
     }
     else
     {
-      log.errorf("Unable to find suitable physical device for vulkan.")
+      log.fatalf("Unable to find suitable physical device for vulkan.")
     }
   }
 
-  return vks
+  // TODO:
+  return true
 }
 
-current_frame :: proc(vks: Vulkan_State) -> (frame: Frame_State)
+@(private="file")
+make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
+                            buffer_size: vk.DeviceSize, buffer_usage: vk.BufferUsageFlags,
+                            memory_properties: vk.MemoryPropertyFlags,
+                            extra_size: vk.DeviceSize) -> (arena: Vulkan_Arena, ok: bool)
 {
-  return vks.frames[vks.curr_index[.FRAME]]
+  buffer_info: vk.BufferCreateInfo =
+  {
+    sType = .BUFFER_CREATE_INFO,
+    size  = buffer_size,
+    usage = buffer_usage,
+    sharingMode = .EXCLUSIVE,
+  }
+  vk_assert(vk.CreateBuffer(logical, &buffer_info, nil, &arena.buffer),
+            "Unable to create vulkan arena buffer.")
+
+  buffer_memory_requirements: vk.MemoryRequirements
+  vk.GetBufferMemoryRequirements(logical, arena.buffer, &buffer_memory_requirements)
+
+  combined_memory_requirements := buffer_memory_requirements
+  combined_memory_requirements.size += extra_size
+
+  arena.memory_type, ok = pick_memory_type(physical, combined_memory_requirements, {.DEVICE_LOCAL})
+  if ok
+  {
+    allocate_info: vk.MemoryAllocateInfo =
+    {
+      sType = .MEMORY_ALLOCATE_INFO,
+      memoryTypeIndex = arena.memory_type,
+      allocationSize  = combined_memory_requirements.size,
+    }
+    vk_assert(vk.AllocateMemory(logical, &allocate_info, nil, &arena.memory),
+              "Unable to allocate memory for vulkan arena buffer.")
+
+    vk_assert(vk.BindBufferMemory(logical, arena.buffer, arena.memory, 0),
+              "Unable to bind memory to vulkan arena buffer.")
+
+    arena.memory_size = allocate_info.allocationSize // Total
+    // Push memory offset past the buffer, any further allocations shall go afterwards
+    arena.memory_offset = buffer_memory_requirements.size
+    arena.buffer_size = buffer_memory_requirements.size
+  }
+  else
+  {
+    log.errorf("Unable to find memory type for vulkan arena.")
+  }
+
+  return arena, ok
 }
 
-begin_draw :: proc(vks: ^Vulkan_State)
+begin_drawing :: proc()
 {
   A_SECOND :: 1000000000
 
-  frame := current_frame(vks^)
+  frame := vks.frames[vks.curr_index[.FRAME]]
   vk_assert(vk.WaitForFences(vks.logical, 1, &frame.fence, true, A_SECOND),
             "Unable to wait on vulkan fence.")
 
@@ -717,21 +820,27 @@ begin_draw :: proc(vks: ^Vulkan_State)
             "Unable to begin vulkan command buffer recording.")
 
   // Barrier on swapchain image to be writable
-  transition_image(frame.buffer, target.image,
-                   .UNDEFINED, .GENERAL,
-                   {.TOP_OF_PIPE}, {}, // Top of pipe since we already waited on sem, no src access
-                   {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}) // Writing to the color part
+  vk_transition_image(frame.buffer, target.image,
+                      .UNDEFINED, .GENERAL,
+                      {.TOP_OF_PIPE}, {}, // Top of pipe since we already waited on sem, no src access
+                      {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}) // Writing to the color part
 
 
-  range := image_range({.COLOR})
+  range := vk_image_range({.COLOR})
   color: vk.ClearColorValue = { float32 = LEARN_OPENGL_BLUE }
   vk.CmdClearColorImage(frame.buffer, target.image, .GENERAL, &color, 1, &range)
+}
+
+flush_drawing :: proc()
+{
+  frame := vks.frames[vks.curr_index[.FRAME]]
+  target := vks.swapchain.targets[vks.curr_index[.TARGET]]
 
   // Barrier for all color writes to be finished to the final image
-  transition_image(frame.buffer, target.image,
-                   .GENERAL, .PRESENT_SRC_KHR,
-                   {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}, // We've written to it
-                   {.BOTTOM_OF_PIPE}, {}) // We are done with this image
+  vk_transition_image(frame.buffer, target.image,
+                      .GENERAL, .PRESENT_SRC_KHR,
+                      {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}, // We've written to it
+                      {.BOTTOM_OF_PIPE}, {}) // We are done with this image
 
   vk_assert(vk.EndCommandBuffer(frame.buffer),
             "Unable to end vulkan command buffer recording.")
@@ -782,6 +891,39 @@ begin_draw :: proc(vks: ^Vulkan_State)
   vks.curr_index[.TARGET] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
+vk_device :: proc() -> vk.Device
+{
+  assert(vks.logical != nil)
+  return vks.logical
+}
+
+vk_arena_push :: proc(arena: Vulkan_Arena_Kind, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
+{
+  aligned_offset = (vks.arenas[arena].memory_offset + alignment - 1) & ~(alignment - 1)
+
+  assert(aligned_offset + size < vks.arenas[arena].memory_size,
+         "Vulkan arena out of memory.")
+
+  vks.arenas[arena].memory_offset = aligned_offset + size
+
+  return aligned_offset
+}
+
+vk_arena_push_image :: proc(arena: Vulkan_Arena_Kind, image: vk.Image)
+{
+  requirements: vk.MemoryRequirements
+  vk.GetImageMemoryRequirements(vks.logical, image, &requirements)
+
+  assert(requirements.memoryTypeBits & (1 << vks.arenas[arena].memory_type) != 0,
+         "Image memory requirements not compatible with arena.")
+
+  memory_offset := vk_arena_push(arena, requirements.size, requirements.alignment)
+
+  vk_assert(vk.BindImageMemory(vks.logical, image, vks.arenas[arena].memory, memory_offset),
+            "Unable to bind vulkan image memory.")
+}
+
+@(private="file")
 semaphore_submit_info :: proc(semaphore: vk.Semaphore, stage: vk.PipelineStageFlags2) -> (info: vk.SemaphoreSubmitInfo)
 {
   info =
@@ -796,10 +938,9 @@ semaphore_submit_info :: proc(semaphore: vk.Semaphore, stage: vk.PipelineStageFl
 }
 
 // All mips and all layers by default
-@(private="file")
-image_range :: proc(aspects: vk.ImageAspectFlags,
-                    mip_base: u32 = 0, mip_count: u32 = vk.REMAINING_MIP_LEVELS,
-                    array_base: u32 = 0, array_count: u32 = vk.REMAINING_ARRAY_LAYERS) -> (range: vk.ImageSubresourceRange)
+vk_image_range :: proc(aspects: vk.ImageAspectFlags,
+                       mip_base: u32 = 0, mip_count: u32 = vk.REMAINING_MIP_LEVELS,
+                       array_base: u32 = 0, array_count: u32 = vk.REMAINING_ARRAY_LAYERS) -> (range: vk.ImageSubresourceRange)
 {
   range =
   {
@@ -813,7 +954,8 @@ image_range :: proc(aspects: vk.ImageAspectFlags,
   return range
 }
 
-transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
+@(private="file")
+vk_transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
                          old, new:   vk.ImageLayout,
                          src_stage:  vk.PipelineStageFlags2,
                          src_access: vk.AccessFlags2,
@@ -830,7 +972,7 @@ transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
     oldLayout     = old,
     newLayout     = new,
     image         = image,
-    subresourceRange = image_range(new == .DEPTH_ATTACHMENT_OPTIMAL ? {.DEPTH} : {.COLOR}),
+    subresourceRange = vk_image_range(new == .DEPTH_ATTACHMENT_OPTIMAL ? {.DEPTH} : {.COLOR}),
   }
 
   dependency: vk.DependencyInfo =
@@ -843,9 +985,15 @@ transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
   vk.CmdPipelineBarrier2(cmd, &dependency)
 }
 
-free_vulkan :: proc(vks: ^Vulkan_State)
+free_vulkan :: proc()
 {
   vk.DeviceWaitIdle(vks.logical)
+
+  for arena in vks.arenas
+  {
+    vk.FreeMemory(vks.logical, arena.memory, nil)
+    vk.DestroyBuffer(vks.logical, arena.buffer, nil)
+  }
   for frame in vks.frames
   {
     vk.DestroyCommandPool(vks.logical, frame.pool, nil)
@@ -863,5 +1011,5 @@ free_vulkan :: proc(vks: ^Vulkan_State)
   when ODIN_DEBUG { vk.DestroyDebugUtilsMessengerEXT(vks. instance, vks.messenger, nil) }
   vk.DestroyInstance(vks.instance, nil)
 
-  vks^ = {}
+  vks = {}
 }

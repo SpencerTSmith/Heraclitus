@@ -230,82 +230,82 @@ begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer)
 make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
                          attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL}) -> (buffer: Framebuffer, ok: bool)
 {
-  fbo: u32
-  gl.CreateFramebuffers(1, &fbo)
-
-  color_targets := make([dynamic]Texture, context.temp_allocator)
-  depth_target: Texture
-
-  gl_attachments := make([dynamic]u32, context.temp_allocator)
-
-  for attachment in attachments
-  {
-    switch attachment
-    {
-    case .COLOR:
-      color_target := alloc_texture(._2D, .RGBA8, .NONE, width, height, samples=samples)
-      attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
-      gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
-
-      append(&color_targets, color_target)
-      append(&gl_attachments, attachment)
-
-    case .HDR_COLOR:
-      color_target := alloc_texture(._2D, .RGBA16F, .NONE, width, height, samples=samples)
-      attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
-      gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
-
-      append(&color_targets, color_target)
-      append(&gl_attachments, attachment)
-
-    case .DEPTH:
-      assert(depth_target.id == 0) // Only one depth attachment
-
-      depth_target = alloc_texture(._2D, .DEPTH32, .CLAMP_WHITE, width, height)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-
-    case .DEPTH_STENCIL:
-      assert(depth_target.id == 0)
-
-      depth_target = alloc_texture(._2D, .DEPTH24_STENCIL8, .NONE, width, height, samples=samples)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-
-    case .DEPTH_CUBE:
-      assert(depth_target.id == 0)
-
-      depth_target = alloc_texture(.CUBE, .DEPTH32, .CLAMP_LINEAR, width, height)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-
-    case .DEPTH_CUBE_ARRAY:
-      assert(depth_target.id == 0)
-
-      assert(array_depth > 0)
-      depth_target = alloc_texture(.CUBE_ARRAY, .DEPTH32, .CLAMP_LINEAR, width, height, array_depth=array_depth)
-      gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-    }
-  }
-
-  gl.NamedFramebufferDrawBuffers(fbo, cast(i32)len(color_targets), raw_data(gl_attachments))
-
-  if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
-  {
-    buffer =
-    {
-      id            = fbo,
-      attachments   = slice.clone(attachments, state.perm_alloc),
-      color_targets = slice.clone(color_targets[:], state.perm_alloc),
-      depth_target  = depth_target,
-      sample_count  = samples,
-      width         = width,
-      height        = height,
-    }
-    ok = true
-  }
-  else
-  {
-    log.error("Unable to create complete framebuffer: %v", buffer)
-    ok = false
-  }
+  // fbo: u32
+  // gl.CreateFramebuffers(1, &fbo)
+  //
+  // color_targets := make([dynamic]Texture, context.temp_allocator)
+  // depth_target: Texture
+  //
+  // gl_attachments := make([dynamic]u32, context.temp_allocator)
+  //
+  // for attachment in attachments
+  // {
+  //   switch attachment
+  //   {
+  //   case .COLOR:
+  //     color_target := alloc_texture(.D2, .RGBA8, .NONE, width, height, samples=samples)
+  //     attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
+  //     gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
+  //
+  //     append(&color_targets, color_target)
+  //     append(&gl_attachments, attachment)
+  //
+  //   case .HDR_COLOR:
+  //     color_target := alloc_texture(.D2, .RGBA16F, .NONE, width, height, samples=samples)
+  //     attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
+  //     gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
+  //
+  //     append(&color_targets, color_target)
+  //     append(&gl_attachments, attachment)
+  //
+  //   case .DEPTH:
+  //     assert(depth_target.id == 0) // Only one depth attachment
+  //
+  //     depth_target = alloc_texture(.D2, .DEPTH32, .CLAMP_WHITE, width, height)
+  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
+  //
+  //   case .DEPTH_STENCIL:
+  //     assert(depth_target.id == 0)
+  //
+  //     depth_target = alloc_texture(.D2, .DEPTH24_STENCIL8, .NONE, width, height, samples=samples)
+  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
+  //
+  //   case .DEPTH_CUBE:
+  //     assert(depth_target.id == 0)
+  //
+  //     depth_target = alloc_texture(.CUBE, .DEPTH32, .CLAMP_LINEAR, width, height)
+  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
+  //
+  //   case .DEPTH_CUBE_ARRAY:
+  //     assert(depth_target.id == 0)
+  //
+  //     assert(array_depth > 0)
+  //     depth_target = alloc_texture(.CUBE_ARRAY, .DEPTH32, .CLAMP_LINEAR, width, height, array_depth=array_depth)
+  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
+  //   }
+  // }
+  //
+  // gl.NamedFramebufferDrawBuffers(fbo, cast(i32)len(color_targets), raw_data(gl_attachments))
+  //
+  // if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
+  // {
+  //   buffer =
+  //   {
+  //     id            = fbo,
+  //     attachments   = slice.clone(attachments, state.perm_alloc),
+  //     color_targets = slice.clone(color_targets[:], state.perm_alloc),
+  //     depth_target  = depth_target,
+  //     sample_count  = samples,
+  //     width         = width,
+  //     height        = height,
+  //   }
+  //   ok = true
+  // }
+  // else
+  // {
+  //   log.error("Unable to create complete framebuffer: %v", buffer)
+  //   ok = false
+  // }
 
   return buffer, ok
 }
@@ -404,107 +404,107 @@ remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (n
   return new_buffer, ok
 }
 
-begin_drawing :: proc()
-{
-  // Probably fine to have a little bit of fragmenting in perm_arena...
-  // only going to be doing hot reloads while developing
-  when ODIN_DEBUG
-  {
-    hot_reload_shaders(&state.shaders, state.perm_alloc)
-  }
-
-  frame := &state.frames[state.curr_frame_index]
-  if frame.fence != nil
-  {
-    gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, U64_MAX)
-    gl.DeleteSync(frame.fence)
-
-    frame.fence = nil
-  }
-
-  clear := BLACK
-  clear_framebuffer(DEFAULT_FRAMEBUFFER, clear)
-  clear_framebuffer(state.hdr_ms_buffer, clear)
-  clear_framebuffer(state.post_buffer, clear)
-  clear_framebuffer(state.ping_pong_buffers[0], clear)
-  clear_framebuffer(state.ping_pong_buffers[1], clear)
-
-  state.began_drawing = true
-
-  //
-  // Update frame uniform
-  //
-  projection := camera_perspective(state.camera, window_aspect_ratio(state.window))
-  view       := camera_view(state.camera)
-  frame_ubo: Frame_Uniform =
-  {
-    projection      = projection,
-    view            = view,
-    proj_view       = projection * view,
-    orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.camera.z_near, state.camera.z_far),
-    camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
-    z_near          = state.camera.z_near,
-    z_far           = state.camera.z_far,
-
-    // And the lights
-    sun_light   = direction_light_uniform(state.sun) if state.sun_on else {},
-    flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
-  }
-
-  if state.point_lights_on
-  {
-    for pl in state.point_lights
-    {
-      // Try to add shadow casting to the shadow casting array first
-      if pl.cast_shadows && frame_ubo.shadow_points_count <= MAX_SHADOW_POINT_LIGHTS
-      {
-        idx := frame_ubo.shadow_points_count
-        frame_ubo.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
-        frame_ubo.shadow_points_count += 1
-      }
-      else
-      {
-        // If we had too many try to add to the normal point lights
-        if pl.cast_shadows
-        {
-          log.errorf("Too many shadow casting point lights! Attempting to add to non shadow casting lights.")
-        }
-
-        if frame_ubo.points_count <= MAX_POINT_LIGHTS
-        {
-          idx := frame_ubo.points_count
-          frame_ubo.point_lights[idx] = point_light_uniform(pl)
-          frame_ubo.points_count += 1
-        }
-        else
-        {
-          log.errorf("Too many point lights! Ignoring.")
-        }
-      }
-    }
-  }
-
-  write_gpu_buffer_frame(state.frame_uniforms, 0, size_of(frame_ubo), &frame_ubo)
-  bind_gpu_buffer_frame_range(state.frame_uniforms, .FRAME)
-
-  bind_gpu_buffer_frame_range(state.mds.draw_uniforms, .DRAW_UNIFORMS)
-}
-
-flush_drawing :: proc()
-{
-  immediate_frame_reset()
-
-  // And set up for next frame
-  frame := &state.frames[state.curr_frame_index]
-  frame.fence = gl.FenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-  state.curr_frame_index = (state.curr_frame_index + 1) % FRAMES_IN_FLIGHT
-
-  state.began_drawing = false
-
-  reset_multi_draw(&state.mds)
-
-  glfw.SwapBuffers(state.window.handle)
-}
+// begin_drawing :: proc()
+// {
+//   // Probably fine to have a little bit of fragmenting in perm_arena...
+//   // only going to be doing hot reloads while developing
+//   when ODIN_DEBUG
+//   {
+//     hot_reload_shaders(&state.shaders, state.perm_alloc)
+//   }
+//
+//   frame := &state.frames[state.curr_frame_index]
+//   if frame.fence != nil
+//   {
+//     gl.ClientWaitSync(frame.fence, gl.SYNC_FLUSH_COMMANDS_BIT, U64_MAX)
+//     gl.DeleteSync(frame.fence)
+//
+//     frame.fence = nil
+//   }
+//
+//   clear := BLACK
+//   clear_framebuffer(DEFAULT_FRAMEBUFFER, clear)
+//   clear_framebuffer(state.hdr_ms_buffer, clear)
+//   clear_framebuffer(state.post_buffer, clear)
+//   clear_framebuffer(state.ping_pong_buffers[0], clear)
+//   clear_framebuffer(state.ping_pong_buffers[1], clear)
+//
+//   state.began_drawing = true
+//
+//   //
+//   // Update frame uniform
+//   //
+//   projection := camera_perspective(state.camera, window_aspect_ratio(state.window))
+//   view       := camera_view(state.camera)
+//   frame_ubo: Frame_Uniform =
+//   {
+//     projection      = projection,
+//     view            = view,
+//     proj_view       = projection * view,
+//     orthographic    = mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, state.camera.z_near, state.camera.z_far),
+//     camera_position = {state.camera.position.x, state.camera.position.y, state.camera.position.z,  0.0},
+//     z_near          = state.camera.z_near,
+//     z_far           = state.camera.z_far,
+//
+//     // And the lights
+//     sun_light   = direction_light_uniform(state.sun) if state.sun_on else {},
+//     flash_light = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
+//   }
+//
+//   if state.point_lights_on
+//   {
+//     for pl in state.point_lights
+//     {
+//       // Try to add shadow casting to the shadow casting array first
+//       if pl.cast_shadows && frame_ubo.shadow_points_count <= MAX_SHADOW_POINT_LIGHTS
+//       {
+//         idx := frame_ubo.shadow_points_count
+//         frame_ubo.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
+//         frame_ubo.shadow_points_count += 1
+//       }
+//       else
+//       {
+//         // If we had too many try to add to the normal point lights
+//         if pl.cast_shadows
+//         {
+//           log.errorf("Too many shadow casting point lights! Attempting to add to non shadow casting lights.")
+//         }
+//
+//         if frame_ubo.points_count <= MAX_POINT_LIGHTS
+//         {
+//           idx := frame_ubo.points_count
+//           frame_ubo.point_lights[idx] = point_light_uniform(pl)
+//           frame_ubo.points_count += 1
+//         }
+//         else
+//         {
+//           log.errorf("Too many point lights! Ignoring.")
+//         }
+//       }
+//     }
+//   }
+//
+//   write_gpu_buffer_frame(state.frame_uniforms, 0, size_of(frame_ubo), &frame_ubo)
+//   bind_gpu_buffer_frame_range(state.frame_uniforms, .FRAME)
+//
+//   bind_gpu_buffer_frame_range(state.mds.draw_uniforms, .DRAW_UNIFORMS)
+// }
+//
+// flush_drawing :: proc()
+// {
+//   immediate_frame_reset()
+//
+//   // And set up for next frame
+//   frame := &state.frames[state.curr_frame_index]
+//   frame.fence = gl.FenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
+//   state.curr_frame_index = (state.curr_frame_index + 1) % FRAMES_IN_FLIGHT
+//
+//   state.began_drawing = false
+//
+//   reset_multi_draw(&state.mds)
+//
+//   glfw.SwapBuffers(state.window.handle)
+// }
 
 resize_window :: proc(window: ^Window) -> (ok: bool)
 {

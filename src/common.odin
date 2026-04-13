@@ -20,7 +20,8 @@ FRAMES_IN_FLIGHT :: 3
 TARGET_FPS :: 240
 TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
 
-Program_Mode :: enum {
+Program_Mode :: enum
+{
   GAME,
   MENU,
   EDIT,
