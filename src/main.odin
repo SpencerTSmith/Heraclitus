@@ -252,6 +252,8 @@ main :: proc()
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
+  draw_target := alloc_texture(.D2, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h), is_render_target=true)
+
   for !should_close(state.window)
   {
     // dt and sleeping
@@ -270,9 +272,11 @@ main :: proc()
 
     poll_input_state(state.window, dt_s)
 
-    begin_drawing()
-    flush_drawing()
+    begin_drawing(draw_target)
+    flush_drawing(draw_target)
   }
+
+  free_texture(&draw_target)
 }
 
 free_state :: proc()

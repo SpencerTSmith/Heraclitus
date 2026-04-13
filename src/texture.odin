@@ -79,7 +79,9 @@ make_texture_from_missing :: proc() -> (texture: Texture)
 
 free_texture :: proc(texture: ^Texture)
 {
-
+  vk.DestroyImage(vk_device(), texture.image, nil)
+  vk.DestroyImageView(vk_device(), texture.view, nil)
+  texture^ = {}
 }
 
 bind_texture :: proc
@@ -109,12 +111,29 @@ bind_texture_by_asset :: proc(name: string, handle: Texture_Handle)
   bind_texture_to_name(name, texture)
 }
 
+pixel_format_to_vk_aspects :: proc(format: Pixel_Format) -> (aspects: vk.ImageAspectFlags)
+{
+  switch format
+  {
+    case .NONE: assert(false)
+    case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
+      aspects += {.COLOR}
+    case .DEPTH24_STENCIL8:
+      aspects += {.STENCIL}
+      fallthrough
+    case .DEPTH32:
+      aspects += {.DEPTH}
+  }
+
+  return aspects
+}
+
 // First value is the internal format and the second is the logical format
 // Ie you pass the first to TextureStorage and the second to TextureSubImage
 
 // TODO: Cubemaps
 alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
-                      width, height: u32, samples: u32 = 0, array_count: u32 = 0, is_render_target := false) -> (texture: Texture)
+                      width, height: u32, samples: u32 = 1, array_count: u32 = 1, is_render_target := false) -> (texture: Texture)
 {
   assert(width > 0 && height > 0)
 
@@ -154,7 +173,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
 
   if is_render_target
   {
-    usage += {.STORAGE}
+    usage += {.STORAGE, .TRANSFER_SRC}
     if format == .DEPTH32 || format == .DEPTH24_STENCIL8
     {
       usage += {.DEPTH_STENCIL_ATTACHMENT}
@@ -172,7 +191,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
   {
     sType       = .IMAGE_CREATE_INFO,
     imageType   = .D2, // NOTE: Hardcoded.
-    extent      = {width, height, 0}, // NOTE: Hardcoded.
+    extent      = {width, height, 1}, // NOTE: Hardcoded.
     format      = vk_format_table[format],
     mipLevels   = mip_count, // TODO: Generate mipmaps.
     arrayLayers = array_count,
@@ -194,19 +213,6 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
 
   components: vk.ComponentMapping = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY} if format != .R8 else {.R, .R, .R, .R }
 
-  aspects: vk.ImageAspectFlags
-  switch format
-  {
-    case .NONE: assert(false)
-    case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
-      aspects += {.COLOR}
-    case .DEPTH24_STENCIL8:
-      aspects += {.STENCIL}
-      fallthrough
-    case .DEPTH32:
-      aspects += {.DEPTH}
-  }
-
   vk_arena_push_image(.DEVICE, texture.image)
 
   view_info: vk.ImageViewCreateInfo =
@@ -216,7 +222,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
     format     = image_info.format,
     viewType   = vk_view_type_table[type],
     components = components,
-    subresourceRange = vk_image_range(aspects)
+    subresourceRange = vk_image_range(pixel_format_to_vk_aspects(format), mip_count = mip_count,  array_count = array_count)
   }
 
   vk_assert(vk.CreateImageView(vk_device(), &view_info, nil, &texture.view),
@@ -234,6 +240,41 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
   return texture
 }
 
+// NOTE: Hardcoded to just blit everything entirely
+blit_textures :: proc(src, dst: Texture, src_w, src_h, dst_w, dst_h: u32)
+{
+  blit_region :vk.ImageBlit2 =
+  {
+    sType = .IMAGE_BLIT_2,
+    srcOffsets = {{0,0,0}, {i32(src_w), i32(src_h), 1}},
+    srcSubresource =
+    {
+      aspectMask = pixel_format_to_vk_aspects(src.format),
+      layerCount = src.array_count,
+    },
+    dstOffsets = {{0,0,0}, {i32(dst_w), i32(dst_h), 1}},
+    dstSubresource =
+    {
+      aspectMask = pixel_format_to_vk_aspects(dst.format),
+      layerCount = dst.array_count,
+    },
+  }
+
+  blit_info: vk.BlitImageInfo2 =
+  {
+    sType          = .BLIT_IMAGE_INFO_2,
+    srcImage       = src.image,
+    srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+    dstImage       = dst.image,
+    dstImageLayout = .TRANSFER_DST_OPTIMAL,
+    filter         = .LINEAR,
+    pRegions       = &blit_region,
+    regionCount    = 1,
+  }
+
+  vk.CmdBlitImage2(vk_cmd(), &blit_info)
+}
+
 make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                                datas: []rawptr, width, height: u32, samples: u32 = 0) -> (texture: Texture)
 {
@@ -245,7 +286,6 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
 // Creates a handle, makes it resident, appends to the end of the texture_handles gpu_buffer, and returns its index
 make_texture_bindless :: proc(texture: ^Texture)
 {
-
 }
 
 format_for_channels :: proc(channels: u32, nonlinear_color: bool = false) -> Pixel_Format

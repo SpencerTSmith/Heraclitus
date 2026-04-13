@@ -790,7 +790,7 @@ make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
   return arena, ok
 }
 
-begin_drawing :: proc()
+begin_drawing :: proc(draw_into: Texture)
 {
   A_SECOND :: 1000000000
 
@@ -819,28 +819,42 @@ begin_drawing :: proc()
   vk_assert(vk.BeginCommandBuffer(frame.buffer, &buffer_info),
             "Unable to begin vulkan command buffer recording.")
 
-  // Barrier on swapchain image to be writable
-  vk_transition_image(frame.buffer, target.image,
+  vk_transition_image(frame.buffer, draw_into.image,
                       .UNDEFINED, .GENERAL,
-                      {.TOP_OF_PIPE}, {}, // Top of pipe since we already waited on sem, no src access
-                      {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}) // Writing to the color part
-
+                      {.TOP_OF_PIPE}, {},
+                      {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE})
 
   range := vk_image_range({.COLOR})
   color: vk.ClearColorValue = { float32 = LEARN_OPENGL_BLUE }
-  vk.CmdClearColorImage(frame.buffer, target.image, .GENERAL, &color, 1, &range)
+  vk.CmdClearColorImage(frame.buffer, draw_into.image, .GENERAL, &color, 1, &range)
 }
 
-flush_drawing :: proc()
+flush_drawing :: proc(to_display: Texture)
 {
   frame := vks.frames[vks.curr_index[.FRAME]]
   target := vks.swapchain.targets[vks.curr_index[.TARGET]]
 
+
+
   // Barrier for all color writes to be finished to the final image
-  vk_transition_image(frame.buffer, target.image,
-                      .GENERAL, .PRESENT_SRC_KHR,
+  vk_transition_image(frame.buffer, to_display.image,
+                      .GENERAL, .TRANSFER_SRC_OPTIMAL,
                       {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}, // We've written to it
                       {.BOTTOM_OF_PIPE}, {}) // We are done with this image
+
+  // Transfer swapchain image to be ready for blitting draw image to it.
+  vk_transition_image(frame.buffer, target.image,
+                      .UNDEFINED, .TRANSFER_DST_OPTIMAL,
+                      {.TOP_OF_PIPE}, {}, // Top of pipe since we already waited on sem, no src access
+                      {.TRANSFER}, {.TRANSFER_WRITE}) // Blit destination
+
+  vk_blit_images(to_display.image, target.image, to_display.width, to_display.height,
+                 vks.swapchain.extent.width, vks.swapchain.extent.height)
+
+  vk_transition_image(frame.buffer, target.image,
+                      .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR,
+                      {.TRANSFER}, {.TRANSFER_WRITE},
+                      {.BOTTOM_OF_PIPE}, {})
 
   vk_assert(vk.EndCommandBuffer(frame.buffer),
             "Unable to end vulkan command buffer recording.")
@@ -891,10 +905,54 @@ flush_drawing :: proc()
   vks.curr_index[.TARGET] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
+// NOTE: Hardcoded for color, mostly just for blitting from a texture to a swap image
+vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
+{
+  blit_region :vk.ImageBlit2 =
+  {
+    sType = .IMAGE_BLIT_2,
+    srcOffsets = {{0,0,0}, {i32(src_w), i32(src_h), 1}},
+    srcSubresource =
+    {
+      aspectMask = {.COLOR},
+      layerCount = 1,
+    },
+    dstOffsets = {{0,0,0}, {i32(dst_w), i32(dst_h), 1}},
+    dstSubresource =
+    {
+      aspectMask = {.COLOR},
+      layerCount = 1,
+    },
+  }
+
+  blit_info: vk.BlitImageInfo2 =
+  {
+    sType          = .BLIT_IMAGE_INFO_2,
+    srcImage       = src,
+    srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+    dstImage       = dst,
+    dstImageLayout = .TRANSFER_DST_OPTIMAL,
+    filter         = .LINEAR,
+    pRegions       = &blit_region,
+    regionCount    = 1,
+  }
+
+  vk.CmdBlitImage2(vk_cmd(), &blit_info)
+}
+
 vk_device :: proc() -> vk.Device
 {
   assert(vks.logical != nil)
+
   return vks.logical
+}
+
+vk_cmd :: proc() -> (buffer: vk.CommandBuffer)
+{
+  buffer = vks.frames[vks.curr_index[.FRAME]].buffer
+  assert(buffer != nil)
+
+  return buffer
 }
 
 vk_arena_push :: proc(arena: Vulkan_Arena_Kind, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
@@ -956,11 +1014,11 @@ vk_image_range :: proc(aspects: vk.ImageAspectFlags,
 
 @(private="file")
 vk_transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
-                         old, new:   vk.ImageLayout,
-                         src_stage:  vk.PipelineStageFlags2,
-                         src_access: vk.AccessFlags2,
-                         dst_stage:  vk.PipelineStageFlags2,
-                         dst_access: vk.AccessFlags2)
+                            old, new:   vk.ImageLayout,
+                            src_stage:  vk.PipelineStageFlags2,
+                            src_access: vk.AccessFlags2,
+                            dst_stage:  vk.PipelineStageFlags2,
+                            dst_access: vk.AccessFlags2)
 {
   barrier: vk.ImageMemoryBarrier2 =
   {
@@ -989,8 +1047,16 @@ free_vulkan :: proc()
 {
   vk.DeviceWaitIdle(vks.logical)
 
-  for arena in vks.arenas
+  for arena, kind in vks.arenas
   {
+    extra_used := arena.memory_offset - arena.buffer_size
+    extra_max  := arena.memory_size - arena.buffer_size
+
+    extra_percent  := f64(extra_used) / f64(extra_max)
+    buffer_percent := f64(arena.buffer_offset) / f64(arena.buffer_size)
+
+    log.infof("Arena %v:\n buffer used: %v/%v(%f)\n extra used: %v/%v(%f)",
+              kind, arena.buffer_offset, arena.buffer_size, buffer_percent, extra_used, extra_max, extra_percent)
     vk.FreeMemory(vks.logical, arena.memory, nil)
     vk.DestroyBuffer(vks.logical, arena.buffer, nil)
   }
