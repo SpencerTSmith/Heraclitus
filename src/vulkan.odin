@@ -8,6 +8,7 @@ import "core:mem"
 import "vendor:glfw"
 import vk "vendor:vulkan"
 
+Renderer_Internal :: distinct u64
 
 Queue_Kind :: enum
 {
@@ -15,10 +16,10 @@ Queue_Kind :: enum
   PRESENT,
 }
 
-Swapchain :: struct($N: int) // Is this voodoo?
+Swapchain :: struct
 {
   handle: vk.SwapchainKHR,
-  targets: [dynamic; N]struct
+  targets: [dynamic; 3]struct
   {
     image:     vk.Image,
     view:      vk.ImageView,
@@ -55,6 +56,25 @@ Vulkan_Arena :: struct
   buffer_size:   vk.DeviceSize,
 }
 
+Vulkan_Image :: struct
+{
+  image: vk.Image,
+  view:  vk.ImageView,
+}
+
+Vulkan_Pipeline :: struct
+{
+  pipeline: vk.Pipeline,
+  layout:   vk.PipelineLayout,
+}
+
+// Internal API Objects
+Vulkan_Internal :: union
+{
+  Vulkan_Image,
+  Vulkan_Pipeline,
+}
+
 Vulkan_State :: struct
 {
   instance:   vk.Instance,
@@ -63,10 +83,13 @@ Vulkan_State :: struct
   logical:    vk.Device,
   queues:     [Queue_Kind]vk.Queue,
   surface:    vk.SurfaceKHR,
-  swapchain:  Swapchain(3),
+  swapchain:  Swapchain,
   frames:     [3]Frame_State,
   curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
   arenas:     [Vulkan_Arena_Kind]Vulkan_Arena,
+
+  // API Object Pool
+  internals: [dynamic; 512]Vulkan_Internal,
 }
 
 @(private="file")
@@ -192,30 +215,10 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
     }
     vk.GetPhysicalDeviceFeatures2(device, &supported_device_features)
 
-    // TODO: Metaprogramming, can just read struct fields
-
     props: vk.PhysicalDeviceProperties
     vk.GetPhysicalDeviceProperties(device, &props)
-    queue_families: []vk.QueueFamilyProperties
-    {
-      queue_family_count: u32
-      vk.GetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, nil)
-      queue_families = make([]vk.QueueFamilyProperties, queue_family_count, context.temp_allocator)
-      vk.GetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, raw_data(queue_families))
-    }
 
-    // Support for all needed queues
-    indices: [Queue_Kind]union{u32}
-    for family, idx in queue_families
-    {
-      idx := u32(idx)
-
-      if .GRAPHICS in family.queueFlags { indices[.GRAPHICS] = idx}
-
-      present_support: b32
-      vk.GetPhysicalDeviceSurfaceSupportKHR(device, idx, surface, &present_support)
-      if present_support { indices[.PRESENT] = idx }
-    }
+    indices := get_queue_indices(device, surface)
 
     suitable := props.deviceType == .DISCRETE_GPU
     // Check all families supported
@@ -596,83 +599,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // Create Swapchain
       // // //
 
-      surface_format := choose_surface_format(vks.physical, vks.surface)
-      present_mode := choose_present_mode(vks.physical, vks.surface)
-      extent, image_count, capabilities := choose_surface_capabilities(window, vks.physical, vks.surface)
-
-      // Finally clamp image count less than defined max targets
-      image_count = min(image_count, cap(vks.swapchain.targets))
-
-      swapchain_info: vk.SwapchainCreateInfoKHR =
-      {
-        sType            = .SWAPCHAIN_CREATE_INFO_KHR,
-        surface          = vks.surface,
-        minImageCount    = image_count,
-        imageFormat      = surface_format.format,
-        imageColorSpace  = surface_format.colorSpace,
-        imageExtent      = extent,
-        imageArrayLayers = 1,
-        imageUsage       = {.COLOR_ATTACHMENT, .TRANSFER_DST},
-        preTransform     = capabilities.currentTransform,
-        compositeAlpha   = {.OPAQUE},
-        presentMode      = present_mode,
-        clipped          = true,
-        imageSharingMode = .EXCLUSIVE, // By default
-      }
-
-      // HACK: Not really sure what this would really entail, but tutorials say to do this.
-      if queue_indices[.GRAPHICS] != queue_indices[.PRESENT]
-      {
-        as_array := []u32{queue_indices[.GRAPHICS].(u32), queue_indices[.PRESENT].(u32)}
-        swapchain_info.imageSharingMode = .CONCURRENT
-        swapchain_info.queueFamilyIndexCount = u32(len(as_array))
-        swapchain_info.pQueueFamilyIndices   = raw_data(as_array)
-      }
-
-      vk_assert(vk.CreateSwapchainKHR(vks.logical, &swapchain_info, nil, &vks.swapchain.handle),
-                "Unable to create vulkan swapchain.")
-
-      vks.swapchain.format = surface_format.format
-      vks.swapchain.extent = extent
-
-      actual_image_count: u32
-      vk.GetSwapchainImagesKHR(vks.logical, vks.swapchain.handle, &actual_image_count, nil)
-      assert(actual_image_count <= cap(vks.swapchain.targets) && actual_image_count == image_count)
-      temp_images: [cap(vks.swapchain.targets)]vk.Image
-      vk.GetSwapchainImagesKHR(vks.logical, vks.swapchain.handle, &actual_image_count, raw_data(temp_images[:]))
-
-      resize(&vks.swapchain.targets, actual_image_count)
-      for &target, i in &vks.swapchain.targets
-      {
-        target.image = temp_images[i]
-
-        view_info: vk.ImageViewCreateInfo =
-        {
-          sType    = .IMAGE_VIEW_CREATE_INFO,
-          image    = target.image,
-          format   = vks.swapchain.format,
-          viewType = .D2,
-          components = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY},
-          subresourceRange =
-          {
-            aspectMask     = {.COLOR},
-            baseMipLevel   = 0,
-            levelCount     = 1,
-            baseArrayLayer = 0,
-            layerCount     = 1,
-          },
-        }
-
-        vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &target.view),
-                  "Unable to create vulkan swapchain image view.")
-
-        semaphore_info: vk.SemaphoreCreateInfo =
-        {
-          sType = .SEMAPHORE_CREATE_INFO,
-        }
-        vk_assert(vk.CreateSemaphore(vks.logical, &semaphore_info, nil, &target.semaphore),
-                  "Unable to create vulkan swapchain image semaphore.")
-      }
+      vks.swapchain = make_swapchain(window, vks.logical, vks.physical, vks.surface, {})
 
       // // //
       // Frame stuff
@@ -740,6 +667,123 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
   return true
 }
 
+get_queue_indices :: proc(physical: vk.PhysicalDevice, surface: vk.SurfaceKHR) -> (queue_indices: [Queue_Kind]union{u32})
+{
+  queue_families: []vk.QueueFamilyProperties
+  {
+    queue_family_count: u32
+    vk.GetPhysicalDeviceQueueFamilyProperties(physical, &queue_family_count, nil)
+    queue_families = make([]vk.QueueFamilyProperties, queue_family_count, context.temp_allocator)
+    vk.GetPhysicalDeviceQueueFamilyProperties(physical, &queue_family_count, raw_data(queue_families))
+  }
+
+  for family, idx in queue_families
+  {
+    idx := u32(idx)
+
+    if .GRAPHICS in family.queueFlags { queue_indices[.GRAPHICS] = idx}
+
+    present_support: b32
+    vk.GetPhysicalDeviceSurfaceSupportKHR(physical, idx, surface, &present_support)
+    if present_support { queue_indices[.PRESENT] = idx }
+  }
+
+  return queue_indices
+}
+
+@(private="file")
+make_swapchain :: proc(window: Window, logical: vk.Device, physical: vk.PhysicalDevice, surface: vk.SurfaceKHR, old: Swapchain) -> (new: Swapchain)
+{
+  if old.handle != 0
+  {
+    vk.DeviceWaitIdle(logical)
+    free_swapchain(old)
+  }
+
+  surface_format := choose_surface_format(physical, surface)
+  present_mode := choose_present_mode(physical, surface)
+  extent, image_count, capabilities := choose_surface_capabilities(window, physical, surface)
+
+  // Finally clamp image count less than defined max targets
+  image_count = min(image_count, cap(new.targets))
+
+  swapchain_info: vk.SwapchainCreateInfoKHR =
+  {
+    sType            = .SWAPCHAIN_CREATE_INFO_KHR,
+    surface          = surface,
+    minImageCount    = image_count,
+    imageFormat      = surface_format.format,
+    imageColorSpace  = surface_format.colorSpace,
+    imageExtent      = extent,
+    imageArrayLayers = 1,
+    imageUsage       = {.COLOR_ATTACHMENT, .TRANSFER_DST},
+    preTransform     = capabilities.currentTransform,
+    compositeAlpha   = {.OPAQUE},
+    presentMode      = present_mode,
+    clipped          = true,
+    imageSharingMode = .EXCLUSIVE, // By default
+    oldSwapchain     = old.handle,
+  }
+
+  queue_indices := get_queue_indices(physical, surface)
+
+  // HACK: Not really sure what this would really entail, but tutorials say to do this.
+  if queue_indices[.GRAPHICS] != queue_indices[.PRESENT]
+  {
+    as_array := []u32{queue_indices[.GRAPHICS].(u32), queue_indices[.PRESENT].(u32)}
+    swapchain_info.imageSharingMode = .CONCURRENT
+    swapchain_info.queueFamilyIndexCount = u32(len(as_array))
+    swapchain_info.pQueueFamilyIndices   = raw_data(as_array)
+  }
+
+  vk_assert(vk.CreateSwapchainKHR(logical, &swapchain_info, nil, &new.handle),
+            "Unable to create vulkan swapchain.")
+
+  new.format = surface_format.format
+  new.extent = extent
+
+  actual_image_count: u32
+  vk.GetSwapchainImagesKHR(logical, new.handle, &actual_image_count, nil)
+  assert(actual_image_count <= cap(new.targets) && actual_image_count == image_count)
+  temp_images: [cap(new.targets)]vk.Image
+  vk.GetSwapchainImagesKHR(logical, new.handle, &actual_image_count, raw_data(temp_images[:]))
+
+  resize(&new.targets, actual_image_count)
+  for &target, i in &new.targets
+  {
+    target.image = temp_images[i]
+
+    view_info: vk.ImageViewCreateInfo =
+    {
+      sType    = .IMAGE_VIEW_CREATE_INFO,
+      image    = target.image,
+      format   = new.format,
+      viewType = .D2,
+      components = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY},
+      subresourceRange =
+      {
+        aspectMask     = {.COLOR},
+        baseMipLevel   = 0,
+        levelCount     = 1,
+        baseArrayLayer = 0,
+        layerCount     = 1,
+      },
+    }
+
+    vk_assert(vk.CreateImageView(logical, &view_info, nil, &target.view),
+              "Unable to create vulkan swapchain image view.")
+
+    semaphore_info: vk.SemaphoreCreateInfo =
+    {
+      sType = .SEMAPHORE_CREATE_INFO,
+    }
+    vk_assert(vk.CreateSemaphore(logical, &semaphore_info, nil, &target.semaphore),
+              "Unable to create vulkan swapchain image semaphore.")
+  }
+
+  return new
+}
+
 @(private="file")
 make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
                             buffer_size: vk.DeviceSize, buffer_usage: vk.BufferUsageFlags,
@@ -762,7 +806,7 @@ make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
   combined_memory_requirements := buffer_memory_requirements
   combined_memory_requirements.size += extra_size
 
-  arena.memory_type, ok = pick_memory_type(physical, combined_memory_requirements, {.DEVICE_LOCAL})
+  arena.memory_type, ok = pick_memory_type(physical, combined_memory_requirements, memory_properties)
   if ok
   {
     allocate_info: vk.MemoryAllocateInfo =
@@ -790,8 +834,22 @@ make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
   return arena, ok
 }
 
-begin_drawing :: proc(draw_into: Texture)
+@(private="file")
+vk_get_render_internal :: proc(internal: Renderer_Internal) -> (vulkan: Vulkan_Internal)
 {
+  return vks.internals[internal]
+}
+
+@(private="file")
+vk_get_image :: proc(internal: Renderer_Internal) -> (image: Vulkan_Image)
+{
+  return vk_get_render_internal(internal).(Vulkan_Image)
+}
+
+begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
+{
+  ok = true
+
   A_SECOND :: 1000000000
 
   frame := vks.frames[vks.curr_index[.FRAME]]
@@ -802,31 +860,95 @@ begin_drawing :: proc(draw_into: Texture)
             "Unable to reset vulkan fence.")
 
   // Try to acquire an image, when we do: signal this frames semaphore we can start rendering.
-  vk_assert(vk.AcquireNextImageKHR(vks.logical, vks.swapchain.handle, A_SECOND,
-            frame.semaphore, {}, &vks.curr_index[.TARGET]),
-            "Unable to acquire next vulkan swapchain image.")
-
-  vk_assert(vk.ResetCommandPool(vks.logical, frame.pool, {}),
-            "Unable to reset vulkan command pool.")
-
-  target := vks.swapchain.targets[vks.curr_index[.TARGET]]
-
-  buffer_info: vk.CommandBufferBeginInfo =
+  if acquire := vk.AcquireNextImageKHR(vks.logical, vks.swapchain.handle, A_SECOND, frame.semaphore, {}, &vks.curr_index[.TARGET]);
+     acquire != .SUCCESS
   {
-    sType = .COMMAND_BUFFER_BEGIN_INFO,
-    flags = {.ONE_TIME_SUBMIT},
+    if state.window.should_resize || acquire == .ERROR_OUT_OF_DATE_KHR
+    {
+      log.infof("Resizing swapchain.")
+      vks.swapchain = make_swapchain(state.window, vks.logical, vks.physical, vks.surface, vks.swapchain)
+      state.window.should_resize = false
+    }
+    else
+    {
+      log.errorf("Unable to acquire next vulkan swapchain image: %v.", acquire)
+    }
+
+    ok = false
   }
-  vk_assert(vk.BeginCommandBuffer(frame.buffer, &buffer_info),
-            "Unable to begin vulkan command buffer recording.")
 
-  vk_transition_image(frame.buffer, draw_into.image,
-                      .UNDEFINED, .GENERAL,
-                      {.TOP_OF_PIPE}, {},
-                      {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE})
+  if ok
+  {
+    vk_assert(vk.ResetCommandPool(vks.logical, frame.pool, {}),
+      "Unable to reset vulkan command pool.")
 
-  range := vk_image_range({.COLOR})
-  color: vk.ClearColorValue = { float32 = LEARN_OPENGL_BLUE }
-  vk.CmdClearColorImage(frame.buffer, draw_into.image, .GENERAL, &color, 1, &range)
+    buffer_info: vk.CommandBufferBeginInfo =
+    {
+      sType = .COMMAND_BUFFER_BEGIN_INFO,
+      flags = {.ONE_TIME_SUBMIT},
+    }
+    vk_assert(vk.BeginCommandBuffer(frame.buffer, &buffer_info),
+      "Unable to begin vulkan command buffer recording.")
+
+    draw_image := vk_get_image(draw_into.internal)
+
+    vk_transition_image(frame.buffer, draw_image.image,
+                        .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL,
+                        {.TOP_OF_PIPE}, {},
+                        {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE})
+
+    color: vk.ClearColorValue = { float32 = LEARN_OPENGL_ORANGE }
+    color_attachment: vk.RenderingAttachmentInfo =
+    {
+      sType       = .RENDERING_ATTACHMENT_INFO,
+      imageView   = draw_image.view,
+      imageLayout = .COLOR_ATTACHMENT_OPTIMAL, // TODO
+      loadOp      = .CLEAR,
+      storeOp     = .STORE,
+      clearValue  = { color = color }
+    }
+    rendering_info: vk.RenderingInfo =
+    {
+      sType                = .RENDERING_INFO,
+      renderArea           = { extent = { draw_into.width, draw_into.height} },
+      layerCount           = 1,
+      colorAttachmentCount = 1,
+      pColorAttachments    = &color_attachment,
+    }
+
+    vk.CmdBeginRendering(frame.buffer, &rendering_info)
+    vk.CmdBindPipeline(frame.buffer, .GRAPHICS, vk_get_render_internal(triangle.internal).(Vulkan_Pipeline).pipeline)
+
+    viewport: vk.Viewport =
+    {
+        width    = f32(draw_into.width),
+        height   = f32(draw_into.height),
+        minDepth = 0.0,
+        maxDepth = 1.0,
+    }
+    scissor: vk.Rect2D =
+    {
+        offset = { 0, 0 },
+        extent = { draw_into.width, draw_into.height },
+    }
+    vk.CmdSetViewport(frame.buffer, 0, 1, &viewport)
+    vk.CmdSetScissor(frame.buffer, 0, 1, &scissor)
+    vk.CmdSetCullMode(frame.buffer, {})
+    vk.CmdSetFrontFace(frame.buffer, .COUNTER_CLOCKWISE)
+    vk.CmdSetDepthTestEnable(frame.buffer, false)
+    vk.CmdSetDepthWriteEnable(frame.buffer, false)
+    vk.CmdSetDepthCompareOp(frame.buffer, .LESS_OR_EQUAL)
+    vk.CmdSetDepthBiasEnable(frame.buffer, false)
+    vk.CmdSetStencilTestEnable(frame.buffer, false)
+    vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
+    vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
+
+    vk.CmdDraw(frame.buffer, 3, 1, 0, 0)
+
+    vk.CmdEndRendering(frame.buffer)
+  }
+
+  return ok
 }
 
 flush_drawing :: proc(to_display: Texture)
@@ -834,13 +956,13 @@ flush_drawing :: proc(to_display: Texture)
   frame := vks.frames[vks.curr_index[.FRAME]]
   target := vks.swapchain.targets[vks.curr_index[.TARGET]]
 
+  display_image := vk_get_image(to_display.internal)
 
-
-  // Barrier for all color writes to be finished to the final image
-  vk_transition_image(frame.buffer, to_display.image,
-                      .GENERAL, .TRANSFER_SRC_OPTIMAL,
+  // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
+  vk_transition_image(frame.buffer, display_image.image,
+                      .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL,
                       {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}, // We've written to it
-                      {.BOTTOM_OF_PIPE}, {}) // We are done with this image
+                      {.TRANSFER}, {.TRANSFER_READ}) // Now we want to writ it to the swapchain
 
   // Transfer swapchain image to be ready for blitting draw image to it.
   vk_transition_image(frame.buffer, target.image,
@@ -848,7 +970,7 @@ flush_drawing :: proc(to_display: Texture)
                       {.TOP_OF_PIPE}, {}, // Top of pipe since we already waited on sem, no src access
                       {.TRANSFER}, {.TRANSFER_WRITE}) // Blit destination
 
-  vk_blit_images(to_display.image, target.image, to_display.width, to_display.height,
+  vk_blit_images(display_image.image, target.image, to_display.width, to_display.height,
                  vks.swapchain.extent.width, vks.swapchain.extent.height)
 
   vk_transition_image(frame.buffer, target.image,
@@ -899,13 +1021,27 @@ flush_drawing :: proc(to_display: Texture)
     waitSemaphoreCount = 1,
     pImageIndices      = &vks.curr_index[.TARGET],
   }
-  vk_assert(vk.QueuePresentKHR(vks.queues[.PRESENT], &present_info),
-            "Unable to submit vulkan image presentation.")
 
-  vks.curr_index[.TARGET] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
+  if present := vk.QueuePresentKHR(vks.queues[.PRESENT], &present_info);
+     present != .SUCCESS
+  {
+    if state.window.should_resize || present == .ERROR_OUT_OF_DATE_KHR
+    {
+      log.infof("Resizing swapchain.")
+      vks.swapchain = make_swapchain(state.window, vks.logical, vks.physical, vks.surface, vks.swapchain)
+      state.window.should_resize = false
+    }
+    else
+    {
+      log.errorf("Unable to submit vulkan image for presentation: %v.", present)
+    }
+  }
+
+  vks.curr_index[.FRAME] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
 // NOTE: Hardcoded for color, mostly just for blitting from a texture to a swap image
+@(private="file")
 vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
 {
   blit_region :vk.ImageBlit2 =
@@ -940,13 +1076,6 @@ vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
   vk.CmdBlitImage2(vk_cmd(), &blit_info)
 }
 
-vk_device :: proc() -> vk.Device
-{
-  assert(vks.logical != nil)
-
-  return vks.logical
-}
-
 vk_cmd :: proc() -> (buffer: vk.CommandBuffer)
 {
   buffer = vks.frames[vks.curr_index[.FRAME]].buffer
@@ -955,6 +1084,7 @@ vk_cmd :: proc() -> (buffer: vk.CommandBuffer)
   return buffer
 }
 
+@(private="file")
 vk_arena_push :: proc(arena: Vulkan_Arena_Kind, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
 {
   aligned_offset = (vks.arenas[arena].memory_offset + alignment - 1) & ~(alignment - 1)
@@ -967,18 +1097,265 @@ vk_arena_push :: proc(arena: Vulkan_Arena_Kind, size: vk.DeviceSize, alignment: 
   return aligned_offset
 }
 
-vk_arena_push_image :: proc(arena: Vulkan_Arena_Kind, image: vk.Image)
+@(private="file")
+vk_push_internal :: proc(item: Vulkan_Internal) -> (internal: Renderer_Internal)
 {
-  requirements: vk.MemoryRequirements
-  vk.GetImageMemoryRequirements(vks.logical, image, &requirements)
+  assert(append(&vks.internals, item) == 1,
+         "Too many items for vulkan api object pool.")
 
-  assert(requirements.memoryTypeBits & (1 << vks.arenas[arena].memory_type) != 0,
+  return Renderer_Internal(len(vks.internals) - 1)
+}
+
+vk_format_table: [Pixel_Format]vk.Format =
+{
+  .NONE             = .UNDEFINED,
+  .R8               = .R8_UNORM,
+  .RGB8             = .R8G8B8_UNORM,
+  .RGBA8            = .R8G8B8A8_UNORM,
+  .SRGB8            = .R8G8B8_SRGB,
+  .SRGBA8           = .R8G8B8A8_SRGB,
+  .RGBA16F          = .R16G16B16A16_SFLOAT,
+  .DEPTH32          = .D32_SFLOAT,
+  .DEPTH24_STENCIL8 = .D24_UNORM_S8_UINT,
+}
+
+vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
+                         width, height, samples, array_count, mip_count: u32, is_render_target: bool) -> (handle: Renderer_Internal)
+{
+
+  vk_samples: vk.SampleCountFlags
+  switch samples
+  {
+    case:
+      log.errorf("Invalid sample count requested for texture.")
+      fallthrough // use 1 sample if invalid
+    case 1: vk_samples = {._1}
+    case 2: vk_samples = {._2}
+    case 4: vk_samples = {._4}
+    case 8: vk_samples = {._8}
+  }
+
+  usage: vk.ImageUsageFlags = {.TRANSFER_DST, .SAMPLED} // Always
+  if mip_count > 1 { usage += {.TRANSFER_SRC} } // Will have to read to generate mips
+
+  if is_render_target
+  {
+    usage += {.STORAGE, .TRANSFER_SRC}
+    if format == .DEPTH32 || format == .DEPTH24_STENCIL8
+    {
+      usage += {.DEPTH_STENCIL_ATTACHMENT}
+    }
+    else
+    {
+      usage += {.COLOR_ATTACHMENT}
+    }
+  }
+
+  flags: vk.ImageCreateFlags
+  if type == .CUBE || type == .CUBE_ARRAY { flags |= {.CUBE_COMPATIBLE} }
+
+  image_info: vk.ImageCreateInfo =
+  {
+    sType       = .IMAGE_CREATE_INFO,
+    imageType   = .D2, // NOTE: Hardcoded.
+    extent      = {width, height, 1}, // NOTE: Hardcoded.
+    format      = vk_format_table[format],
+    mipLevels   = mip_count, // TODO: Generate mipmaps.
+    arrayLayers = array_count,
+    samples     = vk_samples,
+    tiling      = .OPTIMAL, // Currently not ever reading back textures sooo.
+    usage       = usage,
+  }
+
+  image: Vulkan_Image
+
+  vk_assert(vk.CreateImage(vks.logical, &image_info, nil, &image.image),
+            "Unable to create vulkan image.")
+
+  vk_view_type_table: [Texture_Type]vk.ImageViewType =
+  {
+    .NONE = .D1, // Shouldn't happen
+    .D2   = .D2,
+    .CUBE = .CUBE,
+    .CUBE_ARRAY = .CUBE,
+  }
+
+  components: vk.ComponentMapping = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY} if format != .R8 else {.R, .R, .R, .R }
+
+  requirements: vk.MemoryRequirements
+  vk.GetImageMemoryRequirements(vks.logical, image.image, &requirements)
+
+  assert(requirements.memoryTypeBits & (1 << vks.arenas[.DEVICE].memory_type) != 0,
          "Image memory requirements not compatible with arena.")
 
-  memory_offset := vk_arena_push(arena, requirements.size, requirements.alignment)
+  memory_offset := vk_arena_push(.DEVICE, requirements.size, requirements.alignment)
 
-  vk_assert(vk.BindImageMemory(vks.logical, image, vks.arenas[arena].memory, memory_offset),
+  vk_assert(vk.BindImageMemory(vks.logical, image.image, vks.arenas[.DEVICE].memory, memory_offset),
             "Unable to bind vulkan image memory.")
+
+  view_info: vk.ImageViewCreateInfo =
+  {
+    sType      = .IMAGE_VIEW_CREATE_INFO,
+    image      = image.image,
+    format     = image_info.format,
+    viewType   = vk_view_type_table[type],
+    components = components,
+    subresourceRange = vk_image_range(pixel_format_to_vk_aspects(format), mip_count = mip_count,  array_count = array_count)
+  }
+
+  vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &image.view),
+            "Unable to create vulkan image view.")
+
+  return vk_push_internal(image)
+}
+
+vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_format: Pixel_Format) -> (internal: Renderer_Internal)
+{
+  make_shader_module :: proc(code: []byte) -> (module: vk.ShaderModule)
+  {
+    info: vk.ShaderModuleCreateInfo =
+    {
+      sType    = .SHADER_MODULE_CREATE_INFO,
+      pCode    = cast(^u32)raw_data(code),
+      codeSize = len(code),
+    }
+
+    vk_assert(vk.CreateShaderModule(vks.logical, &info, nil, &module),
+              "Unable to create vulkan shader module")
+
+    return module
+  }
+
+  vert_mod := make_shader_module(vert_code)
+  defer vk.DestroyShaderModule(vks.logical, vert_mod, nil)
+  frag_mod := make_shader_module(frag_code)
+  defer vk.DestroyShaderModule(vks.logical, frag_mod, nil)
+
+  // // //
+  // The Pain begins
+  // // //
+
+  stages: []vk.PipelineShaderStageCreateInfo =
+  {
+    { sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX}, module = vert_mod, pName = "main", },
+    { sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = frag_mod, pName = "main", }
+  }
+
+  // Do vertex pulling.
+  vertex: vk.PipelineVertexInputStateCreateInfo = { sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, }
+
+  assembly: vk.PipelineInputAssemblyStateCreateInfo =
+  {
+    sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+    topology = .TRIANGLE_LIST
+  }
+
+  // Always. From research most desktop gpus already have these in hardware as dynamic.
+  dynamic_states: []vk.DynamicState =
+  {
+    .VIEWPORT,
+    .SCISSOR,
+    .CULL_MODE,
+    .FRONT_FACE,
+    .DEPTH_TEST_ENABLE,
+    .DEPTH_WRITE_ENABLE,
+    .DEPTH_COMPARE_OP,
+    .DEPTH_BIAS_ENABLE,
+    .DEPTH_BIAS,
+    .STENCIL_OP,
+    .STENCIL_TEST_ENABLE,
+  }
+  dynamic_info: vk.PipelineDynamicStateCreateInfo =
+  {
+    sType             = .PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+    pDynamicStates    = raw_data(dynamic_states),
+    dynamicStateCount = u32(len(dynamic_states)),
+  }
+  viewport: vk.PipelineViewportStateCreateInfo =
+  {
+    sType         = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+    scissorCount  = 1,
+    viewportCount = 1,
+  }
+
+  rasterize: vk.PipelineRasterizationStateCreateInfo =
+  {
+    sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+    polygonMode = .FILL,
+    cullMode    = {.BACK},
+    frontFace   = .COUNTER_CLOCKWISE,
+    lineWidth   = 1.0,
+  }
+
+  // FIXME: Allow others
+  multisample: vk.PipelineMultisampleStateCreateInfo =
+  {
+    sType                = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+    rasterizationSamples = {._1},
+  }
+
+  // FIXME: Not allowing transparency
+  blend_attach: vk.PipelineColorBlendAttachmentState =
+  {
+    colorWriteMask = {.R, .G, .B, .A},
+    blendEnable    = false,
+  }
+  color_blend: vk.PipelineColorBlendStateCreateInfo =
+  {
+    sType           = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+    pAttachments    = &blend_attach,
+    attachmentCount = 1,
+  }
+
+  depth_stencil: vk.PipelineDepthStencilStateCreateInfo =
+  {
+    sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+  }
+
+  vk_color_format   := vk_format_table[color_format]
+  vk_depth_format   := vk_format_table[depth_format]
+  vk_stencil_format := vk_format_table[depth_format] if depth_format == .DEPTH24_STENCIL8 else .UNDEFINED
+  rendering: vk.PipelineRenderingCreateInfo =
+  {
+    sType                   = .PIPELINE_RENDERING_CREATE_INFO,
+    colorAttachmentCount    = 1 if color_format != .NONE else 0,
+    pColorAttachmentFormats = &vk_color_format,
+    depthAttachmentFormat   = vk_depth_format,
+    stencilAttachmentFormat = vk_stencil_format,
+  }
+
+  pipeline: Vulkan_Pipeline
+
+  // FIXME!
+  layout_info: vk.PipelineLayoutCreateInfo =
+  {
+    sType = .PIPELINE_LAYOUT_CREATE_INFO,
+  }
+
+  vk_assert(vk.CreatePipelineLayout(vks.logical, &layout_info, nil, &pipeline.layout),
+            "Unable to create vulkan pipeline layout.")
+
+  pipeline_info: vk.GraphicsPipelineCreateInfo =
+  {
+    sType               = .GRAPHICS_PIPELINE_CREATE_INFO,
+    pNext               = &rendering,
+    stageCount          = u32(len(stages)),
+    pStages             = raw_data(stages),
+    pColorBlendState    = &color_blend,
+    pDepthStencilState  = &depth_stencil,
+    pDynamicState       = &dynamic_info,
+    pInputAssemblyState = &assembly,
+    pMultisampleState   = &multisample,
+    pRasterizationState = &rasterize,
+    pVertexInputState   = &vertex,
+    pViewportState      = &viewport,
+    layout              = pipeline.layout,
+  }
+
+  vk_assert(vk.CreateGraphicsPipelines(vks.logical, {}, 1, &pipeline_info, nil, &pipeline.pipeline),
+            "Unable to create vulkan pipeline layout.")
+
+  return vk_push_internal(pipeline)
 }
 
 @(private="file")
@@ -1043,9 +1420,33 @@ vk_transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
   vk.CmdPipelineBarrier2(cmd, &dependency)
 }
 
+@(private="file")
+free_swapchain :: proc(swapchain: Swapchain)
+{
+  for target in vks.swapchain.targets
+  {
+    vk.DestroyImageView(vks.logical, target.view, nil)
+    vk.DestroySemaphore(vks.logical, target.semaphore, nil)
+  }
+  vk.DestroySwapchainKHR(vks.logical, vks.swapchain.handle, nil)
+}
+
 free_vulkan :: proc()
 {
   vk.DeviceWaitIdle(vks.logical)
+
+  for internal in vks.internals
+  {
+    switch i in internal
+    {
+      case Vulkan_Image:
+        vk.DestroyImage(vks.logical, i.image, nil)
+        vk.DestroyImageView(vks.logical, i.view, nil)
+      case Vulkan_Pipeline:
+        vk.DestroyPipeline(vks.logical, i.pipeline, nil)
+        vk.DestroyPipelineLayout(vks.logical, i.layout, nil)
+    }
+  }
 
   for arena, kind in vks.arenas
   {
@@ -1066,12 +1467,7 @@ free_vulkan :: proc()
     vk.DestroyFence(vks.logical, frame.fence, nil)
     vk.DestroySemaphore(vks.logical, frame.semaphore, nil)
   }
-  for target in vks.swapchain.targets
-  {
-    vk.DestroyImageView(vks.logical, target.view, nil)
-    vk.DestroySemaphore(vks.logical, target.semaphore, nil)
-  }
-  vk.DestroySwapchainKHR(vks.logical, vks.swapchain.handle, nil)
+  free_swapchain(vks.swapchain)
   vk.DestroySurfaceKHR(vks.instance, vks.surface, nil)
   vk.DestroyDevice(vks.logical, nil)
   when ODIN_DEBUG { vk.DestroyDebugUtilsMessengerEXT(vks. instance, vks.messenger, nil) }

@@ -1,14 +1,13 @@
 package main
 
-import "core:math/rand"
 import "core:mem"
 import "core:time"
-import "core:slice"
 import "core:log"
 import "base:runtime"
-import gl "vendor:OpenGL"
 
 import "vendor:glfw"
+
+triangle: Pipeline
 
 // TODO: Probably split game specific things from rendering specific things
 State :: struct {
@@ -57,7 +56,7 @@ State :: struct {
   point_lights_on: bool,
 
   // Could maybe replace this but this makes it easier to add them
-  shaders: [Shader_Tag]Shader_Program,
+  shaders: [Pipeline_Key]Pipeline,
 
   samplers: [Sampler_Preset]u32,
 
@@ -66,10 +65,6 @@ State :: struct {
   frame_uniforms: GPU_Buffer,
 
   mds: Multi_Draw_State,
-
-  // TODO: Maybe these should be pointers and not copies
-  current_shader:   Shader_Program,
-  bound_textures:   [16]Texture,
 
   input: Input_State,
 
@@ -156,14 +151,14 @@ init_state :: proc() -> (ok: bool)
       // Make the meta shader
       gen_glsl_code()
 
-      state.shaders[.PHONG]       = make_shader_program("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
-      state.shaders[.SKYBOX]      = make_shader_program("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
-      state.shaders[.RESOLVE_HDR] = make_shader_program("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
-      state.shaders[.SUN_DEPTH]   = make_shader_program("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
-      state.shaders[.POINT_DEPTH] = make_shader_program("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
-      state.shaders[.GAUSSIAN]    = make_shader_program("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
-      state.shaders[.GET_BRIGHT]  = make_shader_program("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
-
+      // state.shaders[.PHONG]       = make_pipeline("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
+      // state.shaders[.SKYBOX]      = make_pipeline("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
+      // state.shaders[.RESOLVE_HDR] = make_pipeline("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
+      // state.shaders[.SUN_DEPTH]   = make_pipeline("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
+      // state.shaders[.POINT_DEPTH] = make_pipeline("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
+      // state.shaders[.GAUSSIAN]    = make_pipeline("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
+      // state.shaders[.GET_BRIGHT]  = make_pipeline("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
+      //
       state.samplers = make_samplers()
 
       SAMPLES :: 4
@@ -254,6 +249,10 @@ main :: proc()
   dt_s := 0.0
   draw_target := alloc_texture(.D2, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h), is_render_target=true)
 
+  ok: bool
+  triangle, ok = make_pipeline(state.perm_alloc, "triangle.vert", "triangle.frag", draw_target.format)
+  assert(ok)
+
   for !should_close(state.window)
   {
     // dt and sleeping
@@ -272,8 +271,11 @@ main :: proc()
 
     poll_input_state(state.window, dt_s)
 
-    begin_drawing(draw_target)
-    flush_drawing(draw_target)
+    if begin_drawing(draw_target)
+    {
+      defer flush_drawing(draw_target)
+
+    }
   }
 
   free_texture(&draw_target)
@@ -292,7 +294,7 @@ free_state :: proc()
 
       for &shader in state.shaders
       {
-        free_shader_program(&shader)
+        // free_shader_program(&shader)
       }
     case .VULKAN:
       free_vulkan()

@@ -501,7 +501,7 @@ make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model
 
 draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, instances: int = 1, light_index: u32 = 0)
 {
-  assert(state.current_shader.id != 0)
+  // assert(state.current_shader.id != 0)
 
   for mesh in model.meshes
   {

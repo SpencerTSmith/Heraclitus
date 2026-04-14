@@ -31,7 +31,7 @@ Immediate_State :: struct
   vertex_buffer: GPU_Buffer,
   vertex_count:  int, // ALL vertices for current frame
 
-  shader:        Shader_Program,
+  // shader:        Shader_Program,
   white_texture: Texture_Handle,
 
   batches:    [dynamic; 256]Immediate_Batch,
@@ -63,7 +63,7 @@ init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 
   bind_gpu_buffer_base(immediate.vertex_buffer, .IMM_VERTICES)
 
-  immediate.shader, ok = make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc)
+  // immediate.shader, ok = make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc)
 
   immediate.white_texture = load_texture("white.png")
 
@@ -143,7 +143,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
 
   if immediate.vertex_count > 0
   {
-    bind_shader_program(immediate.shader)
+    // bind_shader_program(immediate.shader)
 
     bind_vertex_buffer(immediate.vertex_buffer)
 
@@ -177,11 +177,11 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
         case .SCREEN:
           if !flush_screen { continue } // We shouldn't flush screen immediates
 
-          set_shader_uniform("transform", orthographic)
+          // set_shader_uniform("transform", orthographic)
         case .WORLD:
           if !flush_world { continue } // We shouldn't flush world immediates
 
-          set_shader_uniform("transform", perspective)
+          // set_shader_uniform("transform", perspective)
         }
 
         // set_shader_uniform("tex", get_texture(batch.texture).handle)
@@ -204,7 +204,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
 free_immediate_renderer :: proc()
 {
   free_gpu_buffer(&immediate.vertex_buffer)
-  free_shader_program(&immediate.shader)
+  // free_shader_program(&immediate.shader)
 }
 
 draw_quad :: proc {

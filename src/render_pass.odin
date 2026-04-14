@@ -389,7 +389,7 @@ blit_framebuffers :: proc(from, to: Framebuffer)
 
 draw_screen_quad :: proc()
 {
-  assert(state.current_shader.files[.VERT].name == "to_screen.vert")
+  // assert(state.current_shader.files[.VERT].name == "to_screen.vert")
   gl.DrawArrays(gl.TRIANGLES, 0, 6)
 }
 
@@ -533,7 +533,7 @@ resize_window :: proc(window: ^Window) -> (ok: bool)
 
 draw_skybox :: proc(handle: Texture_Handle)
 {
-  bind_shader(.SKYBOX)
+  // bind_shader(.SKYBOX)
 
   // Get the depth func before and reset after this call
   // TODO: Do this everywhere, ie push and pop GL state
