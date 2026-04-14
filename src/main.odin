@@ -9,11 +9,10 @@ import "vendor:glfw"
 
 triangle: Pipeline
 
-
-  Color_Push :: struct
-  {
-    color: vec4,
-  }
+Color_Push :: struct
+{
+  color: vec4,
+}
 
 // TODO: Probably split game specific things from rendering specific things
 State :: struct {

@@ -41,6 +41,8 @@ Pipeline :: struct
     name:        string,
     modify_time: time.Time,
   },
+
+  push: typeid,
 }
 
 // NOTE: This is simply a little meta-program to reduce code duplication between glsl and odin
@@ -660,10 +662,13 @@ make_pipeline :: proc(allocator: runtime.Allocator, vert_name, frag_name: string
   if ok
   {
     pipeline.internal = vk_make_pipeline(vert, frag, color_format, depth_format, size_of(push))
+
     pipeline.files[.VERTEX].name = vert_name
     pipeline.files[.VERTEX].modify_time, _ = os.modification_time_by_path(vert_path)
     pipeline.files[.FRAGMENT].name = frag_name
     pipeline.files[.FRAGMENT].modify_time, _ = os.modification_time_by_path(frag_path)
+
+    pipeline.push = push
   }
 
   return pipeline, ok

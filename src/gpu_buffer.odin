@@ -27,14 +27,10 @@ GPU_Buffer :: struct
   flags:      GPU_Buffer_Flags,
 
   mapped:     rawptr,
+
   total_size: int,
-
-  // Aligned, frame range, for mapped buffers
+  // Aligned frame range, for mapped buffers
   range_size: int,
-
-  // Vertex specific stuff
-  vao:          u32,
-  index_offset: int,
 }
 
 align_size_for_gpu :: proc(size: int) -> (aligned: int)
