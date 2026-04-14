@@ -9,6 +9,12 @@ import "vendor:glfw"
 
 triangle: Pipeline
 
+
+  Color_Push :: struct
+  {
+    color: vec4,
+  }
+
 // TODO: Probably split game specific things from rendering specific things
 State :: struct {
   main_context :runtime.Context,
@@ -250,7 +256,7 @@ main :: proc()
   draw_target := alloc_texture(.D2, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h), is_render_target=true)
 
   ok: bool
-  triangle, ok = make_pipeline(state.perm_alloc, "triangle.vert", "triangle.frag", draw_target.format)
+  triangle, ok = make_pipeline(state.perm_alloc, "triangle.vert", "triangle.frag", Color_Push, draw_target.format)
   assert(ok)
 
   for !should_close(state.window)

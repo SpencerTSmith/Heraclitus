@@ -916,8 +916,9 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
       pColorAttachments    = &color_attachment,
     }
 
+    pipeline := vk_get_render_internal(triangle.internal).(Vulkan_Pipeline)
     vk.CmdBeginRendering(frame.buffer, &rendering_info)
-    vk.CmdBindPipeline(frame.buffer, .GRAPHICS, vk_get_render_internal(triangle.internal).(Vulkan_Pipeline).pipeline)
+    vk.CmdBindPipeline(frame.buffer, .GRAPHICS, pipeline.pipeline)
 
     viewport: vk.Viewport =
     {
@@ -943,6 +944,8 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
     vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
     vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
 
+    push := Color_Push {LEARN_OPENGL_BLUE}
+    vk.CmdPushConstants(frame.buffer, pipeline.layout, {.VERTEX, .FRAGMENT}, 0, size_of(Color_Push), &push)
     vk.CmdDraw(frame.buffer, 3, 1, 0, 0)
 
     vk.CmdEndRendering(frame.buffer)
@@ -1209,7 +1212,7 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
   return vk_push_internal(image)
 }
 
-vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_format: Pixel_Format) -> (internal: Renderer_Internal)
+vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_format: Pixel_Format, push_size: int) -> (internal: Renderer_Internal)
 {
   make_shader_module :: proc(code: []byte) -> (module: vk.ShaderModule)
   {
@@ -1326,10 +1329,18 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
 
   pipeline: Vulkan_Pipeline
 
+  push_range: vk.PushConstantRange =
+  {
+    size = u32(push_size),
+    stageFlags = {.VERTEX, .FRAGMENT},
+  }
+
   // FIXME!
   layout_info: vk.PipelineLayoutCreateInfo =
   {
-    sType = .PIPELINE_LAYOUT_CREATE_INFO,
+    sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
+    pPushConstantRanges    = &push_range,
+    pushConstantRangeCount = 1,
   }
 
   vk_assert(vk.CreatePipelineLayout(vks.logical, &layout_info, nil, &pipeline.layout),

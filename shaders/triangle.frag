@@ -7,6 +7,8 @@ layout(location = 0) in FS_IN
 
 layout(location = 0) out vec4 out_color;
 
+#push_constant
+
 void main() {
-    out_color = vec4(fs_in.color, 1.0);
+    out_color = vec4(fs_in.color, 1.0) * push.color;
 }
