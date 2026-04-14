@@ -58,8 +58,8 @@ immediate: Immediate_State
 init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 {
   // Just passing a mesh index even though this system doesn't use indexed rendering.
-  immediate.vertex_buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, Mesh_Index,
-                                               flags = {.PERSISTENT, .FRAME_BUFFERED})
+  // immediate.vertex_buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, Mesh_Index,
+  //                                              flags = {.PERSISTENT, .FRAME_BUFFERED})
 
   bind_gpu_buffer_base(immediate.vertex_buffer, .IMM_VERTICES)
 
@@ -112,7 +112,7 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
       color    = color,
     }
 
-    vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
+    // vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
 
     current := &immediate.batches[len(immediate.batches) - 1]
 
@@ -120,7 +120,7 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
     offset := current.vertex_base + current.vertex_count
 
     // To the gpu buffer!
-    vertex_ptr[offset] = vertex
+    // vertex_ptr[offset] = vertex
     immediate.vertex_count += 1
 
     // And remember to add to the current batches count.
@@ -153,7 +153,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
 
     gl.Disable(gl.CULL_FACE)
 
-    frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
+    // frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
     for batch in immediate.batches
     {
       if batch.vertex_count > 0
@@ -186,7 +186,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
 
         // set_shader_uniform("tex", get_texture(batch.texture).handle)
 
-        first_vertex := i32(frame_base + batch.vertex_base)
+        // first_vertex := i32(frame_base + batch.vertex_base)
         vertex_count := i32(batch.vertex_count)
 
         gl_primitive_map: [Vertex_Primitive]u32 =
@@ -195,7 +195,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
           .LINES     = gl.LINES,
         }
 
-        gl.DrawArrays(gl_primitive_map[batch.primitive], first_vertex, vertex_count)
+        // gl.DrawArrays(gl_primitive_map[batch.primitive], first_vertex, vertex_count)
       }
     }
   }
@@ -203,7 +203,7 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
 
 free_immediate_renderer :: proc()
 {
-  free_gpu_buffer(&immediate.vertex_buffer)
+  // free_gpu_buffer(&immediate.vertex_buffer)
   // free_shader_program(&immediate.shader)
 }
 

@@ -1,10 +1,7 @@
 #version 460
-
-vec2 positions[3] = vec2[](
-    vec2( 0.0, -0.5),
-    vec2( 0.5,  0.5),
-    vec2(-0.5,  0.5)
-);
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
 vec3 colors[3] = vec3[](
     vec3(1.0, 0.0, 0.0),
@@ -17,7 +14,16 @@ layout(location = 0) out VS_OUT
   vec3 color;
 } vs_out;
 
-void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.5, 1.0);
-    vs_out.color  = colors[gl_VertexIndex];
+layout(buffer_reference, scalar) readonly buffer Vertices
+{
+  vec2 positions[];
+};
+
+#push_constant
+
+void main()
+{
+  Vertices verts = Vertices(push.vertices);
+  gl_Position = vec4(verts.positions[gl_VertexIndex], 0.5, 1.0);
+  vs_out.color  = colors[gl_VertexIndex] * push.color.xyz;
 }

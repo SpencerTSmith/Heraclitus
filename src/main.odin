@@ -8,10 +8,12 @@ import "base:runtime"
 import "vendor:glfw"
 
 triangle: Pipeline
+test_buffer: GPU_Buffer
 
 Color_Push :: struct
 {
-  color: vec4,
+  color:    vec4,
+  vertices: rawptr,
 }
 
 // TODO: Probably split game specific things from rendering specific things
@@ -178,7 +180,7 @@ init_state :: proc() -> (ok: bool)
       state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
       state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
-      state.frame_uniforms = make_gpu_buffer(size_of(Frame_Uniform), flags = {.UNIFORM_DATA, .PERSISTENT, .FRAME_BUFFERED})
+      // state.frame_uniforms = make_gpu_buffer(size_of(Frame_Uniform), flags = {.UNIFORM_DATA, .PERSISTENT, .FRAME_BUFFERED})
 
       state.mds = init_multi_draw()
 
@@ -258,6 +260,9 @@ main :: proc()
   triangle, ok = make_pipeline(state.perm_alloc, "triangle.vert", "triangle.frag", Color_Push, draw_target.format)
   assert(ok)
 
+  test_buffer = make_gpu_buffer(256 * 1024, flags={.CPU_MAPPED})
+  positions := cast([^]vec2)test_buffer.cpu_base
+
   for !should_close(state.window)
   {
     // dt and sleeping
@@ -295,7 +300,7 @@ free_state :: proc()
 
       free_assets()
 
-      free_gpu_buffer(&state.frame_uniforms)
+      // free_gpu_buffer(&state.frame_uniforms)
 
       for &shader in state.shaders
       {

@@ -11,8 +11,6 @@ when ODIN_OS == .Linux
     foreign import lib "system:shaderc_combined"
 }
 
-import "core:c"
-
 Compiler        :: distinct rawptr
 Compile_Options :: distinct rawptr
 Result          :: distinct rawptr
@@ -46,6 +44,17 @@ Environment_Version :: enum i32
   VULKAN_1_3 = (1 << 22) | (3 << 12),
 }
 
+SPIRV_Version :: enum i32
+{
+ VERSION_1_0 = 0x010000,
+ VERSION_1_1 = 0x010100,
+ VERSION_1_2 = 0x010200,
+ VERSION_1_3 = 0x010300,
+ VERSION_1_4 = 0x010400,
+ VERSION_1_5 = 0x010500,
+ VERSION_1_6 = 0x010600,
+}
+
 Compilation_Status :: enum i32
 {
   SUCCESS              = 0,
@@ -71,6 +80,7 @@ foreign lib
   compile_options_set_source_language :: proc(options: Compile_Options, language: Source_Language) ---;
   compile_options_set_optimization_level :: proc(options: Compile_Options, level: Optimization_Level) ---;
   compile_options_set_target_env :: proc(options: Compile_Options, environment: Target_Environment, version: Environment_Version) ---;
+  compile_options_set_target_spirv :: proc(options: Compile_Options, version: SPIRV_Version) ---;
 
   compile_into_spv :: proc(compiler: Compiler, source: cstring, source_size: uint,
                            kind: Shader_Kind, input_file_name: cstring, entry_point_name: cstring, options: Compile_Options) -> Result ---;

@@ -35,9 +35,9 @@ init_multi_draw :: proc() -> (mds: Multi_Draw_State)
   bind_gpu_buffer_base(mds.material_buffer, .MATERIALS)
 
   mds.draw_commands = make_gpu_buffer(size_of(Draw_Command) * MAX_DRAWS,
-                                      flags = {.PERSISTENT, .FRAME_BUFFERED})
+                                      flags = {.CPU_MAPPED})
   mds.draw_uniforms = make_gpu_buffer(size_of(Draw_Uniform) * MAX_DRAWS,
-                                      flags = {.PERSISTENT, .FRAME_BUFFERED})
+                                      flags = {.CPU_MAPPED})
 
   return mds
 }
@@ -55,8 +55,8 @@ upload_vertices :: proc(mds: ^Multi_Draw_State, vertices: []Mesh_Vertex, indices
     mds.vertex_count += len(vertices)
 
     index_offset = cast(i32) mds.index_count
-    index_byte_offset := mds.vertex_buffer.index_offset + size_of(indices[0]) * mds.index_count
-    write_gpu_buffer(mds.vertex_buffer, index_byte_offset, size_of(indices[0]) * len(indices), raw_data(indices))
+    // index_byte_offset := mds.vertex_buffer.index_offset + size_of(indices[0]) * mds.index_count
+    // write_gpu_buffer(mds.vertex_buffer, index_byte_offset, size_of(indices[0]) * len(indices), raw_data(indices))
     mds.index_count += len(indices)
   }
   else
@@ -101,17 +101,17 @@ push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_U
       // multidraws per frame due to shadow mapping,
       // gl_DrawID no longer works perfectly to index
       command.base_instance = cast(u32)mds.draw_count
-      command.first_index += cast(u32)mds.vertex_buffer.index_offset/4
+      // command.first_index += cast(u32)mds.vertex_buffer.index_offset/4
 
       offset := size_of(Draw_Command) * mds.draw_count
-      write_gpu_buffer_frame(mds.draw_commands, offset, size_of(command), &command)
+      // write_gpu_buffer_frame(mds.draw_commands, offset, size_of(command), &command)
     }
 
     // Draw Uniform
     {
       uniform := uniform
       offset := size_of(Draw_Uniform) * mds.draw_count
-      write_gpu_buffer_frame(mds.draw_uniforms, offset, size_of(uniform), &uniform)
+      // write_gpu_buffer_frame(mds.draw_uniforms, offset, size_of(uniform), &uniform)
     }
 
     mds.draw_count += 1
@@ -125,16 +125,16 @@ push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_U
 multi_draw :: proc(mds: ^Multi_Draw_State)
 {
   bind_vertex_buffer(mds.vertex_buffer)
-  gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, mds.draw_commands.id)
+  // gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, mds.draw_commands.id)
 
   // Since we can't bind the base we do a frame offset here
-  frame_offset := gpu_buffer_frame_offset(mds.draw_commands)
-  batch_offset := cast(uintptr)(frame_offset + mds.draw_head * size_of(Draw_Command))
+  // frame_offset := gpu_buffer_frame_offset(mds.draw_commands)
+  // batch_offset := cast(uintptr)(frame_offset + mds.draw_head * size_of(Draw_Command))
 
   batch_count := cast(i32) (mds.draw_count - mds.draw_head)
 
-  gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT,
-    cast([^]gl.DrawElementsIndirectCommand)batch_offset, batch_count, 0)
+  // gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT,
+  //   cast([^]gl.DrawElementsIndirectCommand)batch_offset, batch_count, 0)
 
   mds.draw_head = mds.draw_count // Move head pointer up
 }

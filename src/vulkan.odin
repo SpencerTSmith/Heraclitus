@@ -44,6 +44,7 @@ Vulkan_Arena_Kind :: enum
   HOST,
 }
 
+#assert(size_of(vk.DeviceAddress) == size_of(rawptr))
 Vulkan_Arena :: struct
 {
   memory: vk.DeviceMemory,
@@ -54,6 +55,10 @@ Vulkan_Arena :: struct
   buffer: vk.Buffer,
   buffer_offset: vk.DeviceSize,
   buffer_size:   vk.DeviceSize,
+
+  // Mappings of the buffer
+  cpu_base: rawptr,
+  gpu_base: vk.DeviceAddress,
 }
 
 Vulkan_Image :: struct
@@ -75,7 +80,7 @@ Vulkan_Internal :: union
   Vulkan_Pipeline,
 }
 
-Vulkan_State :: struct
+Vulkan_State :: struct($IN_FLIGHT: int)
 {
   instance:   vk.Instance,
   messenger:  vk.DebugUtilsMessengerEXT,
@@ -84,7 +89,7 @@ Vulkan_State :: struct
   queues:     [Queue_Kind]vk.Queue,
   surface:    vk.SurfaceKHR,
   swapchain:  Swapchain,
-  frames:     [3]Frame_State,
+  frames:     [IN_FLIGHT]Frame_State,
   curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
   arenas:     [Vulkan_Arena_Kind]Vulkan_Arena,
 
@@ -93,7 +98,7 @@ Vulkan_State :: struct
 }
 
 @(private="file")
-vks: Vulkan_State
+vks: Vulkan_State(FRAMES_IN_FLIGHT)
 
 vk_assert :: proc(result: vk.Result, message: string)
 {
@@ -192,6 +197,8 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
 
   for device in physical_devices
   {
+    // FIXME: I don't actually check the supported device features against the needed device features...
+    // this looks like it will be painful to do.
     supported_device_features13: vk.PhysicalDeviceVulkan13Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -199,8 +206,6 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
     supported_device_features12: vk.PhysicalDeviceVulkan12Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      bufferDeviceAddress = true,
-      descriptorIndexing  = true,
       pNext = &supported_device_features13,
     }
     supported_device_features11: vk.PhysicalDeviceVulkan11Features =
@@ -532,6 +537,10 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     needed_device_features: vk.PhysicalDeviceFeatures2 =
     {
       sType = .PHYSICAL_DEVICE_FEATURES_2,
+      features =
+      {
+        shaderInt64 = true,
+      },
       pNext = &needed_device_features11,
     }
 
@@ -648,13 +657,14 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // FIXME: Ok should probably just be a variable.
       ok: bool
       vks.arenas[.DEVICE], ok = make_vulkan_arena(vks.logical, vks.physical,
-                                                  256 * mem.Megabyte, {.TRANSFER_DST, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
+                                                  256 * mem.Megabyte, {.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
                                                   {.DEVICE_LOCAL}, 256 * mem.Megabyte)
       if !ok { log.fatalf("Unable to create device local vulkan arena.") }
 
+      // Entire thing gets mapped to a buffer, will never need extra raw memory.
       vks.arenas[.HOST], ok = make_vulkan_arena(vks.logical, vks.physical,
-                                                256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
-                                                {.HOST_VISIBLE, .HOST_COHERENT}, 256 * mem.Megabyte)
+                                                256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
+                                                {.HOST_VISIBLE, .HOST_COHERENT}, 0)
       if !ok { log.fatalf("Unable to create host vulkan arena.") }
     }
     else
@@ -786,9 +796,9 @@ make_swapchain :: proc(window: Window, logical: vk.Device, physical: vk.Physical
 
 @(private="file")
 make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
-                            buffer_size: vk.DeviceSize, buffer_usage: vk.BufferUsageFlags,
-                            memory_properties: vk.MemoryPropertyFlags,
-                            extra_size: vk.DeviceSize) -> (arena: Vulkan_Arena, ok: bool)
+                          buffer_size: vk.DeviceSize, buffer_usage: vk.BufferUsageFlags,
+                          memory_properties: vk.MemoryPropertyFlags,
+                          extra_size: vk.DeviceSize) -> (arena: Vulkan_Arena, ok: bool)
 {
   buffer_info: vk.BufferCreateInfo =
   {
@@ -809,11 +819,17 @@ make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
   arena.memory_type, ok = pick_memory_type(physical, combined_memory_requirements, memory_properties)
   if ok
   {
+    allocate_flags_info: vk.MemoryAllocateFlagsInfo =
+    {
+      sType = .MEMORY_ALLOCATE_FLAGS_INFO,
+      flags = .SHADER_DEVICE_ADDRESS in buffer_usage ? {.DEVICE_ADDRESS} : {},
+    }
     allocate_info: vk.MemoryAllocateInfo =
     {
       sType = .MEMORY_ALLOCATE_INFO,
       memoryTypeIndex = arena.memory_type,
       allocationSize  = combined_memory_requirements.size,
+      pNext = &allocate_flags_info,
     }
     vk_assert(vk.AllocateMemory(logical, &allocate_info, nil, &arena.memory),
               "Unable to allocate memory for vulkan arena buffer.")
@@ -822,12 +838,29 @@ make_vulkan_arena :: proc(logical: vk.Device, physical: vk.PhysicalDevice,
               "Unable to bind memory to vulkan arena buffer.")
 
     arena.memory_size = allocate_info.allocationSize // Total
-    // Push memory offset past the buffer, any further allocations shall go afterwards
+    // Push memory offset past the buffer, any further allocations from raw memory go afterwards
     arena.memory_offset = buffer_memory_requirements.size
     arena.buffer_size = buffer_memory_requirements.size
+
+    if .SHADER_DEVICE_ADDRESS in buffer_usage
+    {
+      address_info: vk.BufferDeviceAddressInfo =
+      {
+        sType  = .BUFFER_DEVICE_ADDRESS_INFO,
+        buffer = arena.buffer,
+      }
+      arena.gpu_base = vk.GetBufferDeviceAddress(logical, &address_info)
+    }
+
+    // Map the whole buffer
+    if .HOST_VISIBLE in memory_properties
+    {
+      vk.MapMemory(logical, arena.memory, 0, arena.buffer_size, {}, &arena.cpu_base)
+    }
   }
   else
   {
+    // TODO: Something more robust.
     log.errorf("Unable to find memory type for vulkan arena.")
   }
 
@@ -944,7 +977,7 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
     vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
     vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
 
-    push := Color_Push {LEARN_OPENGL_BLUE}
+    push := Color_Push {LEARN_OPENGL_BLUE, test_buffer.gpu_base}
     vk.CmdPushConstants(frame.buffer, pipeline.layout, {.VERTEX, .FRAGMENT}, 0, size_of(Color_Push), &push)
     vk.CmdDraw(frame.buffer, 3, 1, 0, 0)
 
@@ -1088,16 +1121,34 @@ vk_cmd :: proc() -> (buffer: vk.CommandBuffer)
 }
 
 @(private="file")
-vk_arena_push :: proc(arena: Vulkan_Arena_Kind, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
+vk_arena_memory_push :: proc(arena: ^Vulkan_Arena, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
 {
-  aligned_offset = (vks.arenas[arena].memory_offset + alignment - 1) & ~(alignment - 1)
+  aligned_offset = (arena.memory_offset + alignment - 1) & ~(alignment - 1)
 
-  assert(aligned_offset + size < vks.arenas[arena].memory_size,
+  assert(aligned_offset + size < arena.memory_size,
          "Vulkan arena out of memory.")
 
-  vks.arenas[arena].memory_offset = aligned_offset + size
+  arena.memory_offset = aligned_offset + size
 
   return aligned_offset
+}
+@(private="file")
+vk_arena_buffer_push :: proc(arena: ^Vulkan_Arena, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (gpu_ptr: vk.DeviceAddress, cpu_ptr: rawptr)
+{
+  aligned_offset := (arena.buffer_offset + alignment - 1) & ~(alignment - 1)
+
+  assert(aligned_offset + size < arena.buffer_size,
+         "Vulkan arena out of memory.")
+
+  arena.buffer_offset = aligned_offset + size
+
+  if arena.cpu_base != nil
+  {
+    cpu_ptr = rawptr(uintptr(arena.cpu_base) + uintptr(aligned_offset))
+  }
+  gpu_ptr = vk.DeviceAddress(vk.DeviceSize(arena.gpu_base) + aligned_offset)
+
+  return gpu_ptr, cpu_ptr
 }
 
 @(private="file")
@@ -1122,6 +1173,7 @@ vk_format_table: [Pixel_Format]vk.Format =
   .DEPTH24_STENCIL8 = .D24_UNORM_S8_UINT,
 }
 
+// NOTE: Always pushed to device memory
 vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                          width, height, samples, array_count, mip_count: u32, is_render_target: bool) -> (handle: Renderer_Internal)
 {
@@ -1163,7 +1215,7 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
     imageType   = .D2, // NOTE: Hardcoded.
     extent      = {width, height, 1}, // NOTE: Hardcoded.
     format      = vk_format_table[format],
-    mipLevels   = mip_count, // TODO: Generate mipmaps.
+    mipLevels   = mip_count,
     arrayLayers = array_count,
     samples     = vk_samples,
     tiling      = .OPTIMAL, // Currently not ever reading back textures sooo.
@@ -1191,7 +1243,7 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
   assert(requirements.memoryTypeBits & (1 << vks.arenas[.DEVICE].memory_type) != 0,
          "Image memory requirements not compatible with arena.")
 
-  memory_offset := vk_arena_push(.DEVICE, requirements.size, requirements.alignment)
+  memory_offset := vk_arena_memory_push(&vks.arenas[.DEVICE], requirements.size, requirements.alignment)
 
   vk_assert(vk.BindImageMemory(vks.logical, image.image, vks.arenas[.DEVICE].memory, memory_offset),
             "Unable to bind vulkan image memory.")
@@ -1210,6 +1262,33 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
             "Unable to create vulkan image view.")
 
   return vk_push_internal(image)
+}
+
+vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr: rawptr)
+{
+  // TODO: Cache this if its slow.
+  props: vk.PhysicalDeviceProperties
+  vk.GetPhysicalDeviceProperties(vks.physical, &props)
+
+  alignment: vk.DeviceSize = 16
+  if .STORAGE_DATA in flags { alignment = props.limits.minStorageBufferOffsetAlignment }
+  if .UNIFORM_DATA in flags { alignment = props.limits.minUniformBufferOffsetAlignment } // This is usually higher so check last
+
+  // By default push to device
+  arena := vks.arenas[.DEVICE]
+  // If cpu mapped push to the host memory
+  if .CPU_MAPPED in flags
+  {
+    assert(.DEVICE_LOCAL not_in flags, "Currently no support for device local cpu mapped memory.")
+    arena = vks.arenas[.HOST]
+  }
+
+  gpu_ptr_: vk.DeviceAddress
+  gpu_ptr_, cpu_ptr = vk_arena_buffer_push(&arena, vk.DeviceSize(size), alignment)
+
+  gpu_ptr = rawptr(uintptr(gpu_ptr_))
+
+  return gpu_ptr, cpu_ptr
 }
 
 vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_format: Pixel_Format, push_size: int) -> (internal: Renderer_Internal)

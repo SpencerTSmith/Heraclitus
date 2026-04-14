@@ -177,8 +177,10 @@ to_glsl_basic_type_string :: proc(type: typeid, allow_vec4: bool) -> string
     s = "int"
   case i32:
     s = "int"
-  case u64:
-    s = "sampler2D" // HACK: !!!
+  case rawptr:
+    s = "uint64_t"
+  // case u64:
+  //   s = "sampler2D" // HACK: !!!
   }
 
   return s
@@ -564,6 +566,7 @@ compile_shader_file :: proc(allocator: runtime.Allocator, file_name: string, typ
       }
       else if trim == "#push_constant" && has_push
       {
+        assert(size_of(push) <= 128, "Push Constants may only be a maximum of 128 bytes.")
         to_glsl_struct(&include_builder, push, "layout(push_constant) uniform", "push")
         put_push = true
       }
@@ -577,16 +580,17 @@ compile_shader_file :: proc(allocator: runtime.Allocator, file_name: string, typ
     if ok
     {
       with_include := strings.to_string(include_builder)
-      print("%v", with_include)
 
+      // Not really sure if is expensive to do this, or if I should just cache the optiosn and compiler
       compiler := sc.compiler_initialize()
       defer sc.compiler_release(compiler)
 
       // NOTE: Hardcoded for vulkan 1.3.
       options := sc.compile_options_initialize()
       sc.compile_options_set_source_language(options, .GLSL)
-      sc.compile_options_set_optimization_level(options, .PERFORMANCE)
+      sc.compile_options_set_optimization_level(options, .ZERO) // NOTE: No optimizations while working.
       sc.compile_options_set_target_env(options, .VULKAN, .VULKAN_1_3)
+      sc.compile_options_set_target_spirv(options, .VERSION_1_6)
       defer sc.compile_options_release(options)
 
       c_str     := strings.clone_to_cstring(with_include, context.temp_allocator)
