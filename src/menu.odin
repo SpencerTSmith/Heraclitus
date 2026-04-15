@@ -139,8 +139,8 @@ update_menu_input :: proc()
 
 draw_menu :: proc()
 {
-  bind_framebuffer(DEFAULT_FRAMEBUFFER)
-  clear_framebuffer(DEFAULT_FRAMEBUFFER, color=LEARN_OPENGL_BLUE)
+  // bind_framebuffer(DEFAULT_FRAMEBUFFER)
+  // clear_framebuffer(DEFAULT_FRAMEBUFFER, color=LEARN_OPENGL_BLUE)
 
   x_title := f32(state.window.w) * 0.5
   y_title := f32(state.window.h) * 0.2

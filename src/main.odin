@@ -55,12 +55,12 @@ State :: struct {
 
     // TODO: Hmm maybe should be enum array too, these must all be the same dimensions as backbuffer
     // so simple to loop over enum array when resizing swapchain/window
-    hdr_ms_buffer:     Framebuffer,
-    post_buffer:       Framebuffer,
-    ping_pong_buffers: [2]Framebuffer,
-
-    point_depth_buffer: Framebuffer,
-    sun_depth_buffer:   Framebuffer,
+    // hdr_ms_buffer:     Framebuffer,
+    // post_buffer:       Framebuffer,
+    // ping_pong_buffers: [2]Framebuffer,
+    //
+    // point_depth_buffer: Framebuffer,
+    // sun_depth_buffer:   Framebuffer,
 
     bound_pipeline: Pipeline,
 
@@ -168,16 +168,16 @@ init_state :: proc() -> (ok: bool)
       state.renderer.samplers = make_samplers()
 
       SAMPLES :: 4
-      state.renderer.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-
-      state.renderer.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-
-      // This will have two attachments so we can collect bright spots
-      state.renderer.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
-      state.renderer.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
-
-      state.renderer.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
-      state.renderer.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
+      // state.renderer.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+      //
+      // state.renderer.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+      //
+      // // This will have two attachments so we can collect bright spots
+      // state.renderer.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
+      // state.renderer.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
+      //
+      // state.renderer.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
+      // state.renderer.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
       for &frame in state.renderer.frames
       {
@@ -258,7 +258,9 @@ main :: proc()
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
-  draw_target := alloc_texture(.D2, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h), is_render_target=true)
+  main_target := make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
+
+  position := vec2{100, 100}
 
   for !should_close(state.window)
   {
@@ -278,9 +280,26 @@ main :: proc()
 
     poll_input_state(state.window, dt_s)
 
-    if begin_drawing(draw_target)
+    if key_down(.W) { position.y -= 10 }
+    if key_down(.S) { position.y += 10 }
+    if key_down(.A) { position.x -= 10 }
+    if key_down(.D) { position.x += 10 }
+
+    if begin_render_frame()
     {
-      defer flush_drawing(draw_target)
+      begin_render_pass({clear_color = LEARN_OPENGL_BLUE}, &main_target)
+      {
+        immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
+
+        draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
+
+        immediate_flush(true, true)
+        immediate_frame_reset()
+        defer end_render_pass()
+
+      }
+
+      defer flush_render_frame(main_target.attachments[0])
 
     }
   }

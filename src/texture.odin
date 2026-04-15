@@ -3,7 +3,6 @@ import "core:log"
 import "core:strings"
 import "core:math"
 
-import vk "vendor:vulkan"
 import stbi "vendor:stb/image"
 
 Texture_Type :: enum u32
@@ -14,6 +13,12 @@ Texture_Type :: enum u32
   CUBE_ARRAY,
 }
 
+Texture_Usage_Flag :: enum
+{
+  TARGET, // Could be used as a rendering attachment
+}
+Texture_Usage_Flags :: bit_set[Texture_Usage_Flag]
+
 Sampler_Preset :: enum u32
 {
   NONE,
@@ -23,18 +28,28 @@ Sampler_Preset :: enum u32
   CLAMP_WHITE,
 }
 
+Texture_State :: enum u32
+{
+  NONE,
+  FRAGMENT_READ,
+  TRANSFER_DST,
+  TRANSFER_SRC,
+  TARGET,
+}
+
 Texture :: struct
 {
   internal: Renderer_Internal, // To get at the underlying api object details.
+  state:    Texture_State,
 
-  type:    Texture_Type,
-  width:   u32,
-  height:  u32,
-  samples: u32, // Only for multisampled textures, 0 if not
+  type:        Texture_Type,
+  width:       u32,
+  height:      u32,
+  samples:     u32, // Only for multisampled textures, 0 if not
   array_count: u32, // Only for array textures, 0 if not
   mip_count:   u32,
-  format:  Pixel_Format,
-  sampler: Sampler_Preset,
+  format:      Pixel_Format,
+  sampler:     Sampler_Preset,
 }
 
 Pixel_Format :: enum u32
@@ -104,8 +119,8 @@ bind_texture_by_asset :: proc(name: string, handle: Texture_Handle)
   bind_texture_to_name(name, texture)
 }
 
-alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
-                      width, height: u32, samples: u32 = 1, array_count: u32 = 1, is_render_target := false) -> (texture: Texture)
+alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pixel_Format, sampler: Sampler_Preset,
+                      width, height: u32, samples: u32 = 1, array_count: u32 = 1) -> (texture: Texture)
 {
   assert(width > 0 && height > 0)
   mip_count: u32 = 1
@@ -115,7 +130,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
     mip_count = u32(math.floor(math.log2(f64(max(width, height))))) + 1
   }
 
-  texture.internal = vk_alloc_texture(type, format, sampler, width, height, samples, array_count, mip_count, is_render_target)
+  texture.internal = vk_alloc_texture(type, usage, format, sampler, width, height, samples, array_count, mip_count)
   texture.width    = width
   texture.height   = height
   texture.type     = type
@@ -131,7 +146,7 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
 make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                                datas: []rawptr, width, height: u32, samples: u32 = 1) -> (texture: Texture)
 {
-  texture = alloc_texture(type, format, sampler, width, height, samples)
+  texture = alloc_texture(type, {}, format, sampler, width, height, samples)
 
   // TODO: Upload
 

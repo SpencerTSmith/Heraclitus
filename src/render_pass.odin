@@ -1,31 +1,13 @@
 package main
 
-import "core:log"
-import "core:slice"
-
 import gl "vendor:OpenGL"
-import "vendor:glfw"
 
-Framebuffer :: struct
+Render_Target :: struct
 {
-  id:            u32,
-
-  attachments:   []Framebuffer_Attachment,
-  color_targets: []Texture,
-  depth_target:  Texture,
-
-  sample_count:  int,
-  width:  int,
-  height: int,
+  attachments: [dynamic; 4]Texture,
 }
 
-Frame_Info :: struct {
-  fence: gl.sync_t,
-}
-
-DEFAULT_FRAMEBUFFER :: Framebuffer{}
-
-Framebuffer_Attachment :: enum
+Attachment_Description :: enum u8
 {
   COLOR,
   HDR_COLOR,
@@ -35,14 +17,14 @@ Framebuffer_Attachment :: enum
   DEPTH_CUBE_ARRAY,
 }
 
-Face_Cull_Mode :: enum
+Face_Cull_Mode :: enum u8
 {
   DISABLED,
   FRONT,
   BACK,
 }
 
-Depth_Test_Mode :: enum
+Depth_Test_Mode :: enum u8
 {
   DISABLED,
   ALWAYS,
@@ -50,14 +32,14 @@ Depth_Test_Mode :: enum
   LESS_EQUAL,
 }
 
-Vertex_Primitive :: enum
+Vertex_Primitive :: enum u8
 {
   TRIANGLES,
   LINES,
 }
 
 // NOTE: Read left to right as src factor and dst factor
-Blend_Mode :: enum
+Blend_Mode :: enum u8
 {
   DISABLED,
   ALPHA_ONE_MINUS_ALPHA,
@@ -65,342 +47,113 @@ Blend_Mode :: enum
 
 Viewport :: struct
 {
-  x: i32,
-  y: i32,
-  w: i32,
-  h: i32,
+  x: u32,
+  y: u32,
+  w: u32,
+  h: u32,
 }
 
-Render_Pass_Flags :: enum
+Render_Pass_Flag :: enum
 {
-  CLEAR_FRAMEBUFFER,
-  USE_ALL_FRAMEBUFFER_VIEWPORT,
-  USE_WINDOW_VIEWPORT,
+  NO_CLEAR,
+  CUSTOM_VIEWPORT,
 }
+Render_Pass_Flags :: bit_set[Render_Pass_Flag]
 
 Render_Pass :: struct
 {
-  flags: bit_set[Render_Pass_Flags],
+  flags: Render_Pass_Flags,
 
-  depth_test: Depth_Test_Mode,
-  face_cull:  Face_Cull_Mode,
-  blend:      Blend_Mode,
-  viewport:   Viewport, // Optional, see flags
+  clear_color: vec4,
+  depth_test:  Depth_Test_Mode,
+  face_cull:   Face_Cull_Mode,
+  blend:       Blend_Mode,
+  viewport:    Viewport, // Optional, see flags
 }
 
 MAIN_PASS :: Render_Pass {
-  flags      = {.CLEAR_FRAMEBUFFER, .USE_WINDOW_VIEWPORT},
   depth_test = .LESS,
   face_cull  = .BACK,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 POST_PASS :: Render_Pass {
-  flags      = {.CLEAR_FRAMEBUFFER, .USE_WINDOW_VIEWPORT},
   depth_test = .DISABLED,
   face_cull  = .BACK,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 SUN_SHADOW_PASS :: Render_Pass {
-  flags      = {.CLEAR_FRAMEBUFFER, .USE_ALL_FRAMEBUFFER_VIEWPORT},
   depth_test = .LESS,
   face_cull  = .FRONT,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 POINT_SHADOW_PASS :: Render_Pass {
-  flags      = {.USE_ALL_FRAMEBUFFER_VIEWPORT},
   depth_test = .LESS,
   face_cull  = .DISABLED,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 UI_PASS :: Render_Pass {
-  flags      = {.CLEAR_FRAMEBUFFER, .USE_WINDOW_VIEWPORT},
   depth_test = .LESS,
   face_cull  = .DISABLED,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
-// TODO: Save state as it was before this pass, perhaps as an optional return
-begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer)
+make_render_target :: proc(width, height: u32, attachments: []Attachment_Description) -> (target: Render_Target)
 {
+  assert(len(attachments) < cap(target.attachments), "Too many attachments specified for render target creation.")
 
-  // bind_framebuffer(fb)
-  // if .CLEAR_FRAMEBUFFER in pass.flags
-  // {
-  //   clear_framebuffer(fb)
-  // }
-
-  /////////
-  // GL State Changes
-  ////////
-
-  DISABLED_SENTINEL :: 0
-
-  // Depth Testing
-  gl_depth_map: [Depth_Test_Mode]u32 =
+  for attachment in attachments
   {
-    .DISABLED   = DISABLED_SENTINEL,
-
-    .ALWAYS     = gl.ALWAYS,
-    .LESS       = gl.LESS,
-    .LESS_EQUAL = gl.LESS,
-  }
-  gl_depth := gl_depth_map[pass.depth_test]
-
-  if gl_depth == DISABLED_SENTINEL
-  {
-    gl.Disable(gl.DEPTH_TEST)
-  }
-  else
-  {
-    gl.Enable(gl.DEPTH_TEST)
-    gl.DepthFunc(gl_depth)
+    texture: Texture
+    switch attachment
+    {
+      case .COLOR:
+        texture = alloc_texture(.D2, {.TARGET}, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h))
+      case .HDR_COLOR:
+        unimplemented()
+      case .DEPTH:
+        unimplemented()
+      case .DEPTH_STENCIL:
+        unimplemented()
+      case .DEPTH_CUBE:
+        unimplemented()
+      case .DEPTH_CUBE_ARRAY:
+        unimplemented()
+    }
+    append(&target.attachments, texture)
   }
 
-  // Face Culling
-  gl_cull_map: [Face_Cull_Mode]u32 =
-  {
-    .DISABLED = DISABLED_SENTINEL,
+  return target
+}
 
-    .FRONT    = gl.FRONT,
-    .BACK     = gl.BACK,
-  }
-  gl_cull := gl_cull_map[pass.face_cull]
+begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
+{
+  // May also assert that the size of these attachments are the same, but eh
+  assert(len(target.attachments) != 0)
 
-  if gl_cull == DISABLED_SENTINEL
+  // Viewport, if no custom viewport just set to the whole thing.
+  pass := pass
+  if .CUSTOM_VIEWPORT not_in pass.flags
   {
-    gl.Disable(gl.CULL_FACE)
-  }
-  else
-  {
-    gl.Enable(gl.CULL_FACE)
-    gl.CullFace(gl_cull)
+    pass.viewport.x = 0
+    pass.viewport.y = 0
+    pass.viewport.w = target.attachments[0].width
+    pass.viewport.h = target.attachments[0].height
   }
 
-  // Blending
-  gl_blend_map: [Blend_Mode][2]u32 =
-  {
-    .DISABLED = {DISABLED_SENTINEL, DISABLED_SENTINEL},
+  vk_begin_render_pass(pass, target)
+}
 
-    .ALPHA_ONE_MINUS_ALPHA = {gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA},
-  }
-  gl_blend := gl_blend_map[pass.blend]
-
-  if gl_blend == DISABLED_SENTINEL
-  {
-    gl.Disable(gl.BLEND)
-  }
-  else
-  {
-    gl.Enable(gl.BLEND)
-    gl.BlendFunc(gl_blend[0], gl_blend[1])
-  }
-
-  // Viewport
-  vp: Viewport
-  if .USE_ALL_FRAMEBUFFER_VIEWPORT in pass.flags
-  {
-    vp.x = 0
-    vp.y = 0
-    vp.w = cast(i32) fb.width
-    vp.h = cast(i32) fb.height
-  }
-  else if .USE_WINDOW_VIEWPORT in pass.flags
-  {
-    vp.x = 0
-    vp.y = 0
-    vp.w = cast(i32) state.window.w
-    vp.h = cast(i32) state.window.h
-  }
-  else
-  {
-    vp = pass.viewport
-  }
-
-  gl.Viewport(vp.x, vp.y, vp.w, vp.h)
+end_render_pass :: proc()
+{
+  vk_end_render_pass()
 }
 
 // For now depth target can either be depth only or depth+stencil,
 // also can only have one attachment of each type
-make_framebuffer :: proc(width, height: int, samples: int = 0, array_depth: int = 0,
-                         attachments: []Framebuffer_Attachment = {.COLOR, .DEPTH_STENCIL}) -> (buffer: Framebuffer, ok: bool)
-{
-  // fbo: u32
-  // gl.CreateFramebuffers(1, &fbo)
-  //
-  // color_targets := make([dynamic]Texture, context.temp_allocator)
-  // depth_target: Texture
-  //
-  // gl_attachments := make([dynamic]u32, context.temp_allocator)
-  //
-  // for attachment in attachments
-  // {
-  //   switch attachment
-  //   {
-  //   case .COLOR:
-  //     color_target := alloc_texture(.D2, .RGBA8, .NONE, width, height, samples=samples)
-  //     attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
-  //     gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
-  //
-  //     append(&color_targets, color_target)
-  //     append(&gl_attachments, attachment)
-  //
-  //   case .HDR_COLOR:
-  //     color_target := alloc_texture(.D2, .RGBA16F, .NONE, width, height, samples=samples)
-  //     attachment := cast(u32) (gl.COLOR_ATTACHMENT0 + len(color_targets))
-  //     gl.NamedFramebufferTexture(fbo,  attachment, color_target.id, 0)
-  //
-  //     append(&color_targets, color_target)
-  //     append(&gl_attachments, attachment)
-  //
-  //   case .DEPTH:
-  //     assert(depth_target.id == 0) // Only one depth attachment
-  //
-  //     depth_target = alloc_texture(.D2, .DEPTH32, .CLAMP_WHITE, width, height)
-  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-  //
-  //   case .DEPTH_STENCIL:
-  //     assert(depth_target.id == 0)
-  //
-  //     depth_target = alloc_texture(.D2, .DEPTH24_STENCIL8, .NONE, width, height, samples=samples)
-  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-  //
-  //   case .DEPTH_CUBE:
-  //     assert(depth_target.id == 0)
-  //
-  //     depth_target = alloc_texture(.CUBE, .DEPTH32, .CLAMP_LINEAR, width, height)
-  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-  //
-  //   case .DEPTH_CUBE_ARRAY:
-  //     assert(depth_target.id == 0)
-  //
-  //     assert(array_depth > 0)
-  //     depth_target = alloc_texture(.CUBE_ARRAY, .DEPTH32, .CLAMP_LINEAR, width, height, array_depth=array_depth)
-  //     gl.NamedFramebufferTexture(fbo, gl.DEPTH_ATTACHMENT, depth_target.id, 0)
-  //   }
-  // }
-  //
-  // gl.NamedFramebufferDrawBuffers(fbo, cast(i32)len(color_targets), raw_data(gl_attachments))
-  //
-  // if gl.CheckNamedFramebufferStatus(fbo, gl.FRAMEBUFFER) == gl.FRAMEBUFFER_COMPLETE
-  // {
-  //   buffer =
-  //   {
-  //     id            = fbo,
-  //     attachments   = slice.clone(attachments, state.perm_alloc),
-  //     color_targets = slice.clone(color_targets[:], state.perm_alloc),
-  //     depth_target  = depth_target,
-  //     sample_count  = samples,
-  //     width         = width,
-  //     height        = height,
-  //   }
-  //   ok = true
-  // }
-  // else
-  // {
-  //   log.error("Unable to create complete framebuffer: %v", buffer)
-  //   ok = false
-  // }
-
-  return buffer, ok
-}
-
-// NOTE: If none passed in clear the default framebuffer
-clear_framebuffer :: proc(fb: Framebuffer, color := BLACK)
-{
-  clear_color := color
-
-  // Hmm may want this to be controllable maybe
-  DEFAULT_DEPTH   :: 1.0
-  DEFAULT_STENCIL :: 0.0
-
-  // This is the default framebuffer
-  if fb.id == 0
-  {
-    gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, 0, raw_data(&clear_color))
-    gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, DEFAULT_DEPTH, DEFAULT_STENCIL)
-  }
-  else
-  {
-    // This is a created framebuffer
-
-    // Clear ALL the draw buffers
-    for _, idx in fb.color_targets
-    {
-      gl.ClearNamedFramebufferfv(fb.id, gl.COLOR, i32(idx), raw_data(&clear_color))
-    }
-
-    // Clear depth stencil target if it exists
-    if fb.depth_target.format == .DEPTH24_STENCIL8
-    {
-      gl.ClearNamedFramebufferfi(fb.id, gl.DEPTH_STENCIL, 0, DEFAULT_DEPTH, DEFAULT_STENCIL)
-    }
-
-    // Clear depth target if it exists
-    if fb.depth_target.format == .DEPTH32
-    {
-      default_depth: f32 = DEFAULT_DEPTH // Since we need a pointer, can't use constant
-      gl.ClearNamedFramebufferfv(fb.id, gl.DEPTH, 0, &default_depth)
-    }
-  }
-}
-
-bind_framebuffer :: proc(fb: Framebuffer)
-{
-  // Should be fine for binding default if pass in empty struct
-  gl.BindFramebuffer(gl.FRAMEBUFFER, fb.id)
-}
-
-free_framebuffer :: proc(fb: ^Framebuffer)
-{
-  for &c in fb.color_targets
-  {
-    free_texture(&c)
-  }
-  free_texture(&fb.depth_target)
-  gl.DeleteFramebuffers(1, &fb.id)
-}
-
-// NOTE: This blits the entire size of the targets, respectively
-// As well as always blitting color and depth buffer info
-blit_framebuffers :: proc(from, to: Framebuffer)
-{
-  gl_filter: u32 = gl.NEAREST
-
-  // TODO: Is this a good idea? Basically only use filtering if we aren't blitting from a multisample buffer
-  // and they are not the same size
-  if from.sample_count > 1 && (from.width != to.width || from.height != to.height)
-  {
-    log.infof("Blitting with linear filtering, check if that was something you wished to do")
-    gl_filter = gl.LINEAR
-  }
-
-  gl.BlitNamedFramebuffer(from.id, to.id,
-    0, 0, cast(i32) from.width, cast(i32) from.height,
-    0, 0, cast(i32) to.width,   cast(i32) to.height,
-    gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT,
-    gl_filter)
-}
-
-draw_screen_quad :: proc()
-{
-  // assert(state.current_shader.files[.VERT].name == "to_screen.vert")
-  gl.DrawArrays(gl.TRIANGLES, 0, 6)
-}
-
-// Will use the same sample count and attachment list as the old
-remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (new_buffer: Framebuffer, ok: bool)
-{
-  old_samples     := frame_buffer.sample_count
-  old_attachments := frame_buffer.attachments
-  free_framebuffer(frame_buffer)
-  new_buffer, ok = make_framebuffer(width, height, old_samples, attachments=old_attachments)
-
-  return new_buffer, ok
-}
 
 // begin_drawing :: proc()
 // {

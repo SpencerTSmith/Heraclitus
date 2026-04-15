@@ -104,7 +104,7 @@ vk_assert :: proc(result: vk.Result, message: string)
 }
 
 @(private="file")
-check_instance_extensions :: proc(needed_extensions: []cstring) -> (found_all: bool)
+check_instance_extensions :: proc(required_extensions: []cstring) -> (found_all: bool)
 {
   supported_extensions: []vk.ExtensionProperties
   {
@@ -115,12 +115,12 @@ check_instance_extensions :: proc(needed_extensions: []cstring) -> (found_all: b
   }
 
   found_all = true
-  for needed in needed_extensions
+  for required in required_extensions
   {
     found := false
     for &supported in supported_extensions
     {
-      if cstring(raw_data(supported.extensionName[:])) == needed
+      if cstring(raw_data(supported.extensionName[:])) == required
       {
         found = true
         break
@@ -129,11 +129,11 @@ check_instance_extensions :: proc(needed_extensions: []cstring) -> (found_all: b
 
     if found
     {
-      log.infof("Necessary VK extension: %v is supported.", needed)
+      log.infof("Necessary VK extension: %v is supported.", required)
     }
     else
     {
-      log.fatalf("Necessary VK extension: %v is NOT supported.", needed)
+      log.fatalf("Necessary VK extension: %v is NOT supported.", required)
       found_all = false
       // Don't break just so it will continue and see the other extensions that might be missing or supported.
     }
@@ -143,7 +143,7 @@ check_instance_extensions :: proc(needed_extensions: []cstring) -> (found_all: b
 }
 
 @(private="file")
-check_device_extensions :: proc(device: vk.PhysicalDevice, needed_extensions: []cstring) -> (found_all: bool)
+check_device_extensions :: proc(device: vk.PhysicalDevice, required_extensions: []cstring) -> (found_all: bool)
 {
   supported_extensions: []vk.ExtensionProperties
   {
@@ -154,12 +154,12 @@ check_device_extensions :: proc(device: vk.PhysicalDevice, needed_extensions: []
   }
 
   found_all = true
-  for needed in needed_extensions
+  for required in required_extensions
   {
     found := false
     for &supported in supported_extensions
     {
-      if cstring(raw_data(supported.extensionName[:])) == needed
+      if cstring(raw_data(supported.extensionName[:])) == required
       {
         found = true
         break
@@ -168,11 +168,11 @@ check_device_extensions :: proc(device: vk.PhysicalDevice, needed_extensions: []
 
     if found
     {
-      log.infof("Necessary VK Device extension: %v is supported.", needed)
+      log.infof("Necessary VK Device extension: %v is supported.", required)
     }
     else
     {
-      log.fatalf("Necessary VK Device extension: %v is NOT supported.", needed)
+      log.fatalf("Necessary VK Device extension: %v is NOT supported.", required)
       found_all = false
       // Don't break just so it will continue and see the other extensions that might be missing or supported.
     }
@@ -182,8 +182,8 @@ check_device_extensions :: proc(device: vk.PhysicalDevice, needed_extensions: []
 }
 
 @(private="file")
-pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, needed_device_features: vk.PhysicalDeviceFeatures2,
-                             needed_device_extensions: []cstring,) -> (physical: vk.PhysicalDevice, queue_indices: [Queue_Kind]union{u32})
+pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, required_device_features: vk.PhysicalDeviceFeatures2,
+                             required_device_extensions: []cstring,) -> (physical: vk.PhysicalDevice, queue_indices: [Queue_Kind]union{u32})
 {
   physical_devices: []vk.PhysicalDevice
   {
@@ -195,7 +195,7 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
 
   for device in physical_devices
   {
-    // FIXME: I don't actually check the supported device features against the needed device features...
+    // FIXME: I don't actually check the supported device features against the required device features...
     // this looks like it will be painful to do.
     supported_device_features13: vk.PhysicalDeviceVulkan13Features =
     {
@@ -230,7 +230,7 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
       suitable &= family != nil
     }
 
-    suitable &= check_device_extensions(device, needed_device_extensions)
+    suitable &= check_device_extensions(device, required_device_extensions)
 
     mode_count: u32
     vk.GetPhysicalDeviceSurfacePresentModesKHR(device, surface, &mode_count, nil)
@@ -252,8 +252,8 @@ pick_physical_device :: proc(instance: vk.Instance, surface: vk.SurfaceKHR, need
 }
 
 @(private="file")
-pick_memory_type :: proc(physical: vk.PhysicalDevice, needed_requirements: vk.MemoryRequirements,
-                         needed_properties: vk.MemoryPropertyFlags) -> (index: u32, ok: bool)
+pick_memory_type :: proc(physical: vk.PhysicalDevice, required_requirements: vk.MemoryRequirements,
+                         required_properties: vk.MemoryPropertyFlags) -> (index: u32, ok: bool)
 {
   memory_properties: vk.PhysicalDeviceMemoryProperties
   vk.GetPhysicalDeviceMemoryProperties(physical, &memory_properties)
@@ -261,8 +261,8 @@ pick_memory_type :: proc(physical: vk.PhysicalDevice, needed_requirements: vk.Me
   for memory_type, idx in memory_properties.memoryTypes[:memory_properties.memoryTypeCount]
   {
     idx := u32(idx)
-    if needed_requirements.memoryTypeBits & (1 << idx) != 0 &&
-       memory_type.propertyFlags >= needed_properties // Weird odin syntax for bit sets, means 'is superset'
+    if required_requirements.memoryTypeBits & (1 << idx) != 0 &&
+       memory_type.propertyFlags >= required_properties // Weird odin syntax for bit sets, means 'is superset'
     {
       index = idx
       ok = true
@@ -274,7 +274,7 @@ pick_memory_type :: proc(physical: vk.PhysicalDevice, needed_requirements: vk.Me
 }
 
 @(private="file")
-check_layers :: proc(needed_layers: []cstring) -> (found_all: bool)
+check_layers :: proc(required_layers: []cstring) -> (found_all: bool)
 {
   supported_layers: []vk.LayerProperties
   {
@@ -285,12 +285,12 @@ check_layers :: proc(needed_layers: []cstring) -> (found_all: bool)
   }
 
   found_all = true
-  for needed in needed_layers
+  for required in required_layers
   {
     found := false
     for &supported in supported_layers
     {
-      if cstring(raw_data(supported.layerName[:])) == needed
+      if cstring(raw_data(supported.layerName[:])) == required
       {
         found = true
         break
@@ -299,11 +299,11 @@ check_layers :: proc(needed_layers: []cstring) -> (found_all: bool)
 
     if found
     {
-      log.infof("Necessary VK validation layer: %v is supported.", needed)
+      log.infof("Necessary VK validation layer: %v is supported.", required)
     }
     else
     {
-      log.warnf("Necessary VK validation layer: %v is NOT supported.", needed)
+      log.warnf("Necessary VK validation layer: %v is NOT supported.", required)
       found_all = false
       // Don't break just so it will continue and see the other layers that might be missing or supported.
     }
@@ -444,41 +444,59 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
 
   glfw_extensions := glfw.GetRequiredInstanceExtensions()
 
-  needed_instance_extensions := make([dynamic]cstring, context.temp_allocator)
-  append(&needed_instance_extensions, ..glfw_extensions)
-  when ODIN_DEBUG { append(&needed_instance_extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME) }
+  required_instance_extensions := make([dynamic]cstring, context.temp_allocator)
+  append(&required_instance_extensions, ..glfw_extensions)
+  when ODIN_DEBUG { append(&required_instance_extensions, vk.EXT_DEBUG_UTILS_EXTENSION_NAME) }
 
-  if check_instance_extensions(needed_instance_extensions[:])
+  if check_instance_extensions(required_instance_extensions[:])
   {
     instance_info: vk.InstanceCreateInfo =
     {
       sType            = .INSTANCE_CREATE_INFO,
       pApplicationInfo = &app_info,
-      ppEnabledExtensionNames = raw_data(needed_instance_extensions),
-      enabledExtensionCount = u32(len(needed_instance_extensions)),
+      ppEnabledExtensionNames = raw_data(required_instance_extensions),
+      enabledExtensionCount = u32(len(required_instance_extensions)),
     }
 
     debug_messenger_info: vk.DebugUtilsMessengerCreateInfoEXT =
     {
       sType           = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
       messageSeverity = {.VERBOSE, .INFO, .WARNING, .ERROR},
-      messageType     = {.GENERAL, .VALIDATION, .PERFORMANCE,},
+      messageType     = {.GENERAL, .VALIDATION, .PERFORMANCE},
       pfnUserCallback = vk_debug_callback,
-      pUserData       = &state.main_context.logger
+      pUserData       = &state.main_context.logger,
     }
 
-    needed_layers: []cstring
+    required_layers: []cstring
     when ODIN_DEBUG
     {
-      needed_layers =
+      required_layers =
       {
         "VK_LAYER_KHRONOS_validation",
       }
 
-      if check_layers(needed_layers)
+      if check_layers(required_layers)
       {
-        instance_info.enabledLayerCount   = u32(len(needed_layers))
-        instance_info.ppEnabledLayerNames = raw_data(needed_layers)
+        layer_data: []b32 = { true }
+        layer_setting: vk.LayerSettingEXT =
+        {
+          pLayerName = "VK_LAYER_KHRONOS validation",
+          type         = .BOOL32,
+          pSettingName   = "validate_best_practices",
+          valueCount   = u32(len(layer_data)),
+          pValues      = raw_data(layer_data),
+        }
+        layer_info: vk.LayerSettingsCreateInfoEXT =
+        {
+          sType        =. LAYER_SETTINGS_CREATE_INFO_EXT,
+          pSettings    = &layer_setting,
+          settingCount = 1,
+        }
+
+        debug_messenger_info.pNext = &layer_info
+
+        instance_info.enabledLayerCount   = u32(len(required_layers))
+        instance_info.ppEnabledLayerNames = raw_data(required_layers)
         instance_info.pNext               = &debug_messenger_info
       }
       else
@@ -509,41 +527,42 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     // Pick Physical Device
     // // //
 
-    needed_device_extensions: []cstring =
+    required_device_extensions: []cstring =
     {
       vk.KHR_SWAPCHAIN_EXTENSION_NAME,
     }
 
-    needed_device_features13: vk.PhysicalDeviceVulkan13Features =
+    required_device_features13: vk.PhysicalDeviceVulkan13Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
       synchronization2 = true,
       dynamicRendering = true,
     }
-    needed_device_features12: vk.PhysicalDeviceVulkan12Features =
+    required_device_features12: vk.PhysicalDeviceVulkan12Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
       bufferDeviceAddress = true,
       descriptorIndexing  = true,
-      pNext = &needed_device_features13,
+      scalarBlockLayout   = true,
+      pNext = &required_device_features13,
     }
-    needed_device_features11: vk.PhysicalDeviceVulkan11Features =
+    required_device_features11: vk.PhysicalDeviceVulkan11Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-      pNext = &needed_device_features12,
+      pNext = &required_device_features12,
     }
-    needed_device_features: vk.PhysicalDeviceFeatures2 =
+    required_device_features: vk.PhysicalDeviceFeatures2 =
     {
       sType = .PHYSICAL_DEVICE_FEATURES_2,
       features =
       {
         shaderInt64 = true,
       },
-      pNext = &needed_device_features11,
+      pNext = &required_device_features11,
     }
 
     queue_indices: [Queue_Kind]union{u32}
-    vks.physical, queue_indices = pick_physical_device(vks.instance, vks.surface, needed_device_features, needed_device_extensions)
+    vks.physical, queue_indices = pick_physical_device(vks.instance, vks.surface, required_device_features, required_device_extensions)
 
     if vks.physical != nil
     {
@@ -584,11 +603,11 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
         sType                   = .DEVICE_CREATE_INFO,
         pQueueCreateInfos       = raw_data(&queue_infos),
         queueCreateInfoCount    = u32(len(queue_infos)),
-        enabledLayerCount       = u32(len(needed_layers)),
-        ppEnabledLayerNames     = raw_data(needed_layers),
-        enabledExtensionCount   = u32(len(needed_device_extensions)),
-        ppEnabledExtensionNames = raw_data(needed_device_extensions),
-        pNext                   = &needed_device_features,
+        enabledLayerCount       = u32(len(required_layers)),
+        ppEnabledLayerNames     = raw_data(required_layers),
+        enabledExtensionCount   = u32(len(required_device_extensions)),
+        ppEnabledExtensionNames = raw_data(required_device_extensions),
+        pNext                   = &required_device_features,
       }
 
       vk_assert(vk.CreateDevice(vks.physical, &device_info, nil, &vks.logical),
@@ -662,7 +681,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // Entire thing gets mapped to a buffer, will never need extra raw memory.
       vks.arenas[.HOST], ok = make_vulkan_arena(vks.logical, vks.physical,
                                                 256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
-                                                {.HOST_VISIBLE, .HOST_COHERENT}, 0)
+                                                {.HOST_VISIBLE, .HOST_COHERENT, }, 0)
       if !ok { log.fatalf("Unable to create host vulkan arena.") }
     }
     else
@@ -877,7 +896,13 @@ vk_get_image :: proc(internal: Renderer_Internal) -> (image: Vulkan_Image)
   return vk_get_render_internal(internal).(Vulkan_Image)
 }
 
-begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
+@(private="file")
+vk_get_pipeline :: proc(internal: Renderer_Internal) -> (image: Vulkan_Pipeline)
+{
+  return vk_get_render_internal(internal).(Vulkan_Pipeline)
+}
+
+begin_render_frame :: proc() -> (ok: bool)
 {
   ok = true
 
@@ -911,7 +936,7 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
   if ok
   {
     vk_assert(vk.ResetCommandPool(vks.logical, frame.pool, {}),
-      "Unable to reset vulkan command pool.")
+              "Unable to reset vulkan command pool.")
 
     buffer_info: vk.CommandBufferBeginInfo =
     {
@@ -919,98 +944,93 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
       flags = {.ONE_TIME_SUBMIT},
     }
     vk_assert(vk.BeginCommandBuffer(frame.buffer, &buffer_info),
-      "Unable to begin vulkan command buffer recording.")
-
-    draw_image := vk_get_image(draw_into.internal)
-
-    vk_transition_image(frame.buffer, draw_image.image,
-                        .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL,
-                        {.TOP_OF_PIPE}, {},
-                        {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE})
-
-    color: vk.ClearColorValue = { float32 = LEARN_OPENGL_ORANGE }
-    color_attachment: vk.RenderingAttachmentInfo =
-    {
-      sType       = .RENDERING_ATTACHMENT_INFO,
-      imageView   = draw_image.view,
-      imageLayout = .COLOR_ATTACHMENT_OPTIMAL, // TODO
-      loadOp      = .CLEAR,
-      storeOp     = .STORE,
-      clearValue  = { color = color }
-    }
-    rendering_info: vk.RenderingInfo =
-    {
-      sType                = .RENDERING_INFO,
-      renderArea           = { extent = { draw_into.width, draw_into.height} },
-      layerCount           = 1,
-      colorAttachmentCount = 1,
-      pColorAttachments    = &color_attachment,
-    }
-
-    vk.CmdBeginRendering(frame.buffer, &rendering_info)
-    viewport: vk.Viewport =
-    {
-      width    = f32(draw_into.width),
-      height   = f32(draw_into.height),
-      minDepth = 0.0,
-      maxDepth = 1.0,
-    }
-    scissor: vk.Rect2D =
-    {
-      offset = { 0, 0 },
-      extent = { draw_into.width, draw_into.height },
-    }
-    vk.CmdSetViewport(frame.buffer, 0, 1, &viewport)
-    vk.CmdSetScissor(frame.buffer, 0, 1, &scissor)
-    vk.CmdSetCullMode(frame.buffer, {})
-    vk.CmdSetFrontFace(frame.buffer, .COUNTER_CLOCKWISE)
-    vk.CmdSetDepthTestEnable(frame.buffer, false)
-    vk.CmdSetDepthWriteEnable(frame.buffer, false)
-    vk.CmdSetDepthCompareOp(frame.buffer, .LESS_OR_EQUAL)
-    vk.CmdSetDepthBiasEnable(frame.buffer, false)
-    vk.CmdSetStencilTestEnable(frame.buffer, false)
-    vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
-    vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
-
-    immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
-
-    draw_quad(vec2{100, 100}, 100, 100, color=LEARN_OPENGL_BLUE)
-
-    immediate_flush(true, true)
-    immediate_frame_reset()
-
-    vk.CmdEndRendering(frame.buffer)
+              "Unable to begin vulkan command buffer recording.")
   }
+
+  // if ok
+  // {
+  //
+  //   draw_image := vk_get_image(draw_into.internal)
+  //
+  //   vk_transition_images(frame.buffer, {vk_image_barrier_info(draw_image.image, .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)})
+  //
+  //   color: vk.ClearColorValue = { float32 = LEARN_OPENGL_BLUE }
+  //   color_attachment: vk.RenderingAttachmentInfo =
+  //   {
+  //     sType       = .RENDERING_ATTACHMENT_INFO,
+  //     imageView   = draw_image.view,
+  //     imageLayout = .COLOR_ATTACHMENT_OPTIMAL,
+  //     loadOp      = .CLEAR,
+  //     storeOp     = .STORE,
+  //     clearValue  = { color = color }
+  //   }
+  //   rendering_info: vk.RenderingInfo =
+  //   {
+  //     sType                = .RENDERING_INFO,
+  //     renderArea           = { extent = { draw_into.width, draw_into.height} },
+  //     layerCount           = 1,
+  //     colorAttachmentCount = 1,
+  //     pColorAttachments    = &color_attachment,
+  //   }
+  //
+  //   vk.CmdBeginRendering(frame.buffer, &rendering_info)
+  //   viewport: vk.Viewport =
+  //   {
+  //     width    = f32(draw_into.width),
+  //     height   = f32(draw_into.height),
+  //     minDepth = 0.0,
+  //     maxDepth = 1.0,
+  //   }
+  //   scissor: vk.Rect2D =
+  //   {
+  //     offset = { 0, 0 },
+  //     extent = { draw_into.width, draw_into.height },
+  //   }
+  //   vk.CmdSetViewport(frame.buffer, 0, 1, &viewport)
+  //   vk.CmdSetScissor(frame.buffer, 0, 1, &scissor)
+  //   vk.CmdSetCullMode(frame.buffer, {})
+  //   vk.CmdSetDepthTestEnable(frame.buffer, false)
+  //   vk.CmdSetDepthWriteEnable(frame.buffer, false)
+  //   vk.CmdSetDepthCompareOp(frame.buffer, .LESS_OR_EQUAL)
+  //   vk.CmdSetDepthBiasEnable(frame.buffer, false)
+  //   vk.CmdSetStencilTestEnable(frame.buffer, false)
+  //   vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
+  //   vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
+  //
+  //   immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
+  //
+  //   draw_quad(vec2{100, 100}, 100, 100, color=LEARN_OPENGL_ORANGE)
+  //
+  //   immediate_flush(true, true)
+  //   immediate_frame_reset()
+  //
+  //   vk.CmdEndRendering(frame.buffer)
+  // }
 
   return ok
 }
 
-flush_drawing :: proc(to_display: Texture)
+flush_render_frame :: proc(to_display: Texture)
 {
   frame := vks.frames[vks.curr_index[.FRAME]]
   target := vks.swapchain.targets[vks.curr_index[.TARGET]]
 
   display_image := vk_get_image(to_display.internal)
 
-  // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
-  vk_transition_image(frame.buffer, display_image.image,
-                      .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL,
-                      {.COLOR_ATTACHMENT_OUTPUT}, {.COLOR_ATTACHMENT_WRITE}, // We've written to it
-                      {.TRANSFER}, {.TRANSFER_READ}) // Now we want to writ it to the swapchain
+  // Blit from display texture to the swapchain image
+  vk_transition_images(frame.buffer,
+  {
+      // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
+      vk_image_barrier_info(display_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL),
 
-  // Transfer swapchain image to be ready for blitting draw image to it.
-  vk_transition_image(frame.buffer, target.image,
-                      .UNDEFINED, .TRANSFER_DST_OPTIMAL,
-                      {.TOP_OF_PIPE}, {}, // Top of pipe since we already waited on sem, no src access
-                      {.TRANSFER}, {.TRANSFER_WRITE}) // Blit destination
-
-  vk_blit_images(display_image.image, target.image, to_display.width, to_display.height,
+      // Transfer swapchain image to be ready for blitting draw image to it.
+      vk_image_barrier_info(target.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+  })
+  vk_blit_images(frame.buffer, display_image.image, target.image, to_display.width, to_display.height,
                  vks.swapchain.extent.width, vks.swapchain.extent.height)
 
-  vk_transition_image(frame.buffer, target.image,
-                      .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR,
-                      {.TRANSFER}, {.TRANSFER_WRITE},
-                      {.BOTTOM_OF_PIPE}, {})
+  // Transition swapchain image to be ready for present
+  vk_transition_images(frame.buffer, {vk_image_barrier_info(target.image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR)})
 
   vk_assert(vk.EndCommandBuffer(frame.buffer),
             "Unable to end vulkan command buffer recording.")
@@ -1082,7 +1102,7 @@ curr_frame_idx :: proc() -> (idx: u32)
 vk_bind_pipeline :: proc(pipeline: Pipeline)
 {
   // UGLY!
-  vk.CmdBindPipeline(vk_curr_cmd(), .GRAPHICS, vk_get_render_internal(pipeline.internal).(Vulkan_Pipeline).pipeline)
+  vk.CmdBindPipeline(vk_curr_cmd(), .GRAPHICS, vk_get_pipeline(pipeline.internal).pipeline)
 }
 
 vk_draw_vertices :: proc(pipeline: Pipeline, first_vertex, vertex_count: u32, push: $Push_Type)
@@ -1091,14 +1111,14 @@ vk_draw_vertices :: proc(pipeline: Pipeline, first_vertex, vertex_count: u32, pu
   push := push
   // UGLY!
   assert(pipeline.push == Push_Type, "Push constats passed to draw do not match push constants pipeline was created with.")
-  vk.CmdPushConstants(vk_curr_cmd(), vk_get_render_internal(pipeline.internal).(Vulkan_Pipeline).layout,
+  vk.CmdPushConstants(vk_curr_cmd(), vk_get_pipeline(pipeline.internal).layout,
                       {.VERTEX, .FRAGMENT}, 0, size_of(push), &push)
   vk.CmdDraw(vk_curr_cmd(), vertex_count, 1, first_vertex, 0)
 }
 
 // NOTE: Hardcoded for color, mostly just for blitting from a texture to a swap image
 @(private="file")
-vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
+vk_blit_images :: proc(cmd: vk.CommandBuffer, src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
 {
   blit_region :vk.ImageBlit2 =
   {
@@ -1129,7 +1149,7 @@ vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
     regionCount    = 1,
   }
 
-  vk.CmdBlitImage2(vk_curr_cmd(), &blit_info)
+  vk.CmdBlitImage2(cmd, &blit_info)
 }
 
 vk_curr_cmd :: proc() -> (buffer: vk.CommandBuffer)
@@ -1178,6 +1198,7 @@ vk_push_internal :: proc(item: Vulkan_Internal) -> (internal: Renderer_Internal)
   return Renderer_Internal(len(vks.internals) - 1)
 }
 
+@(private="file")
 vk_format_table: [Pixel_Format]vk.Format =
 {
   .NONE             = .UNDEFINED,
@@ -1191,9 +1212,127 @@ vk_format_table: [Pixel_Format]vk.Format =
   .DEPTH24_STENCIL8 = .D24_UNORM_S8_UINT,
 }
 
+vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
+{
+  // Sort of jank
+  to_layout :: proc(clearing: bool, format: Pixel_Format, state: Texture_State) -> (layout: vk.ImageLayout)
+  {
+    if clearing
+    {
+      layout = .UNDEFINED
+    }
+    else
+    {
+      switch state
+      {
+        case .NONE:
+          layout = .UNDEFINED
+        case .FRAGMENT_READ:
+          layout = .SHADER_READ_ONLY_OPTIMAL
+        case .TRANSFER_SRC:
+          layout = .TRANSFER_SRC_OPTIMAL
+        case .TRANSFER_DST:
+          layout = .TRANSFER_DST_OPTIMAL
+        case .TARGET:
+          switch format
+          {
+            case .NONE:
+              panic("Idiot.")
+            case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
+              layout = .COLOR_ATTACHMENT_OPTIMAL
+            case .DEPTH24_STENCIL8:
+              layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+            case .DEPTH32:
+              layout = .DEPTH_ATTACHMENT_OPTIMAL
+          }
+      }
+    }
+
+    return layout
+  }
+
+  clearing := .NO_CLEAR not_in pass.flags
+
+  // Put in array so can submit all barriers in one call
+  barriers: [dynamic; cap(target.attachments)]vk.ImageMemoryBarrier2
+
+  color_attachment_infos: [dynamic; cap(target.attachments)]vk.RenderingAttachmentInfo
+  for &attachment in target.attachments
+  {
+    vk_target := vk_get_image(attachment.internal)
+
+    // Whatever it is right now.
+    src_layout := to_layout(clearing, attachment.format, attachment.state)
+
+    // Transition to a target state for attachment
+    dst_layout := to_layout(false, attachment.format, .TARGET)
+
+    append(&barriers, vk_image_barrier_info(vk_target.image, src_layout, dst_layout))
+
+    // This attachment is now a target, so future pipeline barriers can know about it.
+    // FIXME: This state change should probably bundled with the call to pipeline barriers somehow
+    attachment.state = .TARGET
+
+    append(&color_attachment_infos, vk.RenderingAttachmentInfo{
+      sType       = .RENDERING_ATTACHMENT_INFO,
+      imageView   = vk_target.view,
+      imageLayout = dst_layout,
+      // NOTE: Hardcoded depth/stencil clear values
+      clearValue  = dst_layout == .COLOR_ATTACHMENT_OPTIMAL ? {color={float32=pass.clear_color}} : {depthStencil={depth=1.0,stencil=0}},
+      loadOp      = clearing ? .CLEAR : .LOAD,
+      storeOp     = .STORE,
+    })
+  }
+
+  // Now just uno call for all images
+  vk_transition_images(vk_curr_cmd(), barriers[:])
+
+  rendering_info: vk.RenderingInfo =
+  {
+    sType                = .RENDERING_INFO,
+    renderArea           = {{i32(pass.viewport.x), i32(pass.viewport.y)}, {pass.viewport.w, pass.viewport.h}},
+    layerCount           = 1,
+    colorAttachmentCount = u32(len(color_attachment_infos)),
+    pColorAttachments    = raw_data(color_attachment_infos[:]),
+  }
+
+  vk.CmdBeginRendering(vk_curr_cmd(), &rendering_info)
+
+  // Dynamic state
+  viewport: vk.Viewport =
+  {
+    x        = f32(pass.viewport.x),
+    y        = f32(pass.viewport.y),
+    width    = f32(pass.viewport.w),
+    height   = f32(pass.viewport.h),
+    minDepth = 0.0,
+    maxDepth = 1.0,
+  }
+  scissor: vk.Rect2D =
+  {
+    offset = {0, 0},
+    extent = {pass.viewport.w, pass.viewport.h},
+  }
+  vk.CmdSetViewport(vk_curr_cmd(), 0, 1, &viewport)
+  vk.CmdSetScissor(vk_curr_cmd(), 0, 1, &scissor)
+  vk.CmdSetCullMode(vk_curr_cmd(), {})
+  vk.CmdSetDepthTestEnable(vk_curr_cmd(), false)
+  vk.CmdSetDepthWriteEnable(vk_curr_cmd(), false)
+  vk.CmdSetDepthCompareOp(vk_curr_cmd(), .LESS_OR_EQUAL)
+  vk.CmdSetDepthBiasEnable(vk_curr_cmd(), false)
+  vk.CmdSetStencilTestEnable(vk_curr_cmd(), false)
+  vk.CmdSetDepthBias(vk_curr_cmd(), 0, 0, 0)
+  vk.CmdSetStencilOp(vk_curr_cmd(), {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
+}
+
+vk_end_render_pass :: proc()
+{
+  vk.CmdEndRendering(vk_curr_cmd())
+}
+
 // NOTE: Always pushed to device memory
-vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
-                         width, height, samples, array_count, mip_count: u32, is_render_target: bool) -> (handle: Renderer_Internal)
+vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pixel_Format, sampler: Sampler_Preset,
+                         width, height, samples, array_count, mip_count: u32) -> (handle: Renderer_Internal)
 {
 
   vk_samples: vk.SampleCountFlags
@@ -1208,19 +1347,22 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
     case 8: vk_samples = {._8}
   }
 
-  usage: vk.ImageUsageFlags = {.TRANSFER_DST, .SAMPLED} // Always
-  if mip_count > 1 { usage += {.TRANSFER_SRC} } // Will have to read to generate mips
-
-  if is_render_target
+  vk_usage: vk.ImageUsageFlags = {.TRANSFER_DST, .SAMPLED } // Always
+  if mip_count > 1
   {
-    usage += {.STORAGE, .TRANSFER_SRC}
+    vk_usage += {.TRANSFER_SRC}
+  } // Will have to read to generate mips
+
+  if .TARGET in usage
+  {
+    vk_usage += {.STORAGE, .TRANSFER_SRC}
     if format == .DEPTH32 || format == .DEPTH24_STENCIL8
     {
-      usage += {.DEPTH_STENCIL_ATTACHMENT}
+      vk_usage += {.DEPTH_STENCIL_ATTACHMENT}
     }
     else
     {
-      usage += {.COLOR_ATTACHMENT}
+      vk_usage += {.COLOR_ATTACHMENT}
     }
   }
 
@@ -1237,7 +1379,7 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
     arrayLayers = array_count,
     samples     = vk_samples,
     tiling      = .OPTIMAL, // Currently not ever reading back textures sooo.
-    usage       = usage,
+    usage       = vk_usage,
   }
 
   image: Vulkan_Image
@@ -1302,7 +1444,12 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   vk.GetPhysicalDeviceProperties(vks.physical, &props)
 
   alignment := props.limits.minStorageBufferOffsetAlignment
-  if .UNIFORM_DATA in flags { alignment = props.limits.minUniformBufferOffsetAlignment } // This is usually higher, so check after defaulting to storage alignment
+
+  if .UNIFORM_DATA in flags
+  {
+    // I believe this is always higher, so default to this if so.
+    alignment = props.limits.minUniformBufferOffsetAlignment
+  }
 
   // By default push to device
   arena := &vks.arenas[.DEVICE]
@@ -1368,7 +1515,6 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
     .VIEWPORT,
     .SCISSOR,
     .CULL_MODE,
-    .FRONT_FACE,
     .DEPTH_TEST_ENABLE,
     .DEPTH_WRITE_ENABLE,
     .DEPTH_COMPARE_OP,
@@ -1394,7 +1540,6 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
   {
     sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
     polygonMode = .FILL,
-    cullMode    = {.BACK},
     frontFace   = .COUNTER_CLOCKWISE,
     lineWidth   = 1.0,
   }
@@ -1493,6 +1638,7 @@ semaphore_submit_info :: proc(semaphore: vk.Semaphore, stage: vk.PipelineStageFl
 }
 
 // All mips and all layers by default
+@(private="file")
 vk_image_range :: proc(aspects: vk.ImageAspectFlags,
                        mip_base: u32 = 0, mip_count: u32 = vk.REMAINING_MIP_LEVELS,
                        array_base: u32 = 0, array_count: u32 = vk.REMAINING_ARRAY_LAYERS) -> (range: vk.ImageSubresourceRange)
@@ -1510,14 +1656,49 @@ vk_image_range :: proc(aspects: vk.ImageAspectFlags,
 }
 
 @(private="file")
-vk_transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
-                            old, new:   vk.ImageLayout,
-                            src_stage:  vk.PipelineStageFlags2,
-                            src_access: vk.AccessFlags2,
-                            dst_stage:  vk.PipelineStageFlags2,
-                            dst_access: vk.AccessFlags2)
+vk_image_layout_info :: proc(layout: vk.ImageLayout) -> (stage: vk.PipelineStageFlags2, access: vk.AccessFlags2)
 {
-  barrier: vk.ImageMemoryBarrier2 =
+  #partial switch layout
+  {
+    case:
+      panic("Unkown vulkan image layout to map to stage and access.")
+    case .UNDEFINED:
+      stage  = {.TOP_OF_PIPE}
+      access = {}
+    case .COLOR_ATTACHMENT_OPTIMAL:
+      stage  = {.COLOR_ATTACHMENT_OUTPUT}
+      access = {.COLOR_ATTACHMENT_WRITE}
+    case .DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+      stage  = {.EARLY_FRAGMENT_TESTS, .LATE_FRAGMENT_TESTS}
+      access = {.DEPTH_STENCIL_ATTACHMENT_WRITE}
+    case .DEPTH_ATTACHMENT_OPTIMAL:
+      stage  = {.EARLY_FRAGMENT_TESTS, .LATE_FRAGMENT_TESTS}
+      access = {.DEPTH_STENCIL_ATTACHMENT_WRITE}
+    // NOTE: This is hardcoded to be read from fragment shader only
+    case .SHADER_READ_ONLY_OPTIMAL:
+      stage  = {.FRAGMENT_SHADER}
+      access = {.SHADER_READ}
+    case .TRANSFER_SRC_OPTIMAL:
+      stage  = {.TRANSFER}
+      access = {.TRANSFER_READ}
+    case .TRANSFER_DST_OPTIMAL:
+      stage  = {.TRANSFER}
+      access = {.TRANSFER_WRITE}
+    case .PRESENT_SRC_KHR:
+      stage  = {.BOTTOM_OF_PIPE}
+      access = {}
+  }
+
+  return
+}
+
+@(private="file")
+vk_image_barrier_info :: proc(image: vk.Image, old, new: vk.ImageLayout) -> (barrier_info: vk.ImageMemoryBarrier2)
+{
+  src_stage, src_access := vk_image_layout_info(old)
+  dst_stage, dst_access := vk_image_layout_info(new)
+
+  barrier_info =
   {
     sType         = .IMAGE_MEMORY_BARRIER_2,
     srcStageMask  = src_stage,
@@ -1530,11 +1711,16 @@ vk_transition_image :: proc(cmd: vk.CommandBuffer, image: vk.Image,
     subresourceRange = vk_image_range(new == .DEPTH_ATTACHMENT_OPTIMAL ? {.DEPTH} : {.COLOR}),
   }
 
+  return barrier_info
+}
+
+vk_transition_images :: proc(cmd: vk.CommandBuffer, barriers: []vk.ImageMemoryBarrier2)
+{
   dependency: vk.DependencyInfo =
   {
     sType                   = .DEPENDENCY_INFO,
-    pImageMemoryBarriers    = &barrier,
-    imageMemoryBarrierCount = 1,
+    pImageMemoryBarriers    = raw_data(barriers),
+    imageMemoryBarrierCount = u32(len(barriers)),
   }
 
   vk.CmdPipelineBarrier2(cmd, &dependency)
