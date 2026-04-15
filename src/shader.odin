@@ -160,10 +160,16 @@ Draw_Uniform :: struct
   light_index:    u32, // Here for point light shader
 }
 
+GLSL_Layout :: enum
+{
+  STD430,
+  SCALAR,
+}
+
 Nil_Push :: struct {}
 
 @(private="file")
-to_glsl_basic_type_string :: proc(type: typeid, allow_vec4: bool) -> string
+to_glsl_basic_type_string :: proc(type: typeid, allow_vec: bool) -> string
 {
   s: string
   switch type {
@@ -171,8 +177,12 @@ to_glsl_basic_type_string :: proc(type: typeid, allow_vec4: bool) -> string
     s = "float"
   case mat4:
     s = "mat4"
+  case vec2:
+    if allow_vec { s = "vec2" }
+  case vec3:
+    if allow_vec { s = "vec3" }
   case vec4:
-    if allow_vec4 { s = "vec4" }
+    if allow_vec { s = "vec4" }
   case u32:
     s = "int"
   case i32:
@@ -187,7 +197,7 @@ to_glsl_basic_type_string :: proc(type: typeid, allow_vec4: bool) -> string
 }
 
 @(private="file")
-to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, prefix: string = "struct", suffix: string = "", allow_vec4: bool = true)
+to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, prefix: string = "struct", suffix: string = "", allow_vec: bool = true)
 {
   assert(reflect.is_struct(type_info_of(t)))
 
@@ -202,7 +212,7 @@ to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, prefix: string = "struct"
     }
     else
     {
-      basic := to_glsl_basic_type_string(field.type.id, allow_vec4)
+      basic := to_glsl_basic_type_string(field.type.id, allow_vec)
 
       // Wasn't one of the above basic types
       if basic == ""
@@ -215,7 +225,7 @@ to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, prefix: string = "struct"
           array_info := info.variant.(reflect.Type_Info_Array)
 
           // Is it possibly an array of basic types?
-          array_type := to_glsl_basic_type_string(array_info.elem.id, allow_vec4)
+          array_type := to_glsl_basic_type_string(array_info.elem.id, allow_vec)
 
           if array_type == ""
           {
@@ -257,7 +267,9 @@ gen_glsl_code :: proc()
   fmt.sbprintf(&b, "// NOTE: This code was generated on %v (%v)\n\n", date, hours)
 
   // Gotta have it
-  // fmt.sbprint(&b, "#extension GL_ARB_bindless_texture : require\n\n")
+  fmt.sbprintf(&b, "#extension GL_EXT_buffer_reference : require\n")
+  fmt.sbprintf(&b, "#extension GL_EXT_scalar_block_layout : require\n")
+  fmt.sbprintf(&b, "#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require\n")
 
   //
   // Parse and append uniform structs
@@ -273,7 +285,7 @@ gen_glsl_code :: proc()
   // to_glsl_struct(&b, Draw_Uniform)
   // to_glsl_struct(&b, Frame_Uniform)
   // to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
-  to_glsl_struct(&b, Immediate_Vertex, allow_vec4 = false)
+  to_glsl_struct(&b, Immediate_Vertex, allow_vec = true)
 
   // FIXME: Automate somehow.
   // fmt.sbprintln(&b)
@@ -294,7 +306,7 @@ gen_glsl_code :: proc()
   // fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
   // fmt.sbprintf(&b, "};\n\n")
 
-  fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Immediate_Vertices {{\n")
+  fmt.sbprintf(&b, "layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {{\n")
   fmt.sbprintf(&b, "  Immediate_Vertex immediate_vertices[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
@@ -325,24 +337,24 @@ gen_glsl_code :: proc()
 //               mesh_vertices[index].tangent[3]);
 // }
 
-vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
-{
-  return vec3(vertices[index].position[0],
-              vertices[index].position[1],
-              vertices[index].position[2]);
-}
-vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
-{
-  return vec2(vertices[index].uv[0],
-              vertices[index].uv[1]);
-}
-vec4 immediate_vertex_color(Immediate_Vertices vertices, int index)
-{
-  return vec4(vertices[index].color[0],
-              vertices[index].color[1],
-              vertices[index].color[2],
-              vertices[index].color[3]);
-}
+// vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
+// {
+//   return vec3(vertices[index].position[0],
+//               vertices[index].position[1],
+//               vertices[index].position[2]);
+// }
+// vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
+// {
+//   return vec2(vertices[index].uv[0],
+//               vertices[index].uv[1]);
+// }
+// vec4 immediate_vertex_color(Immediate_Vertex vertex)
+// {
+//   return vec4(vertices[index].color[0],
+//               vertices[index].color[1],
+//               vertices[index].color[2],
+//               vertices[index].color[3]);
+// }
 
 `
 

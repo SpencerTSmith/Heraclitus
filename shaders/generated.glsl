@@ -1,12 +1,15 @@
-// NOTE: This code was generated on 15-04-2026 (02:40:46 am)
+// NOTE: This code was generated on 15-04-2026 (03:10:22 am)
 
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 struct Immediate_Vertex {
-  float position[3];
-  float uv[2];
-  float color[4];
+  vec3 position;
+  vec2 uv;
+  vec4 color;
 };
 
-layout(buffer_reference, std430) readonly buffer Immediate_Vertices {
+layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {
   Immediate_Vertex immediate_vertices[];
 };
 
@@ -36,22 +39,22 @@ layout(buffer_reference, std430) readonly buffer Immediate_Vertices {
 //               mesh_vertices[index].tangent[3]);
 // }
 
-vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
-{
-  return vec3(vertices[index].position[0],
-              vertices[index].position[1],
-              vertices[index].position[2]);
-}
-vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
-{
-  return vec2(vertices[index].uv[0],
-              vertices[index].uv[1]);
-}
-vec4 immediate_vertex_color(Immediate_Vertices vertices, int index)
-{
-  return vec4(vertices[index].color[0],
-              vertices[index].color[1],
-              vertices[index].color[2],
-              vertices[index].color[3]);
-}
+// vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
+// {
+//   return vec3(vertices[index].position[0],
+//               vertices[index].position[1],
+//               vertices[index].position[2]);
+// }
+// vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
+// {
+//   return vec2(vertices[index].uv[0],
+//               vertices[index].uv[1]);
+// }
+// vec4 immediate_vertex_color(Immediate_Vertex vertex)
+// {
+//   return vec4(vertices[index].color[0],
+//               vertices[index].color[1],
+//               vertices[index].color[2],
+//               vertices[index].color[3]);
+// }
 

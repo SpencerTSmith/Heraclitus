@@ -66,7 +66,6 @@ init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
   for &buffer in immediate.vertex_buffers
   {
     buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, {.CPU_MAPPED, .VERTEX_DATA})
-    print("%v",buffer.gpu_base)
   }
 
   immediate.pipeline, ok = make_pipeline(state.perm_alloc, "immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
@@ -152,8 +151,10 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
   {
     bind_pipeline(immediate.pipeline)
 
-    // Transforms
+    // Screenspace
     orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, -1, 1)
+
+    // Worldspace
     perspective  := camera_perspective(state.camera, window_aspect_ratio(state.window)) * camera_view(state.camera)
 
     for batch in immediate.batches

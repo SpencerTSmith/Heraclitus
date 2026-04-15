@@ -974,7 +974,7 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
 
     immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
 
-    draw_quad({100, 100}, 100, 100)
+    draw_quad(vec2{100, 100}, 100, 100, color=LEARN_OPENGL_BLUE)
 
     immediate_flush(true, true)
     immediate_frame_reset()
@@ -1301,9 +1301,8 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   props: vk.PhysicalDeviceProperties
   vk.GetPhysicalDeviceProperties(vks.physical, &props)
 
-  alignment: vk.DeviceSize = 16
-  if .STORAGE_DATA in flags { alignment = props.limits.minStorageBufferOffsetAlignment }
-  if .UNIFORM_DATA in flags { alignment = props.limits.minUniformBufferOffsetAlignment } // This is usually higher so check last
+  alignment := props.limits.minStorageBufferOffsetAlignment
+  if .UNIFORM_DATA in flags { alignment = props.limits.minUniformBufferOffsetAlignment } // This is usually higher, so check after defaulting to storage alignment
 
   // By default push to device
   arena := &vks.arenas[.DEVICE]

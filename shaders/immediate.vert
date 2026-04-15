@@ -1,8 +1,6 @@
 #version 460 core
 
-#extension GL_EXT_buffer_reference : require
-#extension GL_EXT_scalar_block_layout : require
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#include "generated.glsl"
 
 layout(location=0) out VS_OUT
 {
@@ -11,17 +9,6 @@ layout(location=0) out VS_OUT
 } vs_out;
 
 #push_constant
-
-struct Immediate_Vertex {
-  vec3 position;
-  vec2 uv;
-  vec4 color;
-};
-
-layout(buffer_reference, scalar) readonly buffer Immediate_Vertices
-{
-  Immediate_Vertex immediate_vertices[];
-};
 
 void main()
 {
