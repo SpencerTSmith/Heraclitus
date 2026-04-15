@@ -104,23 +104,6 @@ bind_texture_by_asset :: proc(name: string, handle: Texture_Handle)
   bind_texture_to_name(name, texture)
 }
 
-pixel_format_to_vk_aspects :: proc(format: Pixel_Format) -> (aspects: vk.ImageAspectFlags)
-{
-  switch format
-  {
-    case .NONE: assert(false)
-    case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
-      aspects += {.COLOR}
-    case .DEPTH24_STENCIL8:
-      aspects += {.STENCIL}
-      fallthrough
-    case .DEPTH32:
-      aspects += {.DEPTH}
-  }
-
-  return aspects
-}
-
 alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
                       width, height: u32, samples: u32 = 1, array_count: u32 = 1, is_render_target := false) -> (texture: Texture)
 {
@@ -145,11 +128,12 @@ alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler
   return texture
 }
 
-// NOTE: Hardcoded to just blit everything entirely
 make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler: Sampler_Preset,
-                               datas: []rawptr, width, height: u32, samples: u32 = 0) -> (texture: Texture)
+                               datas: []rawptr, width, height: u32, samples: u32 = 1) -> (texture: Texture)
 {
   texture = alloc_texture(type, format, sampler, width, height, samples)
+
+  // TODO: Upload
 
   return texture
 }

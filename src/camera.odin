@@ -178,7 +178,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64)
   wish_cam_aabb.min += (wish_pos - camera.position)
   wish_cam_aabb.max += (wish_pos - camera.position)
 
-  if state.draw_debug
+  if state.renderer.draw_debug
   {
     draw_aabb(cam_aabb)
     draw_aabb(wish_cam_aabb, CORAL)
@@ -236,7 +236,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64)
   }
 
   // Draw out input and velocity vectors
-  if state.draw_debug
+  if state.renderer.draw_debug
   {
     draw_pos := camera.position
     draw_pos.y -= 0.5

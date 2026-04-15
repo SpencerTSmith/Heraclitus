@@ -257,7 +257,7 @@ gen_glsl_code :: proc()
   fmt.sbprintf(&b, "// NOTE: This code was generated on %v (%v)\n\n", date, hours)
 
   // Gotta have it
-  fmt.sbprint(&b, "#extension GL_ARB_bindless_texture : require\n\n")
+  // fmt.sbprint(&b, "#extension GL_ARB_bindless_texture : require\n\n")
 
   //
   // Parse and append uniform structs
@@ -265,102 +265,83 @@ gen_glsl_code :: proc()
 
   // TODO: There's gotta be some way to 'tag' structs as ones that need to match up with the generated GLSL code
   // That way, don't need to remember to add it here and can instead
-  to_glsl_struct(&b, Direction_Light_Uniform)
-  to_glsl_struct(&b, Spot_Light_Uniform)
-  to_glsl_struct(&b, Shadow_Point_Light_Uniform)
-  to_glsl_struct(&b, Point_Light_Uniform)
-  to_glsl_struct(&b, Material_Uniform)
-  to_glsl_struct(&b, Draw_Uniform)
-  to_glsl_struct(&b, Frame_Uniform)
-  to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
+  // to_glsl_struct(&b, Direction_Light_Uniform)
+  // to_glsl_struct(&b, Spot_Light_Uniform)
+  // to_glsl_struct(&b, Shadow_Point_Light_Uniform)
+  // to_glsl_struct(&b, Point_Light_Uniform)
+  // to_glsl_struct(&b, Material_Uniform)
+  // to_glsl_struct(&b, Draw_Uniform)
+  // to_glsl_struct(&b, Frame_Uniform)
+  // to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
   to_glsl_struct(&b, Immediate_Vertex, allow_vec4 = false)
 
+  // FIXME: Automate somehow.
+  // fmt.sbprintln(&b)
+  // fmt.sbprintf(&b, "layout(buffer_reference, std140) uniform Frame_Uniform_UBO {{\n",)
+  // fmt.sbprintf(&b, "  Frame_Uniform frame;\n")
+  // fmt.sbprintf(&b, "};\n\n")
+
+  // fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Materials {{\n",
+  //              bind_names[.MATERIALS])
+  // fmt.sbprintf(&b, "  Material_Uniform materials[];\n")
+  // fmt.sbprintf(&b, "};\n\n")
+
+  // fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Draw_Uniforms {{\n",)
+  // fmt.sbprintf(&b, "  Draw_Uniform draw_uniforms[];\n")
+  // fmt.sbprintf(&b, "};\n\n")
   //
-  // Generate buffer bindings
-  //
-  bind_names: [UBO_Bind]string
-  for e in UBO_Bind
-  {
-    enum_string, ok := fmt.enum_value_to_string(e)
-    if !ok
-    {
-      log.errorf("GLSL Code Generation unable to map UBO Bind point enum to string %v", e)
-    }
+  // fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Mesh_Vertices {{\n")
+  // fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
+  // fmt.sbprintf(&b, "};\n\n")
 
-    bind_names[e] = fmt.tprintf("%v_BINDING", enum_string)
-
-    fmt.sbprintf(&b, "#define %v %v\n", bind_names[e], int(e))
-  }
-  fmt.sbprintln(&b)
-  fmt.sbprintf(&b, "layout(binding = %v, std140) uniform Frame_Uniform_UBO {{\n",
-               bind_names[.FRAME])
-  fmt.sbprintf(&b, "  %v frame;\n", typeid_of(Frame_Uniform))
-  fmt.sbprintf(&b, "};\n\n")
-
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Materials {{\n",
-               bind_names[.MATERIALS])
-  fmt.sbprintf(&b, "  Material_Uniform materials[];\n")
-  fmt.sbprintf(&b, "};\n\n")
-
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Draw_Uniforms {{\n",
-               bind_names[.DRAW_UNIFORMS])
-  fmt.sbprintf(&b, "  Draw_Uniform draw_uniforms[];\n")
-  fmt.sbprintf(&b, "};\n\n")
-
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Vertices {{\n",
-               bind_names[.MESH_VERTICES])
-  fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
-  fmt.sbprintf(&b, "};\n\n")
-
-  fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Immediate_Vertices {{\n",
-               bind_names[.IMM_VERTICES])
+  fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Immediate_Vertices {{\n")
   fmt.sbprintf(&b, "  Immediate_Vertex immediate_vertices[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
   // TODO: Can probably generate these instead of hard coding, might not be worth the effort...
   append_always := `
-vec3 mesh_vertex_position(int index)
-{
-  return vec3(mesh_vertices[index].position[0],
-              mesh_vertices[index].position[1],
-              mesh_vertices[index].position[2]);
-}
-vec2 mesh_vertex_uv(int index)
-{
-  return vec2(mesh_vertices[index].uv[0],
-              mesh_vertices[index].uv[1]);
-}
-vec3 mesh_vertex_normal(int index)
-{
-  return vec3(mesh_vertices[index].normal[0],
-              mesh_vertices[index].normal[1],
-              mesh_vertices[index].normal[2]);
-}
-vec4 mesh_vertex_tangent(int index)
-{
-  return vec4(mesh_vertices[index].tangent[0],
-              mesh_vertices[index].tangent[1],
-              mesh_vertices[index].tangent[2],
-              mesh_vertices[index].tangent[3]);
-}
+// vec3 mesh_vertex_position(int index)
+// {
+//   return vec3(mesh_vertices[index].position[0],
+//               mesh_vertices[index].position[1],
+//               mesh_vertices[index].position[2]);
+// }
+// vec2 mesh_vertex_uv(int index)
+// {
+//   return vec2(mesh_vertices[index].uv[0],
+//               mesh_vertices[index].uv[1]);
+// }
+// vec3 mesh_vertex_normal(int index)
+// {
+//   return vec3(mesh_vertices[index].normal[0],
+//               mesh_vertices[index].normal[1],
+//               mesh_vertices[index].normal[2]);
+// }
+// vec4 mesh_vertex_tangent(int index)
+// {
+//   return vec4(mesh_vertices[index].tangent[0],
+//               mesh_vertices[index].tangent[1],
+//               mesh_vertices[index].tangent[2],
+//               mesh_vertices[index].tangent[3]);
+// }
 
-vec3 immediate_vertex_position(int index)
+vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
 {
-  return vec3(immediate_vertices[index].position[0],
-              immediate_vertices[index].position[1],
-              immediate_vertices[index].position[2]);
+  return vec3(vertices[index].position[0],
+              vertices[index].position[1],
+              vertices[index].position[2]);
 }
-vec2 immediate_vertex_uv(int index)
+vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
 {
-  return vec2(immediate_vertices[index].uv[0],
-              immediate_vertices[index].uv[1]);
+  return vec2(vertices[index].uv[0],
+              vertices[index].uv[1]);
 }
-vec4 immediate_vertex_color(int index)
+vec4 immediate_vertex_color(Immediate_Vertices vertices, int index)
 {
-  return vec4(immediate_vertices[index].color[0],
-              immediate_vertices[index].color[1],
-              immediate_vertices[index].color[2],
-              immediate_vertices[index].color[3]);
+  return vec4(vertices[index].color[0],
+              vertices[index].color[1],
+              vertices[index].color[2],
+              vertices[index].color[3]);
 }
 
 `
@@ -717,8 +698,22 @@ hot_reload_shaders :: proc(shaders: ^[Pipeline_Key]Pipeline, allocator: runtime.
   }
 }
 
-bind_pipeline :: proc(tag: Pipeline_Key)
+bind_pipeline :: proc
 {
+  bind_pipeline_direct,
+  bind_pipeline_key,
+}
+
+// TODO: Check against current render target to ensure that pipeline is compatible.
+bind_pipeline_direct :: proc(pipeline: Pipeline)
+{
+  state.renderer.bound_pipeline = pipeline
+  vk_bind_pipeline(pipeline)
+}
+
+bind_pipeline_key :: proc(tag: Pipeline_Key)
+{
+  bind_pipeline_direct(state.renderer.pipelines[tag])
 }
 
 free_pipeline :: proc(pipeline: ^Pipeline)

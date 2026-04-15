@@ -1,7 +1,7 @@
 package main
 
+import "base:intrinsics"
 import "core:mem"
-import "core:log"
 
 // NOTE: CPU mapped is just for writing, the memory is host coherent, not host cached.
 GPU_Buffer_Flag :: enum
@@ -17,7 +17,7 @@ GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
 
 GPU_Buffer :: struct
 {
-  flags:      GPU_Buffer_Flags,
+  flags: GPU_Buffer_Flags,
 
   cpu_base: rawptr,
   gpu_base: rawptr,
@@ -36,7 +36,7 @@ align_size_for_gpu :: proc(size: int) -> (aligned: int)
 
 // NOTE: Since I control memory allocation and I know its just a bump allocator, frame/ring buffer is no longer needed
 // conceptually... buffers made one after another are next to each other in memory, so just make FRAMES_IN_FLIGHT GPU_Buffers
-make_gpu_buffer :: proc(size: int, data: rawptr = nil, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
+make_gpu_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
 {
   buffer.gpu_base, buffer.cpu_base = vk_alloc_buffer(size, flags)
   buffer.flags = flags
@@ -108,62 +108,24 @@ bind_gpu_buffer_range :: proc(buffer: GPU_Buffer, binding: UBO_Bind, offset, siz
 //   return rawptr(address)
 // }
 
-// free_gpu_buffer :: proc(buffer: ^GPU_Buffer)
-// {
-//   if buffer.id != 0
-//   {
-//     // if gpu_buffer_is_mapped(buffer^)
-//     // {
-//     //   // gl.UnmapNamedBuffer(buffer.id)
-//     // }
-//     // gl.DeleteBuffers(1, &buffer.id)
-//   }
-//   buffer^ = {}
-// }
-
-// Now just a fast path for putting vertices and indices into a SSBO.
-make_vertex_buffer :: proc($vertex_type: typeid,
-                           vertex_count: int,
-                           $index_type:  typeid,
-                           index_count:  int = 0,
-                           vertex_data:  rawptr = nil,
-                           index_data:   rawptr = nil,
-                           flags: GPU_Buffer_Flags = {}) -> (buffer: GPU_Buffer)
+// Just a helper for taking in a vertex type and returning the right sized buffer.
+make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
 {
+  size := vertex_count * size_of(vertex_type)
 
-  // vertex_length := vertex_count * size_of(vertex_type)
-  // index_length  := index_count  * size_of(index_type)
-  //
-  // vertex_length_align := align_size_for_gpu(vertex_length)
-  // index_length_align  := align_size_for_gpu(index_length)
-  //
-  // total_size := vertex_length_align + index_length_align
-  //
-  // buffer = make_gpu_buffer(total_size, flags = flags)
-  //
-  // // Ack
-  // // gl.CreateVertexArrays(1, &buffer.vao);
-  // if index_length > 0
-  // {
-  //   // gl.VertexArrayElementBuffer(buffer.vao, buffer.id);
-  // }
-  //
-  // // buffer.index_offset = vertex_length_align
-  //
-  // write_gpu_buffer(buffer, 0, vertex_length, vertex_data)
-  // // write_gpu_buffer(buffer, buffer.index_offset, index_length, index_data)
-  //
+  buffer.flags |= {.VERTEX_DATA} // I am idiot, so just in case I forgot to pass this.
+  buffer = make_gpu_buffer(size, flags = flags)
+
   return buffer
 }
 
-bind_vertex_buffer :: proc(buffer: GPU_Buffer)
+make_index_buffer :: proc($index_type: typeid, index_count: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
+  where intrinsics.type_is_integer(index_type)
 {
-  // assert(.VERTEX_DATA in buffer.flags)
-  // gl.BindVertexArray(buffer.vao)
-}
+  size := index_count * size_of(index_type)
 
-unbind_vertex_buffer :: proc()
-{
-  // gl.BindVertexArray(0)
-}
+  buffer.flags |= {.INDEX_DATA} // I am idiot, so just in case I forgot to pass this.
+  buffer = make_gpu_buffer(size, flags = flags)
 
+  return buffer
+}

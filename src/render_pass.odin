@@ -80,15 +80,12 @@ Render_Pass_Flags :: enum
 
 Render_Pass :: struct
 {
-  flags:      bit_set[Render_Pass_Flags],
+  flags: bit_set[Render_Pass_Flags],
 
   depth_test: Depth_Test_Mode,
   face_cull:  Face_Cull_Mode,
   blend:      Blend_Mode,
-
-  // Optionally filled out if don't want to use the full
-  // Framebuffer size in a render pass, set by flag
-  viewport: Viewport,
+  viewport:   Viewport, // Optional, see flags
 }
 
 MAIN_PASS :: Render_Pass {
@@ -129,11 +126,12 @@ UI_PASS :: Render_Pass {
 // TODO: Save state as it was before this pass, perhaps as an optional return
 begin_render_pass :: proc(pass: Render_Pass, fb: Framebuffer)
 {
-  bind_framebuffer(fb)
-  if .CLEAR_FRAMEBUFFER in pass.flags
-  {
-    clear_framebuffer(fb)
-  }
+
+  // bind_framebuffer(fb)
+  // if .CLEAR_FRAMEBUFFER in pass.flags
+  // {
+  //   clear_framebuffer(fb)
+  // }
 
   /////////
   // GL State Changes
@@ -506,30 +504,30 @@ remake_framebuffer :: proc(frame_buffer: ^Framebuffer, width, height: int) -> (n
 //   glfw.SwapBuffers(state.window.handle)
 // }
 
-resize_window :: proc(window: ^Window) -> (ok: bool)
-{
-  // Reset
-  window.should_resize = false
-
-  state.hdr_ms_buffer, ok = remake_framebuffer(&state.hdr_ms_buffer, window.w, window.h)
-  state.post_buffer, ok = remake_framebuffer(&state.post_buffer, window.w, window.h)
-  state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], window.w, window.h)
-  state.ping_pong_buffers[1], ok = remake_framebuffer(&state.ping_pong_buffers[1], window.w, window.h)
-
-  if !ok
-  {
-    log.fatal("Window has been resized but unable to recreate framebuffers")
-  }
-  else
-  {
-    assert(window.w == state.hdr_ms_buffer.width &&
-           window.h == state.hdr_ms_buffer.height)
-
-    log.infof("Window has resized to %vpx, %vpx", window.w, window.h)
-  }
-
-  return ok
-}
+// resize_window :: proc(window: ^Window) -> (ok: bool)
+// {
+//   // Reset
+//   window.should_resize = false
+//
+//   state.hdr_ms_buffer, ok = remake_framebuffer(&state.hdr_ms_buffer, window.w, window.h)
+//   state.post_buffer, ok = remake_framebuffer(&state.post_buffer, window.w, window.h)
+//   state.ping_pong_buffers[0], ok = remake_framebuffer(&state.ping_pong_buffers[0], window.w, window.h)
+//   state.ping_pong_buffers[1], ok = remake_framebuffer(&state.ping_pong_buffers[1], window.w, window.h)
+//
+//   if !ok
+//   {
+//     log.fatal("Window has been resized but unable to recreate framebuffers")
+//   }
+//   else
+//   {
+//     assert(window.w == state.hdr_ms_buffer.width &&
+//            window.h == state.hdr_ms_buffer.height)
+//
+//     log.infof("Window has resized to %vpx, %vpx", window.w, window.h)
+//   }
+//
+//   return ok
+// }
 
 draw_skybox :: proc(handle: Texture_Handle)
 {

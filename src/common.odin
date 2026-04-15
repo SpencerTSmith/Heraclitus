@@ -96,7 +96,19 @@ mat4_rotate    :: glsl.mat4Rotate
 mat4_scale     :: glsl.mat4Scale
 
 mat4_perspective  :: glsl.mat4Perspective
-mat4_orthographic :: glsl.mat4Ortho3d
+// For vulkan clip space
+mat4_orthographic :: proc(left, right, bottom, top, near, far: f32) -> (m: mat4)
+{
+	m[0, 0] = +2 / (right - left)
+	m[1, 1] = -2 / (top - bottom)
+	m[2, 2] = -1 / (far - near)
+	m[0, 3] = -(right + left)   / (right - left)
+  m[1, 3] = -(bottom + top) / (bottom - top)
+	m[2, 3] = -near / (far - near)
+	m[3, 3] = 1
+
+  return m
+}
 mat4_look_at      :: glsl.mat4LookAt
 
 lerp :: glsl.lerp

@@ -7,9 +7,6 @@ import "base:runtime"
 
 import "vendor:glfw"
 
-triangle: Pipeline
-test_buffer: GPU_Buffer
-
 Color_Push :: struct
 {
   color:    vec4,
@@ -24,8 +21,6 @@ State :: struct {
 
   mode: Program_Mode,
 
-  window: Window,
-
   perm_mem:   []byte,
   perm:       mem.Arena,
   perm_alloc: mem.Allocator,
@@ -34,51 +29,55 @@ State :: struct {
 
   entities: Entities,
 
-  point_lights: [dynamic; MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS]Point_Light,
-
-  start_time: time.Time,
-
-  // TODO: Hmm maybe should be enum array, these must all be the same dimensions as backbuffer
-  // so simple to loop over enum array when resizing window
-  hdr_ms_buffer:      Framebuffer,
-  post_buffer:        Framebuffer,
-  ping_pong_buffers:  [2]Framebuffer,
-
-  point_depth_buffer: Framebuffer,
-  sun_depth_buffer:   Framebuffer,
-
-  fps:              f64,
-  frame_count:      int,
-  frames:           [FRAMES_IN_FLIGHT]Frame_Info,
-  curr_frame_index: int,
-
-  began_drawing: bool,
-
-  sun: Direction_Light,
-
-  flashlight:Spot_Light,
-
-  sun_on:          bool,
-  flashlight_on:   bool,
+  point_lights:    [dynamic; MAX_POINT_LIGHTS + MAX_SHADOW_POINT_LIGHTS]Point_Light,
   point_lights_on: bool,
 
-  // Could maybe replace this but this makes it easier to add them
-  shaders: [Pipeline_Key]Pipeline,
+  start_time: time.Time,
+  tick_count: u64,
 
-  samplers: [Sampler_Preset]u32,
+  sun:    Direction_Light,
+  sun_on: bool,
 
-  skybox: Texture_Handle,
+  flashlight:    Spot_Light,
+  flashlight_on: bool,
 
-  frame_uniforms: GPU_Buffer,
 
-  mds: Multi_Draw_State,
+  window: Window,
+  input:  Input_State,
+  fps:    f64,
 
-  input: Input_State,
+  // NOTE: Perhaps premature abstraction as some state like command buffers are managed in the vulkan layer,
+  // while most others are managed here.
+  renderer: struct
+  {
+    pipelines: [Pipeline_Key]Pipeline,
+    samplers:  [Sampler_Preset]u32,
 
-  draw_debug:   bool,
+    // TODO: Hmm maybe should be enum array too, these must all be the same dimensions as backbuffer
+    // so simple to loop over enum array when resizing swapchain/window
+    hdr_ms_buffer:     Framebuffer,
+    post_buffer:       Framebuffer,
+    ping_pong_buffers: [2]Framebuffer,
+
+    point_depth_buffer: Framebuffer,
+    sun_depth_buffer:   Framebuffer,
+
+    bound_pipeline: Pipeline,
+
+    frames: [FRAMES_IN_FLIGHT]struct
+    {
+      uniforms: GPU_Buffer,
+    },
+
+    mds: Multi_Draw_State,
+
+    bloom_on: bool,
+
+    draw_debug: bool,
+  },
+
   default_font: Font,
-
-  bloom_on: bool,
+  skybox: Texture_Handle,
 }
 
 // NOTE: Global
@@ -127,7 +126,7 @@ init_state :: proc() -> (ok: bool)
   state.sun.direction = normalize(state.sun.direction)
   state.sun_on = true
 
-  state.bloom_on = true
+  state.renderer.bloom_on = true
 
   state.flashlight =
   {
@@ -146,7 +145,7 @@ init_state :: proc() -> (ok: bool)
   }
   state.flashlight_on = true
 
-  state.draw_debug = true
+  state.renderer.draw_debug = true
 
   init_entities()
 
@@ -166,23 +165,26 @@ init_state :: proc() -> (ok: bool)
       // state.shaders[.GAUSSIAN]    = make_pipeline("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
       // state.shaders[.GET_BRIGHT]  = make_pipeline("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
       //
-      state.samplers = make_samplers()
+      state.renderer.samplers = make_samplers()
 
       SAMPLES :: 4
-      state.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+      state.renderer.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
 
-      state.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
+      state.renderer.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
 
       // This will have two attachments so we can collect bright spots
-      state.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
-      state.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
+      state.renderer.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
+      state.renderer.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
 
-      state.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
-      state.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
+      state.renderer.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
+      state.renderer.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
 
-      // state.frame_uniforms = make_gpu_buffer(size_of(Frame_Uniform), flags = {.UNIFORM_DATA, .PERSISTENT, .FRAME_BUFFERED})
+      for &frame in state.renderer.frames
+      {
+        frame.uniforms = make_gpu_buffer(size_of(Frame_Uniform), {.UNIFORM_DATA, .CPU_MAPPED})
+      }
 
-      state.mds = init_multi_draw()
+      state.renderer.mds = init_multi_draw()
 
       init_assets(state.perm_alloc)
 
@@ -205,6 +207,8 @@ init_state :: proc() -> (ok: bool)
 
     case .VULKAN:
       init_vulkan(state.window)
+      gen_glsl_code()
+      init_immediate_renderer(state.perm_alloc) or_return
   }
 
   return true
@@ -256,13 +260,6 @@ main :: proc()
   dt_s := 0.0
   draw_target := alloc_texture(.D2, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h), is_render_target=true)
 
-  ok: bool
-  triangle, ok = make_pipeline(state.perm_alloc, "triangle.vert", "triangle.frag", Color_Push, draw_target.format)
-  assert(ok)
-
-  test_buffer = make_gpu_buffer(256 * 1024, flags={.CPU_MAPPED})
-  positions := cast([^]vec2)test_buffer.cpu_base
-
   for !should_close(state.window)
   {
     // dt and sleeping
@@ -276,7 +273,7 @@ main :: proc()
 
     state.fps = 1.0 / dt_s
 
-    state.frame_count += 1
+    state.tick_count += 1
     last_frame_time = time.tick_now()
 
     poll_input_state(state.window, dt_s)
@@ -287,8 +284,6 @@ main :: proc()
 
     }
   }
-
-  free_texture(&draw_target)
 }
 
 free_state :: proc()
@@ -296,16 +291,10 @@ free_state :: proc()
   switch BACKEND
   {
     case .OPENGL:
-      free_immediate_renderer()
-
       free_assets()
 
       // free_gpu_buffer(&state.frame_uniforms)
 
-      for &shader in state.shaders
-      {
-        // free_shader_program(&shader)
-      }
     case .VULKAN:
       free_vulkan()
   }

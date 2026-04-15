@@ -3,12 +3,6 @@
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-vec3 colors[3] = vec3[](
-    vec3(1.0, 0.0, 0.0),
-    vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
-);
-
 layout(location = 0) out VS_OUT
 {
   vec3 color;
@@ -25,5 +19,5 @@ void main()
 {
   Vertices verts = Vertices(push.vertices);
   gl_Position = vec4(verts.positions[gl_VertexIndex], 0.5, 1.0);
-  vs_out.color  = colors[gl_VertexIndex] * push.color.xyz;
+  vs_out.color = push.color.xyz;
 }

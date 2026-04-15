@@ -14,6 +14,7 @@ Multi_Draw_State :: struct
 {
   vertex_buffer: GPU_Buffer,
   vertex_count:  int,
+  index_buffer:  GPU_Buffer,
   index_count:   int,
 
   material_buffer: GPU_Buffer,
@@ -28,7 +29,8 @@ Multi_Draw_State :: struct
 
 init_multi_draw :: proc() -> (mds: Multi_Draw_State)
 {
-  mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, Mesh_Index, MAX_INDICES)
+  mds.vertex_buffer = make_vertex_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
+  mds.index_buffer  = make_index_buffer(Mesh_Index, MAX_VERTICES, {.INDEX_DATA, .DEVICE_LOCAL})
   bind_gpu_buffer_base(mds.vertex_buffer, .MESH_VERTICES)
 
   mds.material_buffer = make_gpu_buffer(size_of(Material_Uniform) * MAX_MATERIALS, flags={})
@@ -124,7 +126,7 @@ push_draw :: proc(mds: ^Multi_Draw_State, command: Draw_Command, uniform: Draw_U
 
 multi_draw :: proc(mds: ^Multi_Draw_State)
 {
-  bind_vertex_buffer(mds.vertex_buffer)
+  // bind_vertex_buffer(mds.vertex_buffer)
   // gl.BindBuffer(gl.DRAW_INDIRECT_BUFFER, mds.draw_commands.id)
 
   // Since we can't bind the base we do a frame offset here

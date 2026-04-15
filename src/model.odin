@@ -56,7 +56,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
                              materials: []Material, meshes: []Mesh,
                              allocator: runtime.Allocator) -> (model: Model)
 {
-  vertex_offset, index_offset := upload_vertices(&state.mds, vertices, indices)
+  vertex_offset, index_offset := upload_vertices(&state.renderer.mds, vertices, indices)
 
   //
   // Compute AABB
@@ -91,7 +91,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
 
     aabb = aabb,
   }
-  upload_materials(&state.mds, &model.materials)
+  upload_materials(&state.renderer.mds, &model.materials)
 
   return model
 }
@@ -528,7 +528,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       light_index    = light_index,
     }
 
-    push_draw(&state.mds, command, uniform)
+    push_draw(&state.renderer.mds, command, uniform)
   }
 }
 

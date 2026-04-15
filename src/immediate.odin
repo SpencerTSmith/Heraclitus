@@ -3,8 +3,6 @@ package main
 import "core:log"
 import "base:runtime"
 
-import gl "vendor:OpenGL"
-
 MAX_IMMEDIATE_VERTEX_COUNT :: 4096 * 32
 
 Immediate_Vertex :: struct
@@ -28,13 +26,14 @@ Immediate_Space :: enum
 // batches would probably include a renderpass, the immediate space, and the primitive
 Immediate_State :: struct
 {
-  vertex_buffer: GPU_Buffer,
-  vertex_count:  int, // ALL vertices for current frame
+  vertex_buffers: [FRAMES_IN_FLIGHT]GPU_Buffer,
+  vertex_count:   u32, // ALL vertices for current frame
 
-  // shader:        Shader_Program,
+  pipeline: Pipeline,
+
   white_texture: Texture_Handle,
 
-  batches:    [dynamic; 256]Immediate_Batch,
+  batches: [dynamic; 256]Immediate_Batch,
 }
 
 // Just a view into the main vertex buffer
@@ -42,13 +41,19 @@ Immediate_State :: struct
 // that matches state but is not the current batch?
 Immediate_Batch :: struct
 {
-  vertex_base:  int, // First vertex in batch
-  vertex_count: int, // How many vertices in batch
+  vertex_base:  u32, // First vertex in batch
+  vertex_count: u32, // How many vertices in batch
 
   primitive: Vertex_Primitive,
   texture:   Texture_Handle,
   space:     Immediate_Space,
   depth:     Depth_Test_Mode,
+}
+
+Immediate_Push :: struct
+{
+  transform: mat4,
+  vertices:  rawptr,
 }
 
 // Internal state
@@ -58,14 +63,16 @@ immediate: Immediate_State
 init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
 {
   // Just passing a mesh index even though this system doesn't use indexed rendering.
-  // immediate.vertex_buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, Mesh_Index,
-  //                                              flags = {.PERSISTENT, .FRAME_BUFFERED})
+  for &buffer in immediate.vertex_buffers
+  {
+    buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, {.CPU_MAPPED, .VERTEX_DATA})
+    print("%v",buffer.gpu_base)
+  }
 
-  bind_gpu_buffer_base(immediate.vertex_buffer, .IMM_VERTICES)
+  immediate.pipeline, ok = make_pipeline(state.perm_alloc, "immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
 
-  // immediate.shader, ok = make_shader_program("immediate.vert", "immediate.frag", state.perm_alloc)
-
-  immediate.white_texture = load_texture("white.png")
+  // immediate.white_texture = load_texture("white.png", nonlinear_color=true)
+  append(&immediate.batches, Immediate_Batch{})
 
   return ok
 }
@@ -74,12 +81,13 @@ immediate_frame_reset :: proc()
 {
   immediate.vertex_count = 0
   clear(&immediate.batches)
+  append(&immediate.batches, Immediate_Batch{})
 }
 
 // Starts a new batch if necessary
 immediate_begin :: proc(wish_primitive: Vertex_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
 {
-  current := immediate.batches[len(immediate.batches) - 1] if len(immediate.batches) > 0 else {}
+  current := immediate.batches[len(immediate.batches) - 1]
   if current.primitive != wish_primitive ||
      current.space     != wish_space     ||
      current.texture   != wish_texture   ||
@@ -105,14 +113,9 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
 {
   if immediate.vertex_count + 1 < MAX_IMMEDIATE_VERTEX_COUNT
   {
-    vertex: Immediate_Vertex =
-    {
-      position = position,
-      uv       = uv,
-      color    = color,
-    }
-
-    // vertex_ptr := cast([^]Immediate_Vertex)gpu_buffer_frame_base_ptr(immediate.vertex_buffer)
+    // TODO: It is probably inefficient to write invidual vertices directly into the host coherent buffer
+    // Could easily buffer these up.
+    vertex_ptr := cast([^]Immediate_Vertex)immediate.vertex_buffers[curr_frame_idx()].cpu_base
 
     current := &immediate.batches[len(immediate.batches) - 1]
 
@@ -120,7 +123,13 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
     offset := current.vertex_base + current.vertex_count
 
     // To the gpu buffer!
-    // vertex_ptr[offset] = vertex
+    vertex_ptr[offset] =
+    {
+      position = position,
+      uv       = uv,
+      color    = color,
+    }
+
     immediate.vertex_count += 1
 
     // And remember to add to the current batches count.
@@ -139,72 +148,35 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
 // And others that ought to be flushed in the overlay/ui pass
 immediate_flush :: proc(flush_world := false, flush_screen := false)
 {
-  assert(state.began_drawing, "Tried to flush immediate vertex info before we have begun drawing this frame.")
-
   if immediate.vertex_count > 0
   {
-    // bind_shader_program(immediate.shader)
-
-    bind_vertex_buffer(immediate.vertex_buffer)
+    bind_pipeline(immediate.pipeline)
 
     // Transforms
-    orthographic := camera_orthographic(state.camera, state.window.w, state.window.h)
+    orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, -1, 1)
     perspective  := camera_perspective(state.camera, window_aspect_ratio(state.window)) * camera_view(state.camera)
 
-    gl.Disable(gl.CULL_FACE)
-
-    // frame_base := gpu_buffer_frame_offset(immediate.vertex_buffer) / size_of(Immediate_Vertex)
     for batch in immediate.batches
     {
       if batch.vertex_count > 0
       {
-        // TODO: Again make this a more generalizable thing probably
-        depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
-        defer gl.DepthFunc(u32(depth_func_before))
 
-        gl_depth_map: [Depth_Test_Mode]u32 =
-        {
-          .DISABLED   = gl.ALWAYS,
-          .ALWAYS     = gl.ALWAYS,
-          .LESS       = gl.LESS,
-          .LESS_EQUAL = gl.LEQUAL,
-        }
-
-        gl.DepthFunc(gl_depth_map[batch.depth])
-
+        transform: mat4
         switch batch.space
         {
         case .SCREEN:
           if !flush_screen { continue } // We shouldn't flush screen immediates
-
-          // set_shader_uniform("transform", orthographic)
+          transform = orthographic
         case .WORLD:
           if !flush_world { continue } // We shouldn't flush world immediates
-
-          // set_shader_uniform("transform", perspective)
+          transform = perspective
         }
 
-        // set_shader_uniform("tex", get_texture(batch.texture).handle)
-
-        // first_vertex := i32(frame_base + batch.vertex_base)
-        vertex_count := i32(batch.vertex_count)
-
-        gl_primitive_map: [Vertex_Primitive]u32 =
-        {
-          .TRIANGLES = gl.TRIANGLES,
-          .LINES     = gl.LINES,
-        }
-
-        // gl.DrawArrays(gl_primitive_map[batch.primitive], first_vertex, vertex_count)
+        push := Immediate_Push{transform = transform, vertices = immediate.vertex_buffers[curr_frame_idx()].gpu_base}
+        vk_draw_vertices(immediate.pipeline, batch.vertex_base, batch.vertex_count, push)
       }
     }
   }
-}
-
-free_immediate_renderer :: proc()
-{
-  // free_gpu_buffer(&immediate.vertex_buffer)
-  // free_shader_program(&immediate.shader)
 }
 
 draw_quad :: proc {
@@ -220,25 +192,25 @@ draw_quad_screen :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE
 
   top_left: Immediate_Vertex =
   {
-    position = {top_left_position.x, top_left_position.y, -state.camera.z_near},
+    position = {top_left_position.x, top_left_position.y, 0},
     uv       = top_left_uv,
     color    = color,
   }
   top_right: Immediate_Vertex =
   {
-    position = {top_left_position.x + w, top_left_position.y, -state.camera.z_near},
+    position = {top_left_position.x + w, top_left_position.y, 0},
     uv       = {bottom_right_uv.x, top_left_uv.y},
     color    = color,
   }
   bottom_left: Immediate_Vertex =
   {
-    position = {top_left_position.x, top_left_position.y + h, -state.camera.z_near},
+    position = {top_left_position.x, top_left_position.y + h, 0},
     uv       = {top_left_uv.x, bottom_right_uv.y},
     color    = color,
   }
   bottom_right: Immediate_Vertex =
   {
-    position = {top_left_position.x + w, top_left_position.y + h, -state.camera.z_near},
+    position = {top_left_position.x + w, top_left_position.y + h, 0},
     uv       = bottom_right_uv,
     color    = color,
   }
@@ -310,8 +282,8 @@ draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE)
 {
   immediate_begin(.LINES, immediate.white_texture, .SCREEN, .ALWAYS)
 
-  immediate_vertex({xy0.x, xy0.y, -state.camera.z_near}, color=rgba)
-  immediate_vertex({xy1.x, xy1.y, -state.camera.z_near}, color=rgba)
+  immediate_vertex({xy0.x, xy0.y, 0}, color=rgba)
+  immediate_vertex({xy1.x, xy1.y, 0}, color=rgba)
 }
 
 // NOTE: 3d line

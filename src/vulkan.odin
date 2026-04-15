@@ -80,7 +80,8 @@ Vulkan_Internal :: union
   Vulkan_Pipeline,
 }
 
-Vulkan_State :: struct($IN_FLIGHT: int)
+@(private="file")
+vks: struct
 {
   instance:   vk.Instance,
   messenger:  vk.DebugUtilsMessengerEXT,
@@ -89,16 +90,13 @@ Vulkan_State :: struct($IN_FLIGHT: int)
   queues:     [Queue_Kind]vk.Queue,
   surface:    vk.SurfaceKHR,
   swapchain:  Swapchain,
-  frames:     [IN_FLIGHT]Frame_State,
+  frames:     [FRAMES_IN_FLIGHT]Frame_State,
   curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
   arenas:     [Vulkan_Arena_Kind]Vulkan_Arena,
 
   // API Object Pool
   internals: [dynamic; 512]Vulkan_Internal,
 }
-
-@(private="file")
-vks: Vulkan_State(FRAMES_IN_FLIGHT)
 
 vk_assert :: proc(result: vk.Result, message: string)
 {
@@ -949,21 +947,18 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
       pColorAttachments    = &color_attachment,
     }
 
-    pipeline := vk_get_render_internal(triangle.internal).(Vulkan_Pipeline)
     vk.CmdBeginRendering(frame.buffer, &rendering_info)
-    vk.CmdBindPipeline(frame.buffer, .GRAPHICS, pipeline.pipeline)
-
     viewport: vk.Viewport =
     {
-        width    = f32(draw_into.width),
-        height   = f32(draw_into.height),
-        minDepth = 0.0,
-        maxDepth = 1.0,
+      width    = f32(draw_into.width),
+      height   = f32(draw_into.height),
+      minDepth = 0.0,
+      maxDepth = 1.0,
     }
     scissor: vk.Rect2D =
     {
-        offset = { 0, 0 },
-        extent = { draw_into.width, draw_into.height },
+      offset = { 0, 0 },
+      extent = { draw_into.width, draw_into.height },
     }
     vk.CmdSetViewport(frame.buffer, 0, 1, &viewport)
     vk.CmdSetScissor(frame.buffer, 0, 1, &scissor)
@@ -977,9 +972,12 @@ begin_drawing :: proc(draw_into: Texture) -> (ok: bool)
     vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
     vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
 
-    push := Color_Push {LEARN_OPENGL_BLUE, test_buffer.gpu_base}
-    vk.CmdPushConstants(frame.buffer, pipeline.layout, {.VERTEX, .FRAGMENT}, 0, size_of(Color_Push), &push)
-    vk.CmdDraw(frame.buffer, 3, 1, 0, 0)
+    immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
+
+    draw_quad({100, 100}, 100, 100)
+
+    immediate_flush(true, true)
+    immediate_frame_reset()
 
     vk.CmdEndRendering(frame.buffer)
   }
@@ -1076,6 +1074,28 @@ flush_drawing :: proc(to_display: Texture)
   vks.curr_index[.FRAME] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
+curr_frame_idx :: proc() -> (idx: u32)
+{
+  return vks.curr_index[.FRAME]
+}
+
+vk_bind_pipeline :: proc(pipeline: Pipeline)
+{
+  // UGLY!
+  vk.CmdBindPipeline(vk_curr_cmd(), .GRAPHICS, vk_get_render_internal(pipeline.internal).(Vulkan_Pipeline).pipeline)
+}
+
+vk_draw_vertices :: proc(pipeline: Pipeline, first_vertex, vertex_count: u32, push: $Push_Type)
+  where size_of(push) <= 128
+{
+  push := push
+  // UGLY!
+  assert(pipeline.push == Push_Type, "Push constats passed to draw do not match push constants pipeline was created with.")
+  vk.CmdPushConstants(vk_curr_cmd(), vk_get_render_internal(pipeline.internal).(Vulkan_Pipeline).layout,
+                      {.VERTEX, .FRAGMENT}, 0, size_of(push), &push)
+  vk.CmdDraw(vk_curr_cmd(), vertex_count, 1, first_vertex, 0)
+}
+
 // NOTE: Hardcoded for color, mostly just for blitting from a texture to a swap image
 @(private="file")
 vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
@@ -1109,14 +1129,12 @@ vk_blit_images :: proc(src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
     regionCount    = 1,
   }
 
-  vk.CmdBlitImage2(vk_cmd(), &blit_info)
+  vk.CmdBlitImage2(vk_curr_cmd(), &blit_info)
 }
 
-vk_cmd :: proc() -> (buffer: vk.CommandBuffer)
+vk_curr_cmd :: proc() -> (buffer: vk.CommandBuffer)
 {
   buffer = vks.frames[vks.curr_index[.FRAME]].buffer
-  assert(buffer != nil)
-
   return buffer
 }
 
@@ -1165,7 +1183,7 @@ vk_format_table: [Pixel_Format]vk.Format =
   .NONE             = .UNDEFINED,
   .R8               = .R8_UNORM,
   .RGB8             = .R8G8B8_UNORM,
-  .RGBA8            = .R8G8B8A8_UNORM,
+  .RGBA8            = .B8G8R8A8_UINT,
   .SRGB8            = .R8G8B8_SRGB,
   .SRGBA8           = .R8G8B8A8_SRGB,
   .RGBA16F          = .R16G16B16A16_SFLOAT,
@@ -1248,6 +1266,19 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
   vk_assert(vk.BindImageMemory(vks.logical, image.image, vks.arenas[.DEVICE].memory, memory_offset),
             "Unable to bind vulkan image memory.")
 
+  aspects: vk.ImageAspectFlags
+  switch format
+  {
+    case .NONE: assert(false)
+    case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
+      aspects += {.COLOR}
+    case .DEPTH24_STENCIL8:
+      aspects += {.STENCIL}
+      fallthrough
+    case .DEPTH32:
+      aspects += {.DEPTH}
+  }
+
   view_info: vk.ImageViewCreateInfo =
   {
     sType      = .IMAGE_VIEW_CREATE_INFO,
@@ -1255,7 +1286,7 @@ vk_alloc_texture :: proc(type: Texture_Type, format: Pixel_Format, sampler: Samp
     format     = image_info.format,
     viewType   = vk_view_type_table[type],
     components = components,
-    subresourceRange = vk_image_range(pixel_format_to_vk_aspects(format), mip_count = mip_count,  array_count = array_count)
+    subresourceRange = vk_image_range(aspects, mip_count = mip_count,  array_count = array_count)
   }
 
   vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &image.view),
@@ -1275,16 +1306,16 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   if .UNIFORM_DATA in flags { alignment = props.limits.minUniformBufferOffsetAlignment } // This is usually higher so check last
 
   // By default push to device
-  arena := vks.arenas[.DEVICE]
+  arena := &vks.arenas[.DEVICE]
   // If cpu mapped push to the host memory
   if .CPU_MAPPED in flags
   {
     assert(.DEVICE_LOCAL not_in flags, "Currently no support for device local cpu mapped memory.")
-    arena = vks.arenas[.HOST]
+    arena = &vks.arenas[.HOST]
   }
 
   gpu_ptr_: vk.DeviceAddress
-  gpu_ptr_, cpu_ptr = vk_arena_buffer_push(&arena, vk.DeviceSize(size), alignment)
+  gpu_ptr_, cpu_ptr = vk_arena_buffer_push(arena, vk.DeviceSize(size), alignment)
 
   gpu_ptr = rawptr(uintptr(gpu_ptr_))
 

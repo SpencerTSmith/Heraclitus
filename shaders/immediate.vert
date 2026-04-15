@@ -1,23 +1,40 @@
 #version 460 core
 
-#include "generated.glsl"
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_scalar_block_layout : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
 
-out VS_OUT
+layout(location=0) out VS_OUT
 {
   vec2 uv;
   vec4 color;
 } vs_out;
 
-uniform mat4 transform;
+#push_constant
+
+struct Immediate_Vertex {
+  vec3 position;
+  vec2 uv;
+  vec4 color;
+};
+
+layout(buffer_reference, scalar) readonly buffer Immediate_Vertices
+{
+  Immediate_Vertex immediate_vertices[];
+};
 
 void main()
 {
-  vec3 vert_position = immediate_vertex_position(gl_VertexID);
-  vec2 vert_uv       = immediate_vertex_uv(gl_VertexID);
-  vec4 vert_color    = immediate_vertex_color(gl_VertexID);
+  Immediate_Vertices vertices = Immediate_Vertices(push.vertices);
+
+  Immediate_Vertex vertex = vertices.immediate_vertices[gl_VertexIndex];
+
+  vec3 vert_position = vertex.position;
+  vec2 vert_uv       = vertex.uv;
+  vec4 vert_color    = vertex.color;
 
   vs_out.uv    = vert_uv;
   vs_out.color = vert_color;
 
-  gl_Position = transform * vec4(vert_position, 1.0);
+  gl_Position = push.transform * vec4(vert_position, 1.0);
 }
