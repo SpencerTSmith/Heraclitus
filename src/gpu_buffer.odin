@@ -26,15 +26,6 @@ GPU_Buffer :: struct
   size: int,
 }
 
-GPU_Copy_Task :: struct
-{
-  src_buffer: GPU_Buffer,
-  src_offset: uintptr,
-
-  dst_buffer: GPU_Buffer,
-  dst_offset: uintptr,
-}
-
 align_size_for_gpu :: proc(size: int) -> (aligned: int)
 {
   min_alignment: i32
