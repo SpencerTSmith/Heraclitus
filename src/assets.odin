@@ -31,7 +31,7 @@ Assets :: struct
 @(private="file")
 assets: Assets
 
-init_assets :: proc(allocator: runtime.Allocator)
+init_assets :: proc()
 {
   // Probably will want these so might as well load them now
   load_texture("white.png")
@@ -100,7 +100,7 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) #optional_o
     }
     else
     {
-      log.errorf("Model: %v unable to be loaded, using fallback model", path)
+      log.warnf("Model: %v unable to be loaded, using fallback model", path)
       handle = fallback_model_handle()
     }
   }

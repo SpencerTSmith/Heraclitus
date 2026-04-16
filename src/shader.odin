@@ -22,6 +22,7 @@ Pipeline_Key :: enum
   POINT_DEPTH,
   GAUSSIAN,
   GET_BRIGHT,
+  IMMEDIATE,
 }
 
 Shader_Type :: enum u32
@@ -255,7 +256,7 @@ to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, prefix: string = "struct"
 }
 
 
-gen_glsl_code :: proc()
+generate_glsl :: proc()
 {
   b := strings.builder_make(allocator=context.temp_allocator)
 
@@ -638,7 +639,7 @@ compile_shader_file :: proc(allocator: runtime.Allocator, file_name: string, typ
 }
 
 // NOTE: For now will not do recursive includes, but maybe won't be necessary
-make_pipeline :: proc(allocator: runtime.Allocator, vert_name, frag_name: string, $push: typeid,
+make_pipeline :: proc(vert_name, frag_name: string, $push: typeid,
                       color_format: Pixel_Format, depth_format: Pixel_Format = .NONE) -> (pipeline: Pipeline, ok: bool)
 {
   vert_path := join_file_path({SHADER_DIR, vert_name}, context.temp_allocator)

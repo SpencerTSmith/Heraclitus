@@ -1,7 +1,6 @@
 package main
 
 import "core:log"
-import "base:runtime"
 
 MAX_IMMEDIATE_VERTEX_COUNT :: 4096 * 32
 
@@ -20,6 +19,8 @@ Immediate_Space :: enum
   SCREEN,
   WORLD,
 }
+
+// TODO: Collapse all this back into the renderer
 
 // NOTE: This is not integrated with the general asset system and deals with actual textures and such...
 // TODO: Finish up render pass system and integrate with batching system...
@@ -60,7 +61,7 @@ Immediate_Push :: struct
 @(private="file")
 immediate: Immediate_State
 
-init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
+init_immediate_renderer :: proc()
 {
   // Just passing a mesh index even though this system doesn't use indexed rendering.
   for &buffer in immediate.vertex_buffers
@@ -68,12 +69,12 @@ init_immediate_renderer :: proc(allocator: runtime.Allocator) -> (ok: bool)
     buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, {.CPU_MAPPED, .VERTEX_DATA})
   }
 
-  immediate.pipeline, ok = make_pipeline(state.perm_alloc, "immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
+  ok: bool
+  immediate.pipeline, ok = make_pipeline("immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
+  assert(ok)
 
   // immediate.white_texture = load_texture("white.png", nonlinear_color=true)
   append(&immediate.batches, Immediate_Batch{})
-
-  return ok
 }
 
 immediate_frame_reset :: proc()
@@ -161,7 +162,6 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
     {
       if batch.vertex_count > 0
       {
-
         transform: mat4
         switch batch.space
         {

@@ -15,6 +15,7 @@ GPU_Buffer_Flag :: enum
 }
 GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
 
+// TODO: It would be cool if these could also be polymorphic and castable as a pointer to an actual type...
 GPU_Buffer :: struct
 {
   flags: GPU_Buffer_Flags,
@@ -22,7 +23,16 @@ GPU_Buffer :: struct
   cpu_base: rawptr,
   gpu_base: rawptr,
 
-  total_size: int,
+  size: int,
+}
+
+GPU_Copy_Task :: struct
+{
+  src_buffer: GPU_Buffer,
+  src_offset: uintptr,
+
+  dst_buffer: GPU_Buffer,
+  dst_offset: uintptr,
 }
 
 align_size_for_gpu :: proc(size: int) -> (aligned: int)
@@ -40,11 +50,25 @@ make_gpu_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buff
 {
   buffer.gpu_base, buffer.cpu_base = vk_alloc_buffer(size, flags)
   buffer.flags = flags
+  buffer.size  = size
 
   return buffer
 }
 
-write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: int, data: rawptr)
+// Helper for making a few of the same type... having this api set up will help in case i ever change backend allocation to at least keep buffers
+// created through this api to be linear in memory.
+make_ring_gpu_buffers :: proc(size: int, flags: GPU_Buffer_Flags, $N: uint) -> (buffers: [N]GPU_Buffer)
+{
+  // Simple since allocation is just bump on backend.
+  for &buffer in buffers
+  {
+    buffer = make_gpu_buffer(size, flags)
+  }
+
+  return buffers
+}
+
+write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: uint, data: rawptr)
 {
   // if data != nil
   // {

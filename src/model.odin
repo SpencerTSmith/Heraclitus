@@ -56,7 +56,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
                              materials: []Material, meshes: []Mesh,
                              allocator: runtime.Allocator) -> (model: Model)
 {
-  vertex_offset, index_offset := upload_vertices(&state.renderer.mds, vertices, indices)
+  vertex_offset, index_offset := upload_model(vertices, indices)
 
   //
   // Compute AABB
@@ -91,7 +91,7 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
 
     aabb = aabb,
   }
-  upload_materials(&state.renderer.mds, &model.materials)
+  upload_materials(&model.materials)
 
   return model
 }
@@ -501,11 +501,8 @@ make_model_from_missing :: proc(allocator := context.allocator) -> (model: Model
 
 draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, instances: int = 1, light_index: u32 = 0)
 {
-  // assert(state.current_shader.id != 0)
-
   for mesh in model.meshes
   {
-
     true_offset := model.index_offset + mesh.index_offset
 
     command: Draw_Command =
@@ -528,7 +525,7 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
       light_index    = light_index,
     }
 
-    push_draw(&state.renderer.mds, command, uniform)
+    push_draw(command, uniform)
   }
 }
 

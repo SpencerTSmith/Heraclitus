@@ -30,33 +30,17 @@ should_close :: proc(window: Window) -> bool
   return bool(glfw.WindowShouldClose(window.handle)) || !state.running
 }
 
-Render_Backend :: enum
-{
-  OPENGL,
-  VULKAN,
-}
-
 make_window :: proc(window_width:  int,
                     window_height: int,
-                    window_title:  string,
-                    backend: Render_Backend) -> (window: Window, ok: bool)
+                    window_title:  string) -> (window: Window, ok: bool)
 {
-  glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
+  // glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
 
   if glfw.Init() == glfw.TRUE
   {
     glfw.WindowHint(glfw.RESIZABLE, glfw.TRUE)
 
-    switch backend
-    {
-      case .OPENGL:
-        glfw.WindowHint(glfw.OPENGL_FORWARD_COMPAT, glfw.TRUE)
-        glfw.WindowHint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-        glfw.WindowHint(glfw.CONTEXT_VERSION_MAJOR, GL_MAJOR)
-        glfw.WindowHint(glfw.CONTEXT_VERSION_MINOR, GL_MINOR)
-      case .VULKAN:
-        glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
-    }
+    glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 
     c_title := strings.clone_to_cstring(window_title, context.temp_allocator)
     window.handle = glfw.CreateWindow(i32(window_width), i32(window_height), c_title, nil, nil)

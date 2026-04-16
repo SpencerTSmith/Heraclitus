@@ -148,12 +148,11 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
 {
   texture = alloc_texture(type, {}, format, sampler, width, height, samples)
 
-  // TODO: Upload
+  vk_upload_texture_data(state.renderer.staging_buffer[curr_frame_idx()], texture, datas[0])
 
   return texture
 }
 
-// Creates a handle, makes it resident, appends to the end of the texture_handles gpu_buffer, and returns its index
 make_texture_bindless :: proc(texture: ^Texture)
 {
 }
@@ -179,7 +178,7 @@ get_image_data :: proc(file_path: string) -> (data: rawptr, width, height, chann
   c_path := strings.clone_to_cstring(file_path, context.temp_allocator)
 
   w, h, c: i32
-  data = stbi.load(c_path, &w, &h, &c, 0)
+  data = stbi.load(c_path, &w, &h, &c, 4)
 
   if data == nil
   {
@@ -188,7 +187,7 @@ get_image_data :: proc(file_path: string) -> (data: rawptr, width, height, chann
 
   width    = cast(u32)w
   height   = cast(u32)h
-  channels = cast(u32)c
+  channels = 4 // NOTE: Force 4 channels
 
   return data, width, height, channels
 }
@@ -249,6 +248,7 @@ make_texture_cube_map :: proc(file_paths: [6]string, in_texture_dir: bool = true
 make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false) -> (texture: Texture, ok: bool)
 {
   data, w, h, channels := get_image_data(file_name)
+
   if data != nil
   {
     defer free_image_data(data)

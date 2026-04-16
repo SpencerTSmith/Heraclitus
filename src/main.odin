@@ -46,44 +46,14 @@ State :: struct {
   input:  Input_State,
   fps:    f64,
 
-  // NOTE: Perhaps premature abstraction as some state like command buffers are managed in the vulkan layer,
-  // while most others are managed here.
-  renderer: struct
-  {
-    pipelines: [Pipeline_Key]Pipeline,
-    samplers:  [Sampler_Preset]u32,
-
-    // TODO: Hmm maybe should be enum array too, these must all be the same dimensions as backbuffer
-    // so simple to loop over enum array when resizing swapchain/window
-    // hdr_ms_buffer:     Framebuffer,
-    // post_buffer:       Framebuffer,
-    // ping_pong_buffers: [2]Framebuffer,
-    //
-    // point_depth_buffer: Framebuffer,
-    // sun_depth_buffer:   Framebuffer,
-
-    bound_pipeline: Pipeline,
-
-    frames: [FRAMES_IN_FLIGHT]struct
-    {
-      uniforms: GPU_Buffer,
-    },
-
-    mds: Multi_Draw_State,
-
-    bloom_on: bool,
-
-    draw_debug: bool,
-  },
-
   default_font: Font,
   skybox: Texture_Handle,
+
+  renderer: Renderer
 }
 
 // NOTE: Global
 state: State
-
-BACKEND :: Render_Backend.VULKAN
 
 init_state :: proc() -> (ok: bool)
 {
@@ -100,7 +70,7 @@ init_state :: proc() -> (ok: bool)
   state.mode = .EDIT // Edit by default
 
   state.window = make_window(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
-                             WINDOW_DEFAULT_TITLE, BACKEND) or_return
+                             WINDOW_DEFAULT_TITLE) or_return
 
   state.camera =
   {
@@ -126,7 +96,6 @@ init_state :: proc() -> (ok: bool)
   state.sun.direction = normalize(state.sun.direction)
   state.sun_on = true
 
-  state.renderer.bloom_on = true
 
   state.flashlight =
   {
@@ -145,71 +114,27 @@ init_state :: proc() -> (ok: bool)
   }
   state.flashlight_on = true
 
-  state.renderer.draw_debug = true
-
   init_entities()
+  init_renderer()
 
-  switch BACKEND
-  {
-    case .OPENGL:
-      init_opengl(state.window)
-
-      // Make the meta shader
-      gen_glsl_code()
-
-      // state.shaders[.PHONG]       = make_pipeline("simple.vert", "phong.frag",  allocator=state.perm_alloc) or_return
-      // state.shaders[.SKYBOX]      = make_pipeline("skybox.vert", "skybox.frag", allocator=state.perm_alloc) or_return
-      // state.shaders[.RESOLVE_HDR] = make_pipeline("to_screen.vert", "resolve_hdr.frag", allocator=state.perm_alloc) or_return
-      // state.shaders[.SUN_DEPTH]   = make_pipeline("sun_shadow.vert", "sun_shadow.frag", allocator=state.perm_alloc) or_return
-      // state.shaders[.POINT_DEPTH] = make_pipeline("point_shadows.vert", "point_shadows.frag", allocator=state.perm_alloc) or_return
-      // state.shaders[.GAUSSIAN]    = make_pipeline("to_screen.vert", "gaussian.frag", allocator=state.perm_alloc) or_return
-      // state.shaders[.GET_BRIGHT]  = make_pipeline("to_screen.vert", "get_bright_spots.frag", allocator=state.perm_alloc) or_return
-      //
-      state.renderer.samplers = make_samplers()
-
-      SAMPLES :: 4
-      // state.renderer.hdr_ms_buffer = make_framebuffer(state.window.w, state.window.h, SAMPLES, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-      //
-      // state.renderer.post_buffer = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .DEPTH_STENCIL}) or_return
-      //
-      // // This will have two attachments so we can collect bright spots
-      // state.renderer.ping_pong_buffers[0] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR, .HDR_COLOR}) or_return
-      // state.renderer.ping_pong_buffers[1] = make_framebuffer(state.window.w, state.window.h, attachments={.HDR_COLOR}) or_return
-      //
-      // state.renderer.point_depth_buffer = make_framebuffer(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, array_depth=MAX_SHADOW_POINT_LIGHTS, attachments={.DEPTH_CUBE_ARRAY}) or_return
-      // state.renderer.sun_depth_buffer = make_framebuffer(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, attachments={.DEPTH}) or_return
-
-      for &frame in state.renderer.frames
-      {
-        frame.uniforms = make_gpu_buffer(size_of(Frame_Uniform), {.UNIFORM_DATA, .CPU_MAPPED})
-      }
-
-      state.renderer.mds = init_multi_draw()
-
-      init_assets(state.perm_alloc)
-
-      init_immediate_renderer(state.perm_alloc) or_return
-
-      init_menu() or_return
-
-      state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
-
-      cube_map_sides: [6]string =
-      {
-        "skybox/right.jpg",
-        "skybox/left.jpg",
-        "skybox/top.jpg",
-        "skybox/bottom.jpg",
-        "skybox/front.jpg",
-        "skybox/back.jpg",
-      }
-      state.skybox = load_skybox(cube_map_sides) or_return
-
-    case .VULKAN:
-      init_vulkan(state.window)
-      gen_glsl_code()
-      init_immediate_renderer(state.perm_alloc) or_return
-  }
+  init_assets()
+  //
+  // init_immediate_renderer(state.perm_alloc) or_return
+  //
+  // init_menu() or_return
+  //
+  // state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
+  //
+  // cube_map_sides: [6]string =
+  // {
+  //   "skybox/right.jpg",
+  //   "skybox/left.jpg",
+  //   "skybox/top.jpg",
+  //   "skybox/bottom.jpg",
+  //   "skybox/front.jpg",
+  //   "skybox/back.jpg",
+  // }
+  // state.skybox = load_skybox(cube_map_sides) or_return
 
   return true
 }
@@ -260,6 +185,8 @@ main :: proc()
   dt_s := 0.0
   main_target := make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
 
+  entity := make_entity()
+
   position := vec2{100, 100}
 
   for !should_close(state.window)
@@ -287,36 +214,28 @@ main :: proc()
 
     if begin_render_frame()
     {
-      begin_render_pass({clear_color = LEARN_OPENGL_BLUE}, &main_target)
-      {
-        immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
-
-        draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
-
-        immediate_flush(true, true)
-        immediate_frame_reset()
-        defer end_render_pass()
-
-      }
-
       defer flush_render_frame(main_target.attachments[0])
 
+      begin_render_pass({clear_color = LEARN_OPENGL_BLUE}, &main_target)
+      {
+        defer end_render_pass()
+
+        immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
+        {
+          defer immediate_flush(true, true)
+
+          draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
+        }
+      }
     }
   }
 }
 
 free_state :: proc()
 {
-  switch BACKEND
-  {
-    case .OPENGL:
-      free_assets()
+  free_assets()
 
-      // free_gpu_buffer(&state.frame_uniforms)
-
-    case .VULKAN:
-      free_vulkan()
-  }
+  free_vulkan()
 
   glfw.DestroyWindow(state.window.handle)
   // glfw.Terminate() // Causing crashes?

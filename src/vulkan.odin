@@ -38,6 +38,8 @@ Frame_State :: struct
   semaphore: vk.Semaphore,
 }
 
+// These gpu arenas should probably be in agnostic renderer code, not here...
+// But only as these enum handles, keep all the vulkan api objects here
 Vulkan_Arena_Kind :: enum
 {
   DEVICE,
@@ -98,7 +100,7 @@ vks: struct
   internals: [dynamic; 512]Vulkan_Internal,
 }
 
-vk_assert :: proc(result: vk.Result, message: string)
+vk_assert ::  #force_inline proc(result: vk.Result, message: string)
 {
   assert(result == .SUCCESS, message)
 }
@@ -680,8 +682,8 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
 
       // Entire thing gets mapped to a buffer, will never need extra raw memory.
       vks.arenas[.HOST], ok = make_vulkan_arena(vks.logical, vks.physical,
-                                                256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
-                                                {.HOST_VISIBLE, .HOST_COHERENT, }, 0)
+                                                512 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
+                                                {.HOST_VISIBLE, .HOST_COHERENT}, 0)
       if !ok { log.fatalf("Unable to create host vulkan arena.") }
     }
     else
@@ -902,7 +904,61 @@ vk_get_pipeline :: proc(internal: Renderer_Internal) -> (image: Vulkan_Pipeline)
   return vk_get_render_internal(internal).(Vulkan_Pipeline)
 }
 
-begin_render_frame :: proc() -> (ok: bool)
+vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
+{
+  // FIXME: Just assuming that this only happens from cpu -> gpu
+  vk_src_buffer := vks.arenas[.HOST].buffer
+  vk_dst_buffer := vks.arenas[.DEVICE].buffer
+
+  // TODO: Could probably just collapse these into just one since use linear allocation for every thing...
+  buffer_regions:  [dynamic; N]vk.BufferCopy
+  buffer_barriers: [dynamic; N]vk.BufferMemoryBarrier2
+
+  for upload in state.renderer.upload_queue
+  {
+    switch dst in upload.dst
+    {
+      case GPU_Buffer:
+        region: vk.BufferCopy =
+        {
+          srcOffset = vk.DeviceSize(uintptr(upload.src_buffer.gpu_base)) - vk.DeviceSize(vks.arenas[.HOST].gpu_base) + vk.DeviceSize(upload.src_offset),
+          dstOffset = vk.DeviceSize(uintptr(dst.gpu_base)) - vk.DeviceSize(vks.arenas[.DEVICE].gpu_base) + vk.DeviceSize(upload.dst_offset),
+          size      = vk.DeviceSize(upload.size),
+        }
+        // NOTE: Hardcoded to be barrier at vertex stage
+        barrier: vk.BufferMemoryBarrier2 =
+        {
+          sType         = .BUFFER_MEMORY_BARRIER_2,
+          offset        = region.dstOffset,
+          buffer        = vk_dst_buffer,
+          size          = region.size,
+          srcStageMask  = {.TRANSFER},
+          srcAccessMask = {.TRANSFER_WRITE},
+          dstStageMask  = {.VERTEX_ATTRIBUTE_INPUT},
+          dstAccessMask = {.VERTEX_ATTRIBUTE_READ},
+        }
+        append(&buffer_regions, region)
+        append(&buffer_barriers, barrier)
+      case Texture:
+        unimplemented()
+    }
+  }
+
+  dependencies: vk.DependencyInfo =
+  {
+    sType                   = .DEPENDENCY_INFO,
+    pBufferMemoryBarriers   = raw_data(buffer_barriers[:]),
+    bufferMemoryBarrierCount = u32(len(buffer_barriers[:])),
+  }
+
+  if len(buffer_regions) > 0
+  {
+    vk.CmdCopyBuffer(vk_curr_cmd(), vk_src_buffer, vk_dst_buffer, u32(len(buffer_regions)), raw_data(buffer_regions[:]))
+    vk.CmdPipelineBarrier2(vk_curr_cmd(), &dependencies)
+  }
+}
+
+vk_begin_render_frame :: proc() -> (ok: bool)
 {
   ok = true
 
@@ -947,70 +1003,10 @@ begin_render_frame :: proc() -> (ok: bool)
               "Unable to begin vulkan command buffer recording.")
   }
 
-  // if ok
-  // {
-  //
-  //   draw_image := vk_get_image(draw_into.internal)
-  //
-  //   vk_transition_images(frame.buffer, {vk_image_barrier_info(draw_image.image, .UNDEFINED, .COLOR_ATTACHMENT_OPTIMAL)})
-  //
-  //   color: vk.ClearColorValue = { float32 = LEARN_OPENGL_BLUE }
-  //   color_attachment: vk.RenderingAttachmentInfo =
-  //   {
-  //     sType       = .RENDERING_ATTACHMENT_INFO,
-  //     imageView   = draw_image.view,
-  //     imageLayout = .COLOR_ATTACHMENT_OPTIMAL,
-  //     loadOp      = .CLEAR,
-  //     storeOp     = .STORE,
-  //     clearValue  = { color = color }
-  //   }
-  //   rendering_info: vk.RenderingInfo =
-  //   {
-  //     sType                = .RENDERING_INFO,
-  //     renderArea           = { extent = { draw_into.width, draw_into.height} },
-  //     layerCount           = 1,
-  //     colorAttachmentCount = 1,
-  //     pColorAttachments    = &color_attachment,
-  //   }
-  //
-  //   vk.CmdBeginRendering(frame.buffer, &rendering_info)
-  //   viewport: vk.Viewport =
-  //   {
-  //     width    = f32(draw_into.width),
-  //     height   = f32(draw_into.height),
-  //     minDepth = 0.0,
-  //     maxDepth = 1.0,
-  //   }
-  //   scissor: vk.Rect2D =
-  //   {
-  //     offset = { 0, 0 },
-  //     extent = { draw_into.width, draw_into.height },
-  //   }
-  //   vk.CmdSetViewport(frame.buffer, 0, 1, &viewport)
-  //   vk.CmdSetScissor(frame.buffer, 0, 1, &scissor)
-  //   vk.CmdSetCullMode(frame.buffer, {})
-  //   vk.CmdSetDepthTestEnable(frame.buffer, false)
-  //   vk.CmdSetDepthWriteEnable(frame.buffer, false)
-  //   vk.CmdSetDepthCompareOp(frame.buffer, .LESS_OR_EQUAL)
-  //   vk.CmdSetDepthBiasEnable(frame.buffer, false)
-  //   vk.CmdSetStencilTestEnable(frame.buffer, false)
-  //   vk.CmdSetDepthBias(frame.buffer, 0, 0, 0)
-  //   vk.CmdSetStencilOp(frame.buffer, {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
-  //
-  //   immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
-  //
-  //   draw_quad(vec2{100, 100}, 100, 100, color=LEARN_OPENGL_ORANGE)
-  //
-  //   immediate_flush(true, true)
-  //   immediate_frame_reset()
-  //
-  //   vk.CmdEndRendering(frame.buffer)
-  // }
-
   return ok
 }
 
-flush_render_frame :: proc(to_display: Texture)
+vk_flush_render_frame :: proc(to_display: Texture)
 {
   frame := vks.frames[vks.curr_index[.FRAME]]
   target := vks.swapchain.targets[vks.curr_index[.TARGET]]
@@ -1094,6 +1090,11 @@ flush_render_frame :: proc(to_display: Texture)
   vks.curr_index[.FRAME] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
+vk_upload_texture_data :: proc(staging: GPU_Buffer, texture: Texture, data: rawptr)
+{
+  // internal := vk_get_image(texture.internal)
+}
+
 curr_frame_idx :: proc() -> (idx: u32)
 {
   return vks.curr_index[.FRAME]
@@ -1112,7 +1113,7 @@ vk_draw_vertices :: proc(pipeline: Pipeline, first_vertex, vertex_count: u32, pu
   // UGLY!
   assert(pipeline.push == Push_Type, "Push constats passed to draw do not match push constants pipeline was created with.")
   vk.CmdPushConstants(vk_curr_cmd(), vk_get_pipeline(pipeline.internal).layout,
-                      {.VERTEX, .FRAGMENT}, 0, size_of(push), &push)
+                      {.VERTEX, .FRAGMENT, .COMPUTE}, 0, size_of(push), &push)
   vk.CmdDraw(vk_curr_cmd(), vertex_count, 1, first_vertex, 0)
 }
 
@@ -1152,6 +1153,7 @@ vk_blit_images :: proc(cmd: vk.CommandBuffer, src, dst: vk.Image, src_w, src_h, 
   vk.CmdBlitImage2(cmd, &blit_info)
 }
 
+@(private="file")
 vk_curr_cmd :: proc() -> (buffer: vk.CommandBuffer)
 {
   buffer = vks.frames[vks.curr_index[.FRAME]].buffer
@@ -1159,9 +1161,15 @@ vk_curr_cmd :: proc() -> (buffer: vk.CommandBuffer)
 }
 
 @(private="file")
-vk_arena_memory_push :: proc(arena: ^Vulkan_Arena, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
+vk_align_up :: proc(offset, alignment: vk.DeviceSize) -> (aligned: vk.DeviceSize)
 {
-  aligned_offset = (arena.memory_offset + alignment - 1) & ~(alignment - 1)
+  return vk.DeviceSize(mem.align_forward_uintptr(uintptr(offset), uintptr(alignment)))
+}
+
+@(private="file")
+vk_arena_memory_push :: proc(arena: ^Vulkan_Arena, size, alignment: vk.DeviceSize) -> (aligned_offset: vk.DeviceSize)
+{
+  aligned_offset = vk_align_up(arena.memory_offset, alignment)
 
   assert(aligned_offset + size < arena.memory_size,
          "Vulkan arena out of memory.")
@@ -1171,12 +1179,12 @@ vk_arena_memory_push :: proc(arena: ^Vulkan_Arena, size: vk.DeviceSize, alignmen
   return aligned_offset
 }
 @(private="file")
-vk_arena_buffer_push :: proc(arena: ^Vulkan_Arena, size: vk.DeviceSize, alignment: vk.DeviceSize) -> (gpu_ptr: vk.DeviceAddress, cpu_ptr: rawptr)
+vk_arena_buffer_push :: proc(arena: ^Vulkan_Arena, size, alignment: vk.DeviceSize) -> (gpu_ptr: vk.DeviceAddress, cpu_ptr: rawptr)
 {
-  aligned_offset := (arena.buffer_offset + alignment - 1) & ~(alignment - 1)
+  aligned_offset := vk_align_up(arena.buffer_offset, alignment)
 
   assert(aligned_offset + size < arena.buffer_size,
-         "Vulkan arena out of memory.")
+         "Vulkan arena buffer out of memory.")
 
   arena.buffer_offset = aligned_offset + size
 
@@ -1204,8 +1212,8 @@ vk_format_table: [Pixel_Format]vk.Format =
   .NONE             = .UNDEFINED,
   .R8               = .R8_UNORM,
   .RGB8             = .R8G8B8_UNORM,
-  .RGBA8            = .B8G8R8A8_UINT,
-  .SRGB8            = .R8G8B8_SRGB,
+  .RGBA8            = .R8G8B8A8_SRGB,
+  .SRGB8            = .R8G8B8A8_SRGB,
   .SRGBA8           = .R8G8B8A8_SRGB,
   .RGBA16F          = .R16G16B16A16_SFLOAT,
   .DEPTH32          = .D32_SFLOAT,
@@ -1215,37 +1223,30 @@ vk_format_table: [Pixel_Format]vk.Format =
 vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
 {
   // Sort of jank
-  to_layout :: proc(clearing: bool, format: Pixel_Format, state: Texture_State) -> (layout: vk.ImageLayout)
+  to_layout :: proc(format: Pixel_Format, state: Texture_State) -> (layout: vk.ImageLayout)
   {
-    if clearing
+    switch state
     {
-      layout = .UNDEFINED
-    }
-    else
-    {
-      switch state
-      {
-        case .NONE:
-          layout = .UNDEFINED
-        case .FRAGMENT_READ:
-          layout = .SHADER_READ_ONLY_OPTIMAL
-        case .TRANSFER_SRC:
-          layout = .TRANSFER_SRC_OPTIMAL
-        case .TRANSFER_DST:
-          layout = .TRANSFER_DST_OPTIMAL
-        case .TARGET:
-          switch format
-          {
-            case .NONE:
-              panic("Idiot.")
-            case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
-              layout = .COLOR_ATTACHMENT_OPTIMAL
-            case .DEPTH24_STENCIL8:
-              layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-            case .DEPTH32:
-              layout = .DEPTH_ATTACHMENT_OPTIMAL
-          }
-      }
+      case .NONE:
+        layout = .UNDEFINED
+      case .FRAGMENT_READ:
+        layout = .SHADER_READ_ONLY_OPTIMAL
+      case .TRANSFER_SRC:
+        layout = .TRANSFER_SRC_OPTIMAL
+      case .TRANSFER_DST:
+        layout = .TRANSFER_DST_OPTIMAL
+      case .TARGET:
+        switch format
+        {
+          case .NONE:
+            panic("Idiot.")
+          case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
+            layout = .COLOR_ATTACHMENT_OPTIMAL
+          case .DEPTH24_STENCIL8:
+            layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+          case .DEPTH32:
+            layout = .DEPTH_ATTACHMENT_OPTIMAL
+        }
     }
 
     return layout
@@ -1257,23 +1258,23 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
   barriers: [dynamic; cap(target.attachments)]vk.ImageMemoryBarrier2
 
   color_attachment_infos: [dynamic; cap(target.attachments)]vk.RenderingAttachmentInfo
+  depth_attachment_info: vk.RenderingAttachmentInfo
+  have_depth_attachment := false
+  depth_stencil_attachment_info: vk.RenderingAttachmentInfo
+  have_depth_stencil_attachment := false
   for &attachment in target.attachments
   {
     vk_target := vk_get_image(attachment.internal)
 
-    // Whatever it is right now.
-    src_layout := to_layout(clearing, attachment.format, attachment.state)
+    // Whatever it is right now. But undefined if we are clearing it, we don't care what layout it was in
+    src_layout := to_layout(attachment.format, attachment.state) if !clearing else .UNDEFINED
 
     // Transition to a target state for attachment
-    dst_layout := to_layout(false, attachment.format, .TARGET)
+    dst_layout := to_layout(attachment.format, .TARGET)
 
     append(&barriers, vk_image_barrier_info(vk_target.image, src_layout, dst_layout))
-
-    // This attachment is now a target, so future pipeline barriers can know about it.
-    // FIXME: This state change should probably bundled with the call to pipeline barriers somehow
-    attachment.state = .TARGET
-
-    append(&color_attachment_infos, vk.RenderingAttachmentInfo{
+    attachment_info: vk.RenderingAttachmentInfo =
+    {
       sType       = .RENDERING_ATTACHMENT_INFO,
       imageView   = vk_target.view,
       imageLayout = dst_layout,
@@ -1281,7 +1282,26 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
       clearValue  = dst_layout == .COLOR_ATTACHMENT_OPTIMAL ? {color={float32=pass.clear_color}} : {depthStencil={depth=1.0,stencil=0}},
       loadOp      = clearing ? .CLEAR : .LOAD,
       storeOp     = .STORE,
-    })
+    }
+
+    #partial switch dst_layout
+    {
+      case: panic("Idiot.")
+      case .COLOR_ATTACHMENT_OPTIMAL:
+        append(&color_attachment_infos, attachment_info)
+      case .DEPTH_ATTACHMENT_OPTIMAL:
+        assert(!have_depth_attachment, "More than 1 depth attachment for render pass.")
+        depth_attachment_info = attachment_info
+        have_depth_attachment = true
+      case .DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+        assert(!have_depth_stencil_attachment, "More than 1 depth attachment for render pass.")
+        depth_stencil_attachment_info = attachment_info
+        have_depth_stencil_attachment = true
+    }
+
+    // This attachment is now a target, so future pipeline barriers can know about it.
+    // FIXME: This state change should probably bundled with the call to pipeline barriers somehow
+    attachment.state = .TARGET
   }
 
   // Now just uno call for all images
@@ -1586,7 +1606,7 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
   push_range: vk.PushConstantRange =
   {
     size = u32(push_size),
-    stageFlags = {.VERTEX, .FRAGMENT},
+    stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
   }
 
   // FIXME!
