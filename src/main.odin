@@ -185,7 +185,7 @@ main :: proc()
   dt_s := 0.0
   main_target := make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
 
-  entity := make_entity()
+  entity := make_entity("missing/BoxTextured.gltf")
 
   position := vec2{100, 100}
 
