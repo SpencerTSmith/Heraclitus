@@ -568,8 +568,9 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       sType = .PHYSICAL_DEVICE_FEATURES_2,
       features =
       {
-        shaderInt64    = true,
-        imageCubeArray = true,
+        shaderInt64       = true,
+        samplerAnisotropy = true,
+        imageCubeArray    = true,
       },
       pNext = &required_device_features11,
     }
@@ -780,7 +781,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // Samplers
       // // //
       create_sampler :: proc(min_filter, mag_filter: vk.Filter, mipmap_mode: vk.SamplerMipmapMode,
-                             address_mode: vk.SamplerAddressMode, border: vk.BorderColor = .FLOAT_OPAQUE_BLACK) -> (sampler: vk.Sampler)
+                             address_mode: vk.SamplerAddressMode, anisitropy: f32 = 0, border: vk.BorderColor = .FLOAT_OPAQUE_BLACK) -> (sampler: vk.Sampler)
       {
         info: vk.SamplerCreateInfo =
         {
@@ -795,7 +796,8 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
           maxLod       = vk.LOD_CLAMP_NONE,
           mipLodBias   = 0,
           borderColor  = border,
-          anisotropyEnable = false, // TODO:
+          maxAnisotropy = anisitropy,
+          anisotropyEnable = anisitropy != 0, // TODO:
         }
         vk_assert(vk.CreateSampler(vks.logical, &info, nil, &sampler),
                   "Unable to create vulkan sampler.")
@@ -803,10 +805,13 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
         return sampler
       }
 
+      props: vk.PhysicalDeviceProperties
+      vk.GetPhysicalDeviceProperties(vks.physical, &props)
+
       vks.samplers[.REPEAT_NEAREST]   = create_sampler(.NEAREST, .NEAREST, .NEAREST, .REPEAT)
-      vks.samplers[.REPEAT_TRILINEAR] = create_sampler(.LINEAR, .LINEAR, .LINEAR, .REPEAT)
+      vks.samplers[.REPEAT_TRILINEAR] = create_sampler(.LINEAR, .LINEAR, .LINEAR, .REPEAT, anisitropy=props.limits.maxSamplerAnisotropy)
       vks.samplers[.CLAMP_LINEAR]     = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_EDGE)
-      vks.samplers[.CLAMP_WHITE]      = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_BORDER, .FLOAT_OPAQUE_WHITE)
+      vks.samplers[.CLAMP_WHITE]      = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_BORDER, border=.FLOAT_OPAQUE_WHITE)
     }
     else
     {
@@ -1043,15 +1048,19 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
   buffer_barriers: [dynamic; N]vk.BufferMemoryBarrier2
 
   images:              [dynamic; N]vk.Image
+  image_mips:          [dynamic; N]u32
   image_regions:       [dynamic; N]vk.BufferImageCopy
   image_copy_barriers: [dynamic; N]vk.ImageMemoryBarrier2
-  image_read_barriers: [dynamic; N]vk.ImageMemoryBarrier2
+
+  // NOTE: This is a fully dynamic array since there may be more barriers per image, since I am
+  // doing a barrier per mip level... this might be stupid
+  image_read_barriers := make([dynamic]vk.ImageMemoryBarrier2, context.temp_allocator)
 
   for upload in uploads
   {
     switch dst in upload.dst
     {
-      case GPU_Buffer:
+      case GPU_Buffer(byte):
         region: vk.BufferCopy =
         {
           srcOffset = vk.DeviceSize(uintptr(upload.src_buffer.gpu_base)) - vk.DeviceSize(vks.arenas[.HOST].gpu_base) + vk.DeviceSize(upload.src_offset),
@@ -1080,17 +1089,22 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
           imageOffset  = {0,0,0}, // NOTE: Hardcoded... no atlasing for now, i suppose.
           imageSubresource =
           {
-            aspectMask = {.COLOR}, // FIXME: Hardcoded for only uploading color data!
+            aspectMask = vk_aspect_from_format(dst.format),
             layerCount = dst.array_count,
           }
         }
         append(&image_regions, region)
 
+        append(&image_mips, dst.mip_count)
+
         vk_image := vk_get_image(dst.internal).image
         append(&images, vk_image)
         copy_barrier := vk_image_barrier_info(vk_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
         append(&image_copy_barriers, copy_barrier)
-        read_barrier := vk_image_barrier_info(vk_image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
+
+        // NOTE: In the case of mipped images this barrier is only on the last layer, the rest of the barriers are handled on mip blitting
+        // See below.
+        read_barrier := vk_image_barrier_info(vk_image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL, mip_base=dst.mip_count-1)
         append(&image_read_barriers, read_barrier)
     }
   }
@@ -1098,39 +1112,100 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
   // Have to do copy barriers for images to transition them to being transfer dst's
   if len(images) > 0
   {
-    dependencies: vk.DependencyInfo =
+    copy_dependencies: vk.DependencyInfo =
     {
       sType                   = .DEPENDENCY_INFO,
       pImageMemoryBarriers    = raw_data(image_copy_barriers[:]),
       imageMemoryBarrierCount = u32(len(image_copy_barriers)),
     }
-    vk.CmdPipelineBarrier2(vk_curr_cmd(), &dependencies)
+    vk.CmdPipelineBarrier2(vk_curr_cmd(), &copy_dependencies)
   }
 
-  dependencies: vk.DependencyInfo = { sType = .DEPENDENCY_INFO }
+  read_dependencies: vk.DependencyInfo = { sType = .DEPENDENCY_INFO }
   if len(buffer_regions) > 0
   {
     vk.CmdCopyBuffer(vk_curr_cmd(), vk_src_buffer, vk_dst_buffer, u32(len(buffer_regions)), raw_data(buffer_regions[:]))
 
-    dependencies.pBufferMemoryBarriers    = raw_data(buffer_barriers[:])
-    dependencies.bufferMemoryBarrierCount = u32(len(buffer_barriers))
+    read_dependencies.pBufferMemoryBarriers    = raw_data(buffer_barriers[:])
+    read_dependencies.bufferMemoryBarrierCount = u32(len(buffer_barriers))
   }
 
   if len(images) > 0
   {
     // Ehh, kind of sucks to do this..., but not doing atlasing at all so...
-    for &item in soa_zip(image=images[:], region=image_regions[:])
+    for &item in soa_zip(image=images[:], region=image_regions[:], mips=image_mips[:])
     {
       vk.CmdCopyBufferToImage(vk_curr_cmd(), vk_src_buffer, item.image, .TRANSFER_DST_OPTIMAL, 1, &item.region)
+
+      // TODO: Eventually just save the generated mips.
+
+      // Check for mips, if so do the mip generation jig.
+      prev_mip_w, prev_mip_h := item.region.imageExtent.width, item.region.imageExtent.height
+      for mip in 1..<item.mips
+      {
+        curr_mip_w := prev_mip_w / 2 if prev_mip_w > 1 else 1
+        curr_mip_h := prev_mip_h / 2 if prev_mip_h > 1 else 1
+
+        // Transition the previous mip layer to be a transfer src
+        mip_blit_barrier := vk_image_barrier_info(item.image, .TRANSFER_DST_OPTIMAL, .TRANSFER_SRC_OPTIMAL, mip - 1, 1)
+        mip_blit_dependencies: vk.DependencyInfo =
+        {
+          sType                   = .DEPENDENCY_INFO,
+          pImageMemoryBarriers    = &mip_blit_barrier,
+          imageMemoryBarrierCount = 1
+        }
+
+        vk.CmdPipelineBarrier2(vk_curr_cmd(), &mip_blit_dependencies)
+
+        blit_region :vk.ImageBlit2 =
+        {
+          sType = .IMAGE_BLIT_2,
+          srcOffsets = {{0,0,0}, {i32(prev_mip_w), i32(prev_mip_h), 1}},
+          srcSubresource =
+          {
+            aspectMask = item.region.imageSubresource.aspectMask,
+            mipLevel   = mip - 1,
+            layerCount = 1,
+          },
+          dstOffsets = {{0,0,0}, {i32(curr_mip_w), i32(curr_mip_h), 1}},
+          dstSubresource =
+          {
+            aspectMask = item.region.imageSubresource.aspectMask,
+            mipLevel   = mip,
+            layerCount = 1,
+          },
+        }
+
+        blit_info: vk.BlitImageInfo2 =
+        {
+          sType          = .BLIT_IMAGE_INFO_2,
+          srcImage       = item.image,
+          srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+          dstImage       = item.image,
+          dstImageLayout = .TRANSFER_DST_OPTIMAL,
+          filter         = .LINEAR,
+          pRegions       = &blit_region,
+          regionCount    = 1,
+        }
+        vk.CmdBlitImage2(vk_curr_cmd(), &blit_info)
+
+        prev_mip_w = curr_mip_w
+        prev_mip_h = curr_mip_h
+
+        mip_read_barrier := vk_image_barrier_info(item.image, .TRANSFER_SRC_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL, mip_base=mip - 1, mip_count=1)
+        append(&image_read_barriers, mip_read_barrier)
+      }
     }
 
-    dependencies.pImageMemoryBarriers    = raw_data(image_read_barriers[:])
-    dependencies.imageMemoryBarrierCount = u32(len(image_read_barriers))
+    // NOTE: Just one final shader read barrier over the entire image, all mips...
+    // Perhaps you could have more granular barriers... but
+    read_dependencies.pImageMemoryBarriers    = raw_data(image_read_barriers[:])
+    read_dependencies.imageMemoryBarrierCount = u32(len(image_read_barriers))
   }
 
   if len(images) > 0 || len(buffer_regions) > 0
   {
-    vk.CmdPipelineBarrier2(vk_curr_cmd(), &dependencies)
+    vk.CmdPipelineBarrier2(vk_curr_cmd(), &read_dependencies)
   }
 }
 
@@ -1200,8 +1275,37 @@ vk_flush_render_frame :: proc(to_display: Texture)
       // Transfer swapchain image to be ready for blitting draw image to it.
       vk_image_barrier_info(target.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
   })
-  vk_blit_images(frame.buffer, display_image.image, target.image, to_display.width, to_display.height,
-                 vks.swapchain.extent.width, vks.swapchain.extent.height)
+
+  // Blit from to display to the swapchain image
+  blit_region :vk.ImageBlit2 =
+  {
+    sType = .IMAGE_BLIT_2,
+    srcOffsets = {{0,0,0}, {i32(to_display.width), i32(to_display.height), 1}},
+    srcSubresource =
+    {
+      aspectMask = {.COLOR},
+      layerCount = 1,
+    },
+    dstOffsets = {{0,0,0}, {i32(vks.swapchain.extent.width), i32(vks.swapchain.extent.height), 1}},
+    dstSubresource =
+    {
+      aspectMask = {.COLOR},
+      layerCount = 1,
+    },
+  }
+
+  blit_info: vk.BlitImageInfo2 =
+  {
+    sType          = .BLIT_IMAGE_INFO_2,
+    srcImage       = display_image.image,
+    srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+    dstImage       = target.image,
+    dstImageLayout = .TRANSFER_DST_OPTIMAL,
+    filter         = .LINEAR,
+    pRegions       = &blit_region,
+    regionCount    = 1,
+  }
+  vk.CmdBlitImage2(frame.buffer, &blit_info)
 
   // Transition swapchain image to be ready for present
   vk_transition_images(frame.buffer, {vk_image_barrier_info(target.image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR)})
@@ -1283,54 +1387,17 @@ vk_draw_vertices :: proc(first_vertex, vertex_count: u32, push: $Push_Type)
   where size_of(push) <= 128
 {
   push := push
-  // UGLY!
   vk.CmdPushConstants(vk_curr_cmd(), vks.pipeline_layout,
                       {.VERTEX, .FRAGMENT, .COMPUTE}, 0, size_of(push), &push)
   vk.CmdDraw(vk_curr_cmd(), vertex_count, 1, first_vertex, 0)
 }
 
-vk_draw_indirect :: proc(pipeline: Pipeline, commands: GPU_Buffer, uniforms: GPU_Buffer, count: u32)
+vk_draw_indirect :: proc(pipeline: Pipeline, commands: GPU_Buffer(Draw_Command), uniforms: GPU_Buffer(Draw_Uniform), count: u32)
 {
   // assert()
   // // NOTE: Hardcoded that we know the buffer comes from this arena.
   //
   // vk.CmdDrawIndexedIndirect(vk_curr_cmd(), vks.arenas[.HOST].buffer, , count, size_of(Draw_Command))
-}
-
-// NOTE: Hardcoded for color, mostly just for blitting from a texture to a swap image
-@(private="file")
-vk_blit_images :: proc(cmd: vk.CommandBuffer, src, dst: vk.Image, src_w, src_h, dst_w, dst_h: u32)
-{
-  blit_region :vk.ImageBlit2 =
-  {
-    sType = .IMAGE_BLIT_2,
-    srcOffsets = {{0,0,0}, {i32(src_w), i32(src_h), 1}},
-    srcSubresource =
-    {
-      aspectMask = {.COLOR},
-      layerCount = 1,
-    },
-    dstOffsets = {{0,0,0}, {i32(dst_w), i32(dst_h), 1}},
-    dstSubresource =
-    {
-      aspectMask = {.COLOR},
-      layerCount = 1,
-    },
-  }
-
-  blit_info: vk.BlitImageInfo2 =
-  {
-    sType          = .BLIT_IMAGE_INFO_2,
-    srcImage       = src,
-    srcImageLayout = .TRANSFER_SRC_OPTIMAL,
-    dstImage       = dst,
-    dstImageLayout = .TRANSFER_DST_OPTIMAL,
-    filter         = .LINEAR,
-    pRegions       = &blit_region,
-    regionCount    = 1,
-  }
-
-  vk.CmdBlitImage2(cmd, &blit_info)
 }
 
 @(private="file")
@@ -1386,8 +1453,8 @@ vk_push_internal :: proc(item: Vulkan_Internal) -> (internal: Renderer_Internal)
   return Renderer_Internal(len(vks.internals) - 1)
 }
 
-@(private="file")
-vk_format_table: [Pixel_Format]vk.Format =
+@(rodata,private="file")
+VK_FORMAT_TABLE: [Pixel_Format]vk.Format =
 {
   .NONE             = .UNDEFINED,
   .R8               = .R8_UNORM,
@@ -1396,6 +1463,24 @@ vk_format_table: [Pixel_Format]vk.Format =
   .RGBA16F          = .R16G16B16A16_SFLOAT,
   .DEPTH32          = .D32_SFLOAT,
   .DEPTH24_STENCIL8 = .D24_UNORM_S8_UINT,
+}
+
+@(private="file")
+vk_aspect_from_format :: proc(format: Pixel_Format) -> (aspect: vk.ImageAspectFlags)
+{
+  switch format
+  {
+  case .NONE:
+    log.warnf("Tried to obtain vulkan aspect from NONE color format.")
+  case .R8, .RGBA8, .SRGBA8, .RGBA16F:
+    aspect |= {.COLOR}
+  case .DEPTH24_STENCIL8:
+    aspect |= {.DEPTH, .STENCIL}
+  case .DEPTH32:
+    aspect |= {.DEPTH}
+  }
+
+  return aspect
 }
 
 vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
@@ -1547,10 +1632,10 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
   }
 
   vk_usage: vk.ImageUsageFlags = {.TRANSFER_DST, .SAMPLED } // Always
-  if mip_count > 1
+  if mip_count > 1 // Will have to read to generate mips
   {
     vk_usage += {.TRANSFER_SRC}
-  } // Will have to read to generate mips
+  }
 
   if .TARGET in usage
   {
@@ -1573,7 +1658,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
     sType       = .IMAGE_CREATE_INFO,
     imageType   = .D2, // NOTE: Hardcoded.
     extent      = {width, height, 1}, // NOTE: Hardcoded.
-    format      = vk_format_table[format],
+    format      = VK_FORMAT_TABLE[format],
     mipLevels   = mip_count,
     arrayLayers = array_count,
     samples     = vk_samples,
@@ -1607,19 +1692,6 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
   vk_assert(vk.BindImageMemory(vks.logical, image.image, vks.arenas[.DEVICE].memory, memory_offset),
             "Unable to bind vulkan image memory.")
 
-  aspects: vk.ImageAspectFlags
-  switch format
-  {
-    case .NONE: assert(false)
-    case .R8, .RGBA8, .SRGBA8, .RGBA16F:
-      aspects += {.COLOR}
-    case .DEPTH24_STENCIL8:
-      aspects += {.STENCIL}
-      fallthrough
-    case .DEPTH32:
-      aspects += {.DEPTH}
-  }
-
   view_info: vk.ImageViewCreateInfo =
   {
     sType      = .IMAGE_VIEW_CREATE_INFO,
@@ -1627,7 +1699,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
     format     = image_info.format,
     viewType   = vk_view_type_table[type],
     components = components,
-    subresourceRange = vk_image_range(aspects, mip_count = mip_count,  array_count = array_count)
+    subresourceRange = vk_image_range(vk_aspect_from_format(format), mip_count = mip_count,  array_count = array_count)
   }
 
   vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &image.view),
@@ -1794,9 +1866,9 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
     sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
   }
 
-  vk_color_format   := vk_format_table[color_format]
-  vk_depth_format   := vk_format_table[depth_format]
-  vk_stencil_format := vk_format_table[depth_format] if depth_format == .DEPTH24_STENCIL8 else .UNDEFINED
+  vk_color_format   := VK_FORMAT_TABLE[color_format]
+  vk_depth_format   := VK_FORMAT_TABLE[depth_format]
+  vk_stencil_format := VK_FORMAT_TABLE[depth_format] if depth_format == .DEPTH24_STENCIL8 else .UNDEFINED
   rendering: vk.PipelineRenderingCreateInfo =
   {
     sType                   = .PIPELINE_RENDERING_CREATE_INFO,
@@ -1907,7 +1979,7 @@ vk_image_layout_info :: proc(layout: vk.ImageLayout) -> (stage: vk.PipelineStage
 }
 
 @(private="file")
-vk_image_barrier_info :: proc(image: vk.Image, old, new: vk.ImageLayout) -> (barrier_info: vk.ImageMemoryBarrier2)
+vk_image_barrier_info :: proc(image: vk.Image, old, new: vk.ImageLayout, mip_base: u32 = 0, mip_count: u32 = vk.REMAINING_MIP_LEVELS) -> (barrier_info: vk.ImageMemoryBarrier2)
 {
   src_stage, src_access := vk_image_layout_info(old)
   dst_stage, dst_access := vk_image_layout_info(new)
@@ -1922,7 +1994,7 @@ vk_image_barrier_info :: proc(image: vk.Image, old, new: vk.ImageLayout) -> (bar
     oldLayout     = old,
     newLayout     = new,
     image         = image,
-    subresourceRange = vk_image_range(new == .DEPTH_ATTACHMENT_OPTIMAL ? {.DEPTH} : {.COLOR}),
+    subresourceRange = vk_image_range(new == .DEPTH_ATTACHMENT_OPTIMAL ? {.DEPTH} : {.COLOR}, mip_base=mip_base, mip_count=mip_count),
   }
 
   return barrier_info

@@ -48,15 +48,6 @@ Pipeline :: struct
 
 // NOTE: This is simply a little meta-program to reduce code duplication between glsl and odin
 
-UBO_Bind :: enum u32
-{
-  FRAME         = 0,
-  MATERIALS     = 1,
-  DRAW_UNIFORMS = 2,
-  MESH_VERTICES = 3,
-  IMM_VERTICES  = 4,
-}
-
 MAX_SHADOW_POINT_LIGHTS :: 8
 MAX_POINT_LIGHTS :: 128
 
@@ -140,6 +131,11 @@ Frame_Uniform :: struct
 
   sun_light:    Direction_Light_Uniform,
   flash_light:  Spot_Light_Uniform,
+
+  // Texture descriptor heap indices
+  sun_shadow_index:   u32,
+  point_shadow_index: u32,
+  skybox_index:       u32,
 }
 
 Draw_Command :: struct

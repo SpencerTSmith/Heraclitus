@@ -6,12 +6,12 @@ import "core:mem"
 GPU_Upload :: struct
 {
   // Considering store pointers instead of the actual structs here.
-  src_buffer: GPU_Buffer,
+  src_buffer: GPU_Buffer(byte),
   src_offset: int,
 
   dst: union
   {
-    GPU_Buffer,
+    GPU_Buffer(byte),
     Texture,
   },
   dst_offset: int,
@@ -37,31 +37,31 @@ Renderer :: struct
   upload_queue: [dynamic; 32]GPU_Upload,
 
   // Mega buffers
-  vertex_buffer:   GPU_Buffer,
+  vertex_buffer:   GPU_Buffer(Mesh_Vertex),
   vertex_count:    int,
-  index_buffer:    GPU_Buffer,
+  index_buffer:    GPU_Buffer(Mesh_Index),
   index_count:     int,
-  material_buffer: GPU_Buffer,
+  material_buffer: GPU_Buffer(Material_Uniform),
   material_count:  int,
 
   // Mapped buffers that need to be buffered per frame
   // May be better to just have one big one that each frame keeps track of where they were at
   // that way any one frame has a higher likelihood of having more memory to work with...
 
-  uniform_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer,
+  uniform_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer(Frame_Uniform),
 
-  staging_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer,
+  staging_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer(byte),
   staging_offset: int,
 
-  draw_commands: [FRAMES_IN_FLIGHT]GPU_Buffer,
-  draw_uniforms: [FRAMES_IN_FLIGHT]GPU_Buffer,
+  draw_commands: [FRAMES_IN_FLIGHT]GPU_Buffer(Draw_Command),
+  draw_uniforms: [FRAMES_IN_FLIGHT]GPU_Buffer(Draw_Uniform),
   draw_head:     int, // Start of current portion
   draw_count:    int, // Total
 
   // Immediate/dynamic vertex data
   immediate: struct
   {
-    vertex_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer,
+    vertex_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer(Immediate_Vertex),
     vertex_count:  int, // TOTAL for the current frame
     batches: [dynamic; 256]Immediate_Batch,
   },
@@ -71,7 +71,7 @@ Renderer :: struct
   draw_debug:  bool,
 }
 
-MAX_DRAWS     :: 256 * mem.Kilobyte
+MAX_DRAWS     :: 64 * mem.Kilobyte
 MAX_VERTICES  :: 4  * mem.Megabyte
 MAX_INDICES   :: 16 * mem.Megabyte
 MAX_MATERIALS :: 512
@@ -120,19 +120,17 @@ init_renderer :: proc() -> (ok: bool)
   init_vulkan(state.window)
   generate_glsl()
 
-  state.renderer.vertex_buffer   = make_gpu_buffer(size_of(Mesh_Vertex) * MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
-  state.renderer.index_buffer    = make_gpu_buffer(size_of(Mesh_Index) * MAX_VERTICES, {.INDEX_DATA, .DEVICE_LOCAL})
-  state.renderer.material_buffer = make_gpu_buffer(size_of(Material_Uniform) * MAX_MATERIALS, {.STORAGE_DATA, .DEVICE_LOCAL})
+  state.renderer.vertex_buffer   = make_gpu_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
+  state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_VERTICES, {.INDEX_DATA, .DEVICE_LOCAL})
+  state.renderer.material_buffer = make_gpu_buffer(Material_Uniform, MAX_MATERIALS, {.STORAGE_DATA, .DEVICE_LOCAL})
 
-  state.renderer.uniform_buffer = make_ring_gpu_buffers(size_of(Frame_Uniform), {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
-  state.renderer.staging_buffer = make_ring_gpu_buffers(64 * mem.Megabyte, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
+  state.renderer.uniform_buffer = make_ring_gpu_buffers(Frame_Uniform, 1, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
+  state.renderer.staging_buffer = make_ring_gpu_buffers(byte, 64 * mem.Megabyte, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
 
-  state.renderer.draw_commands = make_gpu_buffer(size_of(Draw_Command) * MAX_DRAWS,
-                                                 flags = {.STORAGE_DATA, .CPU_MAPPED})
-  state.renderer.draw_uniforms = make_gpu_buffer(size_of(Draw_Uniform) * MAX_DRAWS,
-                                                 flags = {.STORAGE_DATA, .CPU_MAPPED})
+  state.renderer.draw_commands = make_ring_gpu_buffers(Draw_Command, MAX_DRAWS, {.STORAGE_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
+  state.renderer.draw_uniforms = make_ring_gpu_buffers(Draw_Uniform, MAX_DRAWS, {.STORAGE_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
 
-  state.renderer.immediate.vertex_buffer = make_gpu_buffer(size_of(Immediate_Vertex) * MAX_IMMEDIATE_VERTICES, {.CPU_MAPPED, .VERTEX_DATA})
+  state.renderer.immediate.vertex_buffer = make_ring_gpu_buffers(Immediate_Vertex, MAX_IMMEDIATE_VERTICES, {.CPU_MAPPED, .VERTEX_DATA}, FRAMES_IN_FLIGHT)
 
   // Always have a default batch
   append(&state.renderer.immediate.batches, Immediate_Batch{})
@@ -180,17 +178,21 @@ flush_render_frame :: proc(to_display: Texture)
   state.renderer.frame_began = false
 }
 
-queue_buffer_upload :: proc(data: []byte, dst: GPU_Buffer, dst_offset: int)
+// This may be voodoo with the polymorphism
+queue_buffer_upload :: proc(data: []$Type, dst: GPU_Buffer(Type), dst_offset: int)
 {
-  assert(state.renderer.staging_offset + len(data) < state.renderer.staging_buffer[curr_frame_idx()].size)
+  byte_size   := len(data) * size_of(Type)
+  byte_offset := dst_offset * size_of(Type)
+
+  assert(state.renderer.staging_offset + byte_size < state.renderer.staging_buffer[curr_frame_idx()].count)
 
   upload: GPU_Upload =
   {
     src_buffer = state.renderer.staging_buffer[curr_frame_idx()],
     src_offset = state.renderer.staging_offset,
-    dst        = dst,
-    dst_offset = dst_offset,
-    size       = len(data),
+    dst        = gpu_buffer_as_bytes(dst),
+    dst_offset = byte_offset,
+    size       = byte_size,
   }
 
   // Copy to staging.
@@ -204,7 +206,7 @@ queue_buffer_upload :: proc(data: []byte, dst: GPU_Buffer, dst_offset: int)
 
 upload_texture :: proc(data: []byte, dst: Texture)
 {
-  assert(state.renderer.staging_offset + len(data) < state.renderer.staging_buffer[curr_frame_idx()].size)
+  assert(state.renderer.staging_offset + len(data) < state.renderer.staging_buffer[curr_frame_idx()].count)
 
   upload: GPU_Upload =
   {
@@ -228,14 +230,12 @@ upload_model :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_
   if state.renderer.vertex_count + len(vertices) <= MAX_VERTICES &&
      state.renderer.index_count + len(indices)   <= MAX_INDICES
   {
-    queue_buffer_upload(mem.byte_slice(raw_data(vertices), size_of(vertices[0]) * len(vertices)),
-                        state.renderer.vertex_buffer, state.renderer.vertex_count * size_of(vertices[0]))
+    queue_buffer_upload(vertices, state.renderer.vertex_buffer, state.renderer.vertex_count)
 
     vertex_offset = cast(u32)state.renderer.vertex_count
     state.renderer.vertex_count += len(vertices)
 
-    queue_buffer_upload(mem.byte_slice(raw_data(indices), size_of(indices[0]) * len(indices)),
-                        state.renderer.index_buffer, state.renderer.index_count * size_of(indices[0]))
+    queue_buffer_upload(indices, state.renderer.index_buffer, state.renderer.index_count)
 
     index_offset = cast(u32)state.renderer.index_count
     state.renderer.index_count += len(indices)
@@ -259,11 +259,11 @@ upload_materials :: proc(materials: ^[]Material)
     {
       uniforms[idx] = material_uniform(material)
       material.buffer_index = u32(state.renderer.material_count)
-      state.renderer.material_count += 1
     }
 
-    queue_buffer_upload(mem.byte_slice(raw_data(uniforms), size_of(uniforms[0]) * len(uniforms)),
-                        state.renderer.material_buffer, write_offset)
+    queue_buffer_upload(uniforms, state.renderer.material_buffer, state.renderer.material_count)
+
+    state.renderer.material_count += len(uniforms)
   }
   else
   {
@@ -285,15 +285,12 @@ push_draw :: proc(command: Draw_Command, uniform: Draw_Uniform)
       command.base_instance = cast(u32)state.renderer.draw_count
       command.first_index += cast(u32)state.renderer.index_count
 
-      draw_ptr := cast([^]Draw_Command)state.renderer.draw_commands[curr_frame_idx()].cpu_base
-      draw_ptr[state.renderer.draw_count] = command
+      state.renderer.draw_commands[curr_frame_idx()].cpu_base[state.renderer.draw_count] = command
     }
 
     // Draw Uniform
     {
-      uniform := uniform
-      uniform_ptr := cast([^]Draw_Uniform)state.renderer.draw_uniforms[curr_frame_idx()].cpu_base
-      uniform_ptr[state.renderer.draw_count] = uniform
+      state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[state.renderer.draw_count] = uniform
     }
 
     state.renderer.draw_count += 1
@@ -347,17 +344,13 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
 {
   if state.renderer.immediate.vertex_count + 1 < MAX_IMMEDIATE_VERTICES
   {
-    // TODO: It is probably inefficient to write invidual vertices directly into the host coherent buffer
-    // Could easily buffer these up.
-    vertex_ptr := cast([^]Immediate_Vertex)state.renderer.immediate.vertex_buffer[curr_frame_idx()].cpu_base
-
     current := &state.renderer.immediate.batches[len(state.renderer.immediate.batches) - 1]
 
     // Write into the current batch.
     offset := current.vertex_base + current.vertex_count
 
     // To the gpu buffer!
-    vertex_ptr[offset] =
+    state.renderer.immediate.vertex_buffer[curr_frame_idx()].cpu_base[offset] =
     {
       position = position,
       uv       = uv,

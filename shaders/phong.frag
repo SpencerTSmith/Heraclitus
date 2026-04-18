@@ -15,10 +15,6 @@ in VS_OUT
 
 layout(location = 0) out vec4 frag_color;
 
-layout(binding = 0) uniform samplerCube skybox;
-layout(binding = 1) uniform sampler2D sun_shadow_map;
-layout(binding = 2) uniform samplerCubeArray point_light_shadows;
-
 // Must sample the texture first and pass in that color... keeps this nice and generic
 vec3 phong_diffuse(vec3 normal, vec3 light_direction, vec3 diffuse_color)
 {

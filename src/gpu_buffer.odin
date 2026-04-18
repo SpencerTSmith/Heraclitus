@@ -1,6 +1,5 @@
 package main
 
-import "core:mem"
 import "core:log"
 
 // NOTE: CPU mapped is just for writing, the memory is host coherent, not host cached.
@@ -15,49 +14,55 @@ GPU_Buffer_Flag :: enum
 }
 GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
 
-// TODO: It would be cool if these could also be polymorphic and castable as a pointer to an actual type...
-// just some way to encode a type
-GPU_Buffer :: struct
+// Typed GPU Buffers... really just a convenience. But I think its worth it.
+// For untyped buffers like my staging buffer, just pass a byte as the type
+GPU_Buffer :: struct($Type: typeid)
 {
   flags: GPU_Buffer_Flags,
 
-  cpu_base: rawptr,
+  cpu_base: [^]Type,
   gpu_base: rawptr,
 
-  size: int,
+  count: int,
 }
 
-align_size_for_gpu :: proc(size: int) -> (aligned: int)
+make_gpu_buffer :: proc($Type: typeid, count: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer(Type))
 {
-  min_alignment: i32
-  // gl.GetIntegerv(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT, &min_alignment)
+  gpu_ptr, cpu_ptr := vk_alloc_buffer(size_of(Type) * count, flags)
 
- aligned = mem.align_forward_int(size, int(min_alignment))
- return aligned
-}
-
-// NOTE: Since I control memory allocation and I know its just a bump allocator, frame/ring buffer is no longer needed
-// conceptually... buffers made one after another are next to each other in memory, so just make FRAMES_IN_FLIGHT GPU_Buffers
-make_gpu_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
-{
-  buffer.gpu_base, buffer.cpu_base = vk_alloc_buffer(size, flags)
-  buffer.flags = flags
-  buffer.size  = size
+  buffer.gpu_base = gpu_ptr
+  buffer.cpu_base = cast([^]Type)cpu_ptr
+  buffer.flags    = flags
+  buffer.count    = count
 
   return buffer
 }
 
 // Helper for making a few of the same type... having this api set up will help in case i ever change backend allocation to at least keep buffers
 // created through this api to be linear in memory.
-make_ring_gpu_buffers :: proc(size: int, flags: GPU_Buffer_Flags, $N: uint) -> (buffers: [N]GPU_Buffer)
+make_ring_gpu_buffers :: proc($Type: typeid, count: int, flags: GPU_Buffer_Flags, $N: uint) -> (buffers: [N]GPU_Buffer(Type))
 {
-  if .CPU_MAPPED not_in flags { log.warnf("Did you mean to create GPU ring buffers without asking for cpu mapped memory?") }
+  // Because i am forgetful.
+  if .CPU_MAPPED not_in flags { log.warnf("Did you mean to create GPU ring buffers without asking for CPU mapped memory?") }
 
   // Simple since allocation is just bump on backend.
   for &buffer in buffers
   {
-    buffer = make_gpu_buffer(size, flags)
+    buffer = make_gpu_buffer(Type, count, flags)
   }
 
   return buffers
+}
+
+gpu_buffer_as_bytes :: proc(buffer: GPU_Buffer($Type)) -> (byte_buffer: GPU_Buffer(byte))
+{
+  byte_buffer =
+  {
+    cpu_base = cast([^]byte)buffer.cpu_base,
+    gpu_base = buffer.gpu_base,
+    count    = size_of(Type) * buffer.count,
+    flags    = buffer.flags,
+  }
+
+  return byte_buffer
 }
