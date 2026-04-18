@@ -118,10 +118,10 @@ init_state :: proc() -> (ok: bool)
   init_renderer()
 
   init_assets()
-  //
+
   // init_menu() or_return
   //
-  // state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
+  state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
   //
   // cube_map_sides: [6]string =
   // {
@@ -235,6 +235,7 @@ main :: proc()
 
           draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
           draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
+          draw_debug_stats()
         }
       }
     }
