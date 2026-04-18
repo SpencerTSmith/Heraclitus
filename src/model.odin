@@ -22,9 +22,9 @@ Mesh_Index :: distinct u32
 
 Mesh :: struct
 {
-  index_offset:   i32, // Relative to the parent model offset
-  index_count:    i32,
-  material_index: i32,
+  index_offset:   u32, // Relative to the parent model offset
+  index_count:    u32,
+  material_index: u32,
 
   aabb: AABB, // For each mesh... might do something diff... we will seeeeeee
 }
@@ -32,10 +32,10 @@ Mesh :: struct
 Model :: struct
 {
   // Offsets into mega buffer
-  vertex_offset: i32,
-  vertex_count:  i32,
-  index_offset:  i32,
-  index_count:   i32,
+  vertex_offset: u32,
+  vertex_count:  u32,
+  index_offset:  u32,
+  index_count:   u32,
 
   // Triangle meshes, provide a view into a range of the overall buffer
   meshes:    []Mesh,
@@ -82,8 +82,8 @@ make_model_from_data :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index,
   {
     vertex_offset = vertex_offset,
     index_offset  = index_offset,
-    vertex_count  = i32(len(vertices)),
-    index_count   = i32(len(indices)),
+    vertex_count  = u32(len(vertices)),
+    index_count   = u32(len(indices)),
 
     // Copy from the scratch
     meshes    = slice.clone(meshes, allocator),
@@ -447,9 +447,9 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
             // NOTE: Hmm think i like the look of cast(T) better than the other way
             new_mesh: Mesh =
             {
-              index_count    = cast(i32)primitive_index_count,
-              index_offset   = cast(i32)primitive_index_offset,
-              material_index = cast(i32)primitive_material_index,
+              index_count    = cast(u32)primitive_index_count,
+              index_offset   = cast(u32)primitive_index_offset,
+              material_index = cast(u32)primitive_material_index,
 
               aabb = mesh_aabb,
             }
@@ -507,8 +507,8 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
 
     command: Draw_Command =
     {
-      count          = cast(u32)mesh.index_count,
-      base_vertex    = cast(u32)model.vertex_offset,
+      count          = mesh.index_count,
+      base_vertex    = model.vertex_offset,
       instance_count = cast(u32)instances,
       first_index    = cast(u32)true_offset,
       base_instance  = 0, // We set this in push_draw, as it will know what that ought to be.

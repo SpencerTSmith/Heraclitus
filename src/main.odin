@@ -119,8 +119,6 @@ init_state :: proc() -> (ok: bool)
 
   init_assets()
   //
-  // init_immediate_renderer(state.perm_alloc) or_return
-  //
   // init_menu() or_return
   //
   // state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
@@ -183,11 +181,25 @@ main :: proc()
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
-  main_target := make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
 
-  entity := make_entity("missing/BoxTextured.gltf")
+  // for pos in DEFAULT_MODEL_POSITIONS
+  // {
+  //   make_entity("cube/BoxTextured.gltf", position=pos - {20,0,30})
+  // }
+  //
+  // make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
+  //
+  // make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
+  //
+  // make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
+
+  // make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
+
+  // make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
 
   position := vec2{100, 100}
+
+  main_target := make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
 
   for !should_close(state.window)
   {
@@ -207,10 +219,7 @@ main :: proc()
 
     poll_input_state(state.window, dt_s)
 
-    if key_down(.W) { position.y -= 10 }
-    if key_down(.S) { position.y += 10 }
-    if key_down(.A) { position.x -= 10 }
-    if key_down(.D) { position.x += 10 }
+    move_camera_editor(&state.camera, dt_s)
 
     if begin_render_frame()
     {
@@ -225,6 +234,7 @@ main :: proc()
           defer immediate_flush(true, true)
 
           draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
+          draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
         }
       }
     }

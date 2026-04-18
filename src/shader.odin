@@ -185,13 +185,11 @@ to_glsl_basic_type_string :: proc(type: typeid, allow_vec: bool) -> string
   case vec4:
     if allow_vec { s = "vec4" }
   case u32:
-    s = "int"
+    s = "uint"
   case i32:
     s = "int"
   case rawptr:
     s = "uint64_t"
-  // case u64:
-  //   s = "sampler2D" // HACK: !!!
   }
 
   return s
@@ -267,10 +265,11 @@ generate_glsl :: proc()
   hours := time.to_string_hms_12(now, buf2[:])
   fmt.sbprintf(&b, "// NOTE: This code was generated on %v (%v)\n\n", date, hours)
 
-  // Gotta have it
+  // Gotta have em
   fmt.sbprintf(&b, "#extension GL_EXT_buffer_reference : require\n")
   fmt.sbprintf(&b, "#extension GL_EXT_scalar_block_layout : require\n")
   fmt.sbprintf(&b, "#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require\n")
+  fmt.sbprintf(&b, "#extension GL_EXT_nonuniform_qualifier : require\n")
 
   //
   // Parse and append uniform structs
@@ -287,6 +286,10 @@ generate_glsl :: proc()
   // to_glsl_struct(&b, Frame_Uniform)
   // to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
   to_glsl_struct(&b, Immediate_Vertex, allow_vec = true)
+
+  fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform sampler2D   textures_2D[];\n", TEXTURE_BINDING[.D2])
+  fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform samplerCube textures_cube[];\n", TEXTURE_BINDING[.CUBE])
+  fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform samplerCubeArray   textures_cube_array[];\n", TEXTURE_BINDING[.CUBE_ARRAY])
 
   // FIXME: Automate somehow.
   // fmt.sbprintln(&b)
@@ -720,6 +723,8 @@ bind_pipeline :: proc
 // TODO: Check against current render target to ensure that pipeline is compatible.
 bind_pipeline_direct :: proc(pipeline: Pipeline)
 {
+  ensure(state.renderer.frame_began)
+
   state.renderer.bound_pipeline = pipeline
   vk_bind_pipeline(pipeline)
 }

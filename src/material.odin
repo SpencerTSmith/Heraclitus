@@ -7,6 +7,9 @@ Material_Blend_Mode :: enum u32
   MASK,
 }
 
+// Probably bloat to keep track of this cpu side...
+// Especially for each model keeping an array of these things...
+// Models ought just keep track of the buffer index, and some flags...
 Material :: struct
 {
   buffer_index: u32, // Filled out upon upload

@@ -8,11 +8,12 @@ DATA_DIR    :: "data" + PATH_SLASH
 MODEL_DIR   :: DATA_DIR + "models"   + PATH_SLASH
 TEXTURE_DIR :: DATA_DIR + "textures" + PATH_SLASH
 
+WHITE_TEXTURE    :: Texture_Handle{}
+
 Model_Handle   :: distinct u32
 Texture_Handle :: distinct u32
 
-// TODO: If doing streaming, then assets data structure should be pool like
-// As it stands handle is just an index into this array that never changes or shrinks
+// TODO: LRU instead of simple array for keeping track
 
 // TODO: Maybe it should just be name to handle? Not the full relative path?
 Asset_Catalog :: struct($Type, $Handle: typeid, $N: int)
@@ -34,7 +35,7 @@ assets: Assets
 init_assets :: proc()
 {
   // Probably will want these so might as well load them now
-  load_texture("white.png")
+  assert(load_texture("white.png") == WHITE_TEXTURE)
   load_texture("black.png")
   load_texture("flat_normal.png")
 
@@ -72,6 +73,9 @@ free_assets :: proc()
   }
   delete(assets.texture_catalog.path_map)
 }
+
+// NOTE: The load* should never really 'fail' even if they can't load the passed data, they at least return a valid fallback so can continue rendering
+// without crashing... the fallbacks are ugly enough to be noticeable
 
 load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) #optional_ok
 {
@@ -170,6 +174,7 @@ get_texture_by_handle :: proc(handle: Texture_Handle) -> ^Texture
   return &assets.texture_catalog.assets[handle]
 }
 
+// NOTE: I know this is slow, but its helpful for testing things quickly
 get_texture_by_name :: proc(name: string) -> (texture: ^Texture)
 {
   path := join_file_path({TEXTURE_DIR, name}, context.temp_allocator) // Temp for checking, if we really need to load it... permanent alloc in load_texture

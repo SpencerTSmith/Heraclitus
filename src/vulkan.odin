@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:strings"
 import "core:log"
 import "core:mem"
+import "core:slice"
 
 import "vendor:glfw"
 import vk "vendor:vulkan"
@@ -69,17 +70,12 @@ Vulkan_Image :: struct
   view:  vk.ImageView,
 }
 
-Vulkan_Pipeline :: struct
-{
-  pipeline: vk.Pipeline,
-  layout:   vk.PipelineLayout,
-}
 
 // Internal API Objects
 Vulkan_Internal :: union
 {
   Vulkan_Image,
-  Vulkan_Pipeline,
+  vk.Pipeline,
 }
 
 @(private="file")
@@ -95,6 +91,15 @@ vks: struct
   frames:     [FRAMES_IN_FLIGHT]Frame_State,
   curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
   arenas:     [Vulkan_Arena_Kind]Vulkan_Arena,
+
+  samplers: [Sampler_Preset]vk.Sampler,
+
+  // Shared by all pipelines. Only needed for textures.
+  descriptor_layout: vk.DescriptorSetLayout,
+  descriptor_pool:   vk.DescriptorPool,
+  descriptor_set:    vk.DescriptorSet,
+  descriptor_counts: [Texture_Type]u32,
+  pipeline_layout:   vk.PipelineLayout, // Bro.
 
   // API Object Pool
   internals: [dynamic; 512]Vulkan_Internal,
@@ -543,9 +548,14 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     required_device_features12: vk.PhysicalDeviceVulkan12Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      bufferDeviceAddress = true,
-      descriptorIndexing  = true,
-      scalarBlockLayout   = true,
+      bufferDeviceAddress                       = true,
+      descriptorIndexing                        = true,
+      scalarBlockLayout                         = true,
+      shaderSampledImageArrayNonUniformIndexing = true,
+      descriptorBindingVariableDescriptorCount  = true,
+      descriptorBindingPartiallyBound           = true,
+      runtimeDescriptorArray                    = true,
+      descriptorBindingSampledImageUpdateAfterBind = true,
       pNext = &required_device_features13,
     }
     required_device_features11: vk.PhysicalDeviceVulkan11Features =
@@ -558,7 +568,8 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       sType = .PHYSICAL_DEVICE_FEATURES_2,
       features =
       {
-        shaderInt64 = true,
+        shaderInt64    = true,
+        imageCubeArray = true,
       },
       pNext = &required_device_features11,
     }
@@ -674,17 +685,128 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // Memory
       // // //
       // FIXME: Ok should probably just be a variable.
-      ok: bool
       vks.arenas[.DEVICE], ok = make_vulkan_arena(vks.logical, vks.physical,
                                                   256 * mem.Megabyte, {.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
                                                   {.DEVICE_LOCAL}, 256 * mem.Megabyte)
-      if !ok { log.fatalf("Unable to create device local vulkan arena.") }
+      if !ok { log.panicf("Unable to create device local vulkan arena.") }
 
       // Entire thing gets mapped to a buffer, will never need extra raw memory.
       vks.arenas[.HOST], ok = make_vulkan_arena(vks.logical, vks.physical,
-                                                512 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
-                                                {.HOST_VISIBLE, .HOST_COHERENT}, 0)
-      if !ok { log.fatalf("Unable to create host vulkan arena.") }
+                                                256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER, .INDIRECT_BUFFER},
+                                                {.HOST_VISIBLE, .HOST_COHERENT, .DEVICE_LOCAL}, 0)
+      if !ok { log.panicf("Unable to create host vulkan arena.") }
+
+      // // //
+      // Descriptor layout, just really for accessing textures... i be doin' everything else through gpu pointers
+      // // //
+      bindings:      [Texture_Type]vk.DescriptorSetLayoutBinding
+      binding_flags: [Texture_Type]vk.DescriptorBindingFlags
+      pool_sizes:    [Texture_Type]vk.DescriptorPoolSize
+
+      for type in Texture_Type
+      {
+        bindings[type] =
+        {
+          binding         = TEXTURE_BINDING[type],
+          descriptorType  = .COMBINED_IMAGE_SAMPLER,
+          stageFlags      = {.FRAGMENT}, // NOTE: Hope i never do vertex lighting...
+          descriptorCount = MAX_TEXTURES[type],
+        }
+        binding_flags[type] = {.PARTIALLY_BOUND, .UPDATE_AFTER_BIND}
+        pool_sizes[type] =
+        {
+          type = bindings[type].descriptorType,
+          descriptorCount = bindings[type].descriptorCount,
+        }
+      }
+
+      flags_info: vk.DescriptorSetLayoutBindingFlagsCreateInfo =
+      {
+        sType         = .DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        pBindingFlags = raw_data(slice.enumerated_array(&binding_flags)[:]),
+        bindingCount  = u32(len(binding_flags)),
+      }
+
+      layout_info: vk.DescriptorSetLayoutCreateInfo =
+      {
+        sType        = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        pBindings    = raw_data(slice.enumerated_array(&bindings)[:]),
+        bindingCount = u32(len(bindings)),
+        pNext        = &flags_info,
+        flags        = {.UPDATE_AFTER_BIND_POOL}
+      }
+      vk_assert(vk.CreateDescriptorSetLayout(vks.logical, &layout_info, nil, &vks.descriptor_layout),
+                "Unable to create vulkan descriptor layout.")
+
+      pool_info: vk.DescriptorPoolCreateInfo =
+      {
+        sType         = .DESCRIPTOR_POOL_CREATE_INFO,
+        maxSets       = 1,
+        poolSizeCount = u32(len(slice.enumerated_array(&pool_sizes)[:])),
+        pPoolSizes    = raw_data(slice.enumerated_array(&pool_sizes)[:]),
+        flags         = {.UPDATE_AFTER_BIND},
+      }
+      vk_assert(vk.CreateDescriptorPool(vks.logical, &pool_info, nil, &vks.descriptor_pool),
+                "Unable to create vulkan descriptor pool.")
+
+      alloc_info: vk.DescriptorSetAllocateInfo =
+      {
+        sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+        descriptorPool     = vks.descriptor_pool,
+        pSetLayouts        = &vks.descriptor_layout,
+        descriptorSetCount = 1,
+      }
+      vk_assert(vk.AllocateDescriptorSets(vks.logical, &alloc_info, &vks.descriptor_set),
+                "Unable to create vulkan descriptor set.")
+
+      push_range: vk.PushConstantRange =
+      {
+        offset = 0,
+        size   = 128, // NOTE: just gonna always claim max
+        stageFlags = {.VERTEX,.FRAGMENT,.COMPUTE},
+      }
+      pipeline_layout_info: vk.PipelineLayoutCreateInfo =
+      {
+        sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
+        pSetLayouts            = &vks.descriptor_layout,
+        setLayoutCount         = 1,
+        pPushConstantRanges    = &push_range,
+        pushConstantRangeCount = 1,
+      }
+      vk_assert(vk.CreatePipelineLayout(vks.logical, &pipeline_layout_info, nil, &vks.pipeline_layout),
+                "Unable to create vulkan pipeline layout.")
+
+      // // //
+      // Samplers
+      // // //
+      create_sampler :: proc(min_filter, mag_filter: vk.Filter, mipmap_mode: vk.SamplerMipmapMode,
+                             address_mode: vk.SamplerAddressMode, border: vk.BorderColor = .FLOAT_OPAQUE_BLACK) -> (sampler: vk.Sampler)
+      {
+        info: vk.SamplerCreateInfo =
+        {
+          sType        = .SAMPLER_CREATE_INFO,
+          minFilter    = min_filter,
+          magFilter    = mag_filter,
+          mipmapMode   = mipmap_mode,
+          addressModeU = address_mode,
+          addressModeV = address_mode,
+          addressModeW = address_mode,
+          minLod       = 0,
+          maxLod       = vk.LOD_CLAMP_NONE,
+          mipLodBias   = 0,
+          borderColor  = border,
+          anisotropyEnable = false, // TODO:
+        }
+        vk_assert(vk.CreateSampler(vks.logical, &info, nil, &sampler),
+                  "Unable to create vulkan sampler.")
+
+        return sampler
+      }
+
+      vks.samplers[.REPEAT_NEAREST]   = create_sampler(.NEAREST, .NEAREST, .NEAREST, .REPEAT)
+      vks.samplers[.REPEAT_TRILINEAR] = create_sampler(.LINEAR, .LINEAR, .LINEAR, .REPEAT)
+      vks.samplers[.CLAMP_LINEAR]     = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_EDGE)
+      vks.samplers[.CLAMP_WHITE]      = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_BORDER, .FLOAT_OPAQUE_WHITE)
     }
     else
     {
@@ -692,8 +814,8 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     }
   }
 
-  // TODO:
-  return true
+  // TODO: Fix up
+  return ok
 }
 
 get_queue_indices :: proc(physical: vk.PhysicalDevice, surface: vk.SurfaceKHR) -> (queue_indices: [Queue_Kind]union{u32})
@@ -726,7 +848,6 @@ make_swapchain :: proc(window: Window, logical: vk.Device, physical: vk.Physical
   if old.handle != 0
   {
     vk.DeviceWaitIdle(logical)
-    free_swapchain(old)
   }
 
   surface_format := choose_surface_format(physical, surface)
@@ -767,6 +888,12 @@ make_swapchain :: proc(window: Window, logical: vk.Device, physical: vk.Physical
 
   vk_assert(vk.CreateSwapchainKHR(logical, &swapchain_info, nil, &new.handle),
             "Unable to create vulkan swapchain.")
+
+  // This needs to be destroyed AFTER we create the new swapchain. Otherwise validation layers yell at me.
+  if old.handle != 0
+  {
+    free_swapchain(old)
+  }
 
   new.format = surface_format.format
   new.extent = extent
@@ -899,20 +1026,26 @@ vk_get_image :: proc(internal: Renderer_Internal) -> (image: Vulkan_Image)
 }
 
 @(private="file")
-vk_get_pipeline :: proc(internal: Renderer_Internal) -> (image: Vulkan_Pipeline)
+vk_get_pipeline :: proc(internal: Renderer_Internal) -> (pipeline: vk.Pipeline)
 {
-  return vk_get_render_internal(internal).(Vulkan_Pipeline)
+  return vk_get_render_internal(internal).(vk.Pipeline)
 }
 
 vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
 {
+  // TODO: Could probably collapse some of these since use linear allocations....
+
   // FIXME: Just assuming that this only happens from cpu -> gpu
   vk_src_buffer := vks.arenas[.HOST].buffer
   vk_dst_buffer := vks.arenas[.DEVICE].buffer
 
-  // TODO: Could probably just collapse these into just one since use linear allocation for every thing...
   buffer_regions:  [dynamic; N]vk.BufferCopy
   buffer_barriers: [dynamic; N]vk.BufferMemoryBarrier2
+
+  images:              [dynamic; N]vk.Image
+  image_regions:       [dynamic; N]vk.BufferImageCopy
+  image_copy_barriers: [dynamic; N]vk.ImageMemoryBarrier2
+  image_read_barriers: [dynamic; N]vk.ImageMemoryBarrier2
 
   for upload in state.renderer.upload_queue
   {
@@ -940,20 +1073,63 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
         append(&buffer_regions, region)
         append(&buffer_barriers, barrier)
       case Texture:
-        unimplemented()
+        region: vk.BufferImageCopy =
+        {
+          bufferOffset = vk.DeviceSize(uintptr(upload.src_buffer.gpu_base)) - vk.DeviceSize(vks.arenas[.HOST].gpu_base) + vk.DeviceSize(upload.src_offset),
+          imageExtent  = {width=dst.width,height=dst.height,depth=1}, // NOTE: Hardcoded 2D images only!!
+          imageOffset  = {0,0,0}, // NOTE: Hardcoded... no atlasing for now, i suppose.
+          imageSubresource =
+          {
+            aspectMask = {.COLOR}, // FIXME: Hardcoded for only uploading color data!
+            layerCount = dst.array_count,
+          }
+        }
+        append(&image_regions, region)
+
+        vk_image := vk_get_image(dst.internal).image
+        append(&images, vk_image)
+        copy_barrier := vk_image_barrier_info(vk_image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+        append(&image_copy_barriers, copy_barrier)
+        read_barrier := vk_image_barrier_info(vk_image, .TRANSFER_DST_OPTIMAL, .SHADER_READ_ONLY_OPTIMAL)
+        append(&image_read_barriers, read_barrier)
     }
   }
 
-  dependencies: vk.DependencyInfo =
+  // Have to do copy barriers for images to transition them to being transfer dst's
+  if len(images) > 0
   {
-    sType                   = .DEPENDENCY_INFO,
-    pBufferMemoryBarriers   = raw_data(buffer_barriers[:]),
-    bufferMemoryBarrierCount = u32(len(buffer_barriers[:])),
+    dependencies: vk.DependencyInfo =
+    {
+      sType                   = .DEPENDENCY_INFO,
+      pImageMemoryBarriers    = raw_data(image_copy_barriers[:]),
+      imageMemoryBarrierCount = u32(len(image_copy_barriers)),
+    }
+    vk.CmdPipelineBarrier2(vk_curr_cmd(), &dependencies)
   }
 
+  dependencies: vk.DependencyInfo = { sType = .DEPENDENCY_INFO }
   if len(buffer_regions) > 0
   {
     vk.CmdCopyBuffer(vk_curr_cmd(), vk_src_buffer, vk_dst_buffer, u32(len(buffer_regions)), raw_data(buffer_regions[:]))
+
+    dependencies.pBufferMemoryBarriers    = raw_data(buffer_barriers[:])
+    dependencies.bufferMemoryBarrierCount = u32(len(buffer_barriers))
+  }
+
+  if len(images) > 0
+  {
+    // Ehh, kind of sucks to do this..., but not doing atlasing at all so...
+    for &item in soa_zip(image=images[:], region=image_regions[:])
+    {
+      vk.CmdCopyBufferToImage(vk_curr_cmd(), vk_src_buffer, item.image, .TRANSFER_DST_OPTIMAL, 1, &item.region)
+    }
+
+    dependencies.pImageMemoryBarriers    = raw_data(image_read_barriers[:])
+    dependencies.imageMemoryBarrierCount = u32(len(image_read_barriers))
+  }
+
+  if len(images) > 0 || len(buffer_regions) > 0
+  {
     vk.CmdPipelineBarrier2(vk_curr_cmd(), &dependencies)
   }
 }
@@ -1001,6 +1177,8 @@ vk_begin_render_frame :: proc() -> (ok: bool)
     }
     vk_assert(vk.BeginCommandBuffer(frame.buffer, &buffer_info),
               "Unable to begin vulkan command buffer recording.")
+
+    vk.CmdBindDescriptorSets(frame.buffer, .GRAPHICS, vks.pipeline_layout, 0, 1, &vks.descriptor_set, 0, nil)
   }
 
   return ok
@@ -1090,11 +1268,6 @@ vk_flush_render_frame :: proc(to_display: Texture)
   vks.curr_index[.FRAME] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
 }
 
-vk_upload_texture_data :: proc(staging: GPU_Buffer, texture: Texture, data: rawptr)
-{
-  // internal := vk_get_image(texture.internal)
-}
-
 curr_frame_idx :: proc() -> (idx: u32)
 {
   return vks.curr_index[.FRAME]
@@ -1103,18 +1276,25 @@ curr_frame_idx :: proc() -> (idx: u32)
 vk_bind_pipeline :: proc(pipeline: Pipeline)
 {
   // UGLY!
-  vk.CmdBindPipeline(vk_curr_cmd(), .GRAPHICS, vk_get_pipeline(pipeline.internal).pipeline)
+  vk.CmdBindPipeline(vk_curr_cmd(), .GRAPHICS, vk_get_pipeline(pipeline.internal))
 }
 
-vk_draw_vertices :: proc(pipeline: Pipeline, first_vertex, vertex_count: u32, push: $Push_Type)
+vk_draw_vertices :: proc(first_vertex, vertex_count: u32, push: $Push_Type)
   where size_of(push) <= 128
 {
   push := push
   // UGLY!
-  assert(pipeline.push == Push_Type, "Push constats passed to draw do not match push constants pipeline was created with.")
-  vk.CmdPushConstants(vk_curr_cmd(), vk_get_pipeline(pipeline.internal).layout,
+  vk.CmdPushConstants(vk_curr_cmd(), vks.pipeline_layout,
                       {.VERTEX, .FRAGMENT, .COMPUTE}, 0, size_of(push), &push)
   vk.CmdDraw(vk_curr_cmd(), vertex_count, 1, first_vertex, 0)
+}
+
+vk_draw_indirect :: proc(pipeline: Pipeline, commands: GPU_Buffer, uniforms: GPU_Buffer, count: u32)
+{
+  // assert()
+  // // NOTE: Hardcoded that we know the buffer comes from this arena.
+  //
+  // vk.CmdDrawIndexedIndirect(vk_curr_cmd(), vks.arenas[.HOST].buffer, , count, size_of(Draw_Command))
 }
 
 // NOTE: Hardcoded for color, mostly just for blitting from a texture to a swap image
@@ -1211,9 +1391,7 @@ vk_format_table: [Pixel_Format]vk.Format =
 {
   .NONE             = .UNDEFINED,
   .R8               = .R8_UNORM,
-  .RGB8             = .R8G8B8_UNORM,
-  .RGBA8            = .R8G8B8A8_SRGB,
-  .SRGB8            = .R8G8B8A8_SRGB,
+  .RGBA8            = .R8G8B8A8_UNORM,
   .SRGBA8           = .R8G8B8A8_SRGB,
   .RGBA16F          = .R16G16B16A16_SFLOAT,
   .DEPTH32          = .D32_SFLOAT,
@@ -1240,7 +1418,7 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
         {
           case .NONE:
             panic("Idiot.")
-          case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
+          case .R8, .RGBA8, .SRGBA8, .RGBA16F:
             layout = .COLOR_ATTACHMENT_OPTIMAL
           case .DEPTH24_STENCIL8:
             layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
@@ -1314,6 +1492,8 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
     layerCount           = 1,
     colorAttachmentCount = u32(len(color_attachment_infos)),
     pColorAttachments    = raw_data(color_attachment_infos[:]),
+    pDepthAttachment     = have_depth_attachment ? &depth_attachment_info : nil,
+    pStencilAttachment   = have_depth_stencil_attachment ? &depth_stencil_attachment_info : nil,
   }
 
   vk.CmdBeginRendering(vk_curr_cmd(), &rendering_info)
@@ -1352,9 +1532,8 @@ vk_end_render_pass :: proc()
 
 // NOTE: Always pushed to device memory
 vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pixel_Format, sampler: Sampler_Preset,
-                         width, height, samples, array_count, mip_count: u32) -> (handle: Renderer_Internal)
+                         width, height, samples, array_count, mip_count: u32) -> (handle: Renderer_Internal, index: u32)
 {
-
   vk_samples: vk.SampleCountFlags
   switch samples
   {
@@ -1400,6 +1579,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
     samples     = vk_samples,
     tiling      = .OPTIMAL, // Currently not ever reading back textures sooo.
     usage       = vk_usage,
+    flags       = flags,
   }
 
   image: Vulkan_Image
@@ -1409,10 +1589,9 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
 
   vk_view_type_table: [Texture_Type]vk.ImageViewType =
   {
-    .NONE = .D1, // Shouldn't happen
-    .D2   = .D2,
-    .CUBE = .CUBE,
-    .CUBE_ARRAY = .CUBE,
+    .D2         = .D2,
+    .CUBE       = .CUBE,
+    .CUBE_ARRAY = .CUBE_ARRAY,
   }
 
   components: vk.ComponentMapping = {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY} if format != .R8 else {.R, .R, .R, .R }
@@ -1432,7 +1611,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
   switch format
   {
     case .NONE: assert(false)
-    case .R8, .RGB8, .RGBA8, .SRGB8, .SRGBA8, .RGBA16F:
+    case .R8, .RGBA8, .SRGBA8, .RGBA16F:
       aspects += {.COLOR}
     case .DEPTH24_STENCIL8:
       aspects += {.STENCIL}
@@ -1454,7 +1633,33 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
   vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &image.view),
             "Unable to create vulkan image view.")
 
-  return vk_push_internal(image)
+  // FIXME: Grace!
+  assert(vks.descriptor_counts[type] + 1 < MAX_TEXTURES[type], "No more vulkan texture descriptors available.")
+
+  index = vks.descriptor_counts[type]
+  vks.descriptor_counts[type] += 1
+
+  descriptor_info: vk.DescriptorImageInfo =
+  {
+    imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+    imageView   = image.view,
+    sampler     = vks.samplers[sampler],// TODO
+  }
+
+  // Bindless... put into big descriptor set
+  descriptor_write: vk.WriteDescriptorSet =
+  {
+    sType = .WRITE_DESCRIPTOR_SET,
+    dstSet = vks.descriptor_set,
+    dstBinding = TEXTURE_BINDING[type],
+    descriptorCount = 1,
+    descriptorType = .COMBINED_IMAGE_SAMPLER,
+    pImageInfo = &descriptor_info,
+    dstArrayElement = index,
+  }
+  vk.UpdateDescriptorSets(vks.logical, 1, &descriptor_write, 0, nil)
+
+  return vk_push_internal(image), index
 }
 
 vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr: rawptr)
@@ -1601,24 +1806,13 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
     stencilAttachmentFormat = vk_stencil_format,
   }
 
-  pipeline: Vulkan_Pipeline
+  pipeline: vk.Pipeline
 
   push_range: vk.PushConstantRange =
   {
     size = u32(push_size),
     stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
   }
-
-  // FIXME!
-  layout_info: vk.PipelineLayoutCreateInfo =
-  {
-    sType                  = .PIPELINE_LAYOUT_CREATE_INFO,
-    pPushConstantRanges    = &push_range,
-    pushConstantRangeCount = 1,
-  }
-
-  vk_assert(vk.CreatePipelineLayout(vks.logical, &layout_info, nil, &pipeline.layout),
-            "Unable to create vulkan pipeline layout.")
 
   pipeline_info: vk.GraphicsPipelineCreateInfo =
   {
@@ -1634,10 +1828,10 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
     pRasterizationState = &rasterize,
     pVertexInputState   = &vertex,
     pViewportState      = &viewport,
-    layout              = pipeline.layout,
+    layout              = vks.pipeline_layout,
   }
 
-  vk_assert(vk.CreateGraphicsPipelines(vks.logical, {}, 1, &pipeline_info, nil, &pipeline.pipeline),
+  vk_assert(vk.CreateGraphicsPipelines(vks.logical, {}, 1, &pipeline_info, nil, &pipeline),
             "Unable to create vulkan pipeline layout.")
 
   return vk_push_internal(pipeline)
@@ -1761,6 +1955,11 @@ free_vulkan :: proc()
 {
   vk.DeviceWaitIdle(vks.logical)
 
+  for sampler in vks.samplers
+  {
+    vk.DestroySampler(vks.logical, sampler, nil)
+  }
+
   for internal in vks.internals
   {
     switch i in internal
@@ -1768,21 +1967,24 @@ free_vulkan :: proc()
       case Vulkan_Image:
         vk.DestroyImage(vks.logical, i.image, nil)
         vk.DestroyImageView(vks.logical, i.view, nil)
-      case Vulkan_Pipeline:
-        vk.DestroyPipeline(vks.logical, i.pipeline, nil)
-        vk.DestroyPipelineLayout(vks.logical, i.layout, nil)
+      case vk.Pipeline:
+        vk.DestroyPipeline(vks.logical, i, nil)
     }
   }
+
+  vk.DestroyPipelineLayout(vks.logical, vks.pipeline_layout, nil)
+  vk.DestroyDescriptorPool(vks.logical, vks.descriptor_pool, nil)
+  vk.DestroyDescriptorSetLayout(vks.logical, vks.descriptor_layout, nil)
 
   for arena, kind in vks.arenas
   {
     extra_used := arena.memory_offset - arena.buffer_size
     extra_max  := arena.memory_size - arena.buffer_size
 
-    extra_percent  := f64(extra_used) / f64(extra_max)
-    buffer_percent := f64(arena.buffer_offset) / f64(arena.buffer_size)
+    extra_percent  := f64(extra_used) / f64(extra_max) * 100
+    buffer_percent := f64(arena.buffer_offset) / f64(arena.buffer_size) * 100
 
-    log.infof("Arena %v:\n buffer used: %v/%v(%f)\n extra used: %v/%v(%f)",
+    log.infof("Arena %v:\n buffer used: %v/%v(%f%%)\n extra used: %v/%v(%f%%)",
               kind, arena.buffer_offset, arena.buffer_size, buffer_percent, extra_used, extra_max, extra_percent)
     vk.FreeMemory(vks.logical, arena.memory, nil)
     vk.DestroyBuffer(vks.logical, arena.buffer, nil)

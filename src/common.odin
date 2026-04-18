@@ -95,8 +95,19 @@ mat4_translate :: glsl.mat4Translate
 mat4_rotate    :: glsl.mat4Rotate
 mat4_scale     :: glsl.mat4Scale
 
-mat4_perspective  :: glsl.mat4Perspective
-// For vulkan clip space
+// For vulkan clip space.
+mat4_perspective  :: proc(fovy, aspect, near, far: f32) -> (m: mat4)
+{
+	tan_half_fovy := tan(0.5 * fovy)
+	m[0, 0] = 1 / (aspect * tan_half_fovy)
+	m[1, 1] = -1 / (tan_half_fovy)
+	m[2, 2] = -far / (far - near)
+	m[3, 2] = -1
+	m[2, 3] = -far * near / (far - near)
+
+	return m
+}
+
 mat4_orthographic :: proc(left, right, bottom, top, near, far: f32) -> (m: mat4)
 {
 	m[0, 0] = +2 / (right - left)

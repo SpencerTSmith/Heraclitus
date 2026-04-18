@@ -1,5 +1,7 @@
 #version 460 core
 
+#include "generated.glsl"
+
 layout(location=0) in VS_OUT
 {
   vec2 uv;
@@ -8,8 +10,10 @@ layout(location=0) in VS_OUT
 
 layout(location = 0) out vec4 frag_color;
 
+#push_constant
+
 void main()
 {
-  frag_color = fs_in.color;
-  // frag_color = texture(tex, fs_in.uv) * fs_in.color;
+  // frag_color = fs_in.color;
+  frag_color = texture(textures_2D[nonuniformEXT(push.texture_index)], fs_in.uv) * fs_in.color;
 }

@@ -1,7 +1,7 @@
 package main
 
-import "base:intrinsics"
 import "core:mem"
+import "core:log"
 
 // NOTE: CPU mapped is just for writing, the memory is host coherent, not host cached.
 GPU_Buffer_Flag :: enum
@@ -16,6 +16,7 @@ GPU_Buffer_Flag :: enum
 GPU_Buffer_Flags :: bit_set[GPU_Buffer_Flag]
 
 // TODO: It would be cool if these could also be polymorphic and castable as a pointer to an actual type...
+// just some way to encode a type
 GPU_Buffer :: struct
 {
   flags: GPU_Buffer_Flags,
@@ -50,6 +51,8 @@ make_gpu_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buff
 // created through this api to be linear in memory.
 make_ring_gpu_buffers :: proc(size: int, flags: GPU_Buffer_Flags, $N: uint) -> (buffers: [N]GPU_Buffer)
 {
+  if .CPU_MAPPED not_in flags { log.warnf("Did you mean to create GPU ring buffers without asking for cpu mapped memory?") }
+
   // Simple since allocation is just bump on backend.
   for &buffer in buffers
   {
@@ -57,90 +60,4 @@ make_ring_gpu_buffers :: proc(size: int, flags: GPU_Buffer_Flags, $N: uint) -> (
   }
 
   return buffers
-}
-
-write_gpu_buffer :: proc(buffer: GPU_Buffer, offset, size: uint, data: rawptr)
-{
-  // if data != nil
-  // {
-  //   if gpu_buffer_is_mapped(buffer)
-  //   {
-  //     ptr := uintptr(buffer.cpu_base) + uintptr(offset)
-  //     mem.copy(rawptr(ptr), data, size)
-  //   }
-  //   else
-  //   {
-  //     // gl.NamedBufferSubData(buffer.id, offset, size, data)
-  //   }
-  // }
-}
-
-bind_gpu_buffer_base :: proc(buffer: GPU_Buffer, binding: UBO_Bind)
-{
-  // gl_target: u32 = gl.UNIFORM_BUFFER if .UNIFORM_DATA in buffer.flags else gl.SHADER_STORAGE_BUFFER
-
-  // gl.BindBufferBase(gl_target, u32(binding), buffer.id)
-}
-
-bind_gpu_buffer_range :: proc(buffer: GPU_Buffer, binding: UBO_Bind, offset, size: int)
-{
-  // gl_target: u32 = gl.UNIFORM_BUFFER if .UNIFORM_DATA in buffer.flags else gl.SHADER_STORAGE_BUFFER
-
-  // gl.BindBufferRange(gl_target, u32(binding), buffer.id, offset, size)
-}
-
-// Helper fast paths for triple buffered frame dependent buffers
-// gpu_buffer_frame_offset :: proc(buffer: GPU_Buffer, frame_index: int = state.curr_frame_index) -> int
-// {
-//   assert(frame_index < FRAMES_IN_FLIGHT && frame_index >= 0)
-//   // frame_offset := buffer.range_size * frame_index
-//
-//   return frame_offset
-// }
-
-// bind_gpu_buffer_frame_range :: proc(buffer: GPU_Buffer, binding: UBO_Bind, frame_index: int = state.curr_frame_index)
-// {
-//   frame_offset := gpu_buffer_frame_offset(buffer, frame_index)
-//
-//   bind_gpu_buffer_range(buffer, binding, frame_offset, buffer.range_size)
-// }
-
-// write_gpu_buffer_frame :: proc(buffer: GPU_Buffer, offset, size: int, data: rawptr, frame_index: int = state.curr_frame_index)
-// {
-//   assert(size <= buffer.range_size)
-//
-//   frame_offset := gpu_buffer_frame_offset(buffer, frame_index)
-//
-//   write_gpu_buffer(buffer, frame_offset + offset, size, data)
-// }
-
-// gpu_buffer_frame_base_ptr :: proc(buffer: GPU_Buffer, frame_index: int = state.curr_frame_index) -> rawptr
-// {
-//   frame_offset := gpu_buffer_frame_offset(buffer, frame_index)
-//
-//   address := uintptr(buffer.cpu_base) + uintptr(frame_offset)
-//
-//   return rawptr(address)
-// }
-
-// Just a helper for taking in a vertex type and returning the right sized buffer.
-make_vertex_buffer :: proc($vertex_type: typeid, vertex_count: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
-{
-  size := vertex_count * size_of(vertex_type)
-
-  buffer.flags |= {.VERTEX_DATA} // I am idiot, so just in case I forgot to pass this.
-  buffer = make_gpu_buffer(size, flags = flags)
-
-  return buffer
-}
-
-make_index_buffer :: proc($index_type: typeid, index_count: int, flags: GPU_Buffer_Flags) -> (buffer: GPU_Buffer)
-  where intrinsics.type_is_integer(index_type)
-{
-  size := index_count * size_of(index_type)
-
-  buffer.flags |= {.INDEX_DATA} // I am idiot, so just in case I forgot to pass this.
-  buffer = make_gpu_buffer(size, flags = flags)
-
-  return buffer
 }

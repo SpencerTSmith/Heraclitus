@@ -293,11 +293,6 @@ camera_perspective :: proc(camera: Camera, aspect_ratio: f32) -> (perspective: m
   return mat4_perspective(radians(camera.curr_fov_y), aspect_ratio, camera.z_near, camera.z_far)
 }
 
-camera_orthographic :: proc(camera: Camera, width, height: int) -> (orthographic: mat4)
-{
-  return mat4_orthographic(0, f32(width), f32(height), 0, camera.z_near, camera.z_far)
-}
-
 get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3)
 {
   forward = camera_forward(camera)

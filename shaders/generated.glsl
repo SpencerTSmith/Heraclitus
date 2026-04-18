@@ -1,14 +1,18 @@
-// NOTE: This code was generated on 17-04-2026 (06:33:37 pm)
+// NOTE: This code was generated on 18-04-2026 (07:39:41 am)
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_scalar_block_layout : require
 #extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_EXT_nonuniform_qualifier : require
 struct Immediate_Vertex {
   vec3 position;
   vec2 uv;
   vec4 color;
 };
 
+layout(set = 0, binding = 0) uniform sampler2D   textures_2D[];
+layout(set = 0, binding = 1) uniform samplerCube textures_cube[];
+layout(set = 0, binding = 2) uniform samplerCubeArray   textures_cube_array[];
 layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {
   Immediate_Vertex immediate_vertices[];
 };

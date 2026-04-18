@@ -236,7 +236,7 @@ move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
     input_direction -= camera_forward
   }
 
-  // Y, vertical
+  // Y, vertical, but in world space not camera up
   if key_down(.SPACE)
   {
     input_direction += WORLD_UP

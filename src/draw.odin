@@ -1,185 +1,5 @@
 package main
 
-import "core:log"
-
-MAX_IMMEDIATE_VERTEX_COUNT :: 4096 * 32
-
-Immediate_Vertex :: struct
-{
-  position: vec3,
-  uv:       vec2,
-  color:    vec4,
-}
-
-// NOTE: When an immediate_* function takes in a vec2 for position it means its in screen coords
-// When taking in a vec3 for position its in world space
-
-Immediate_Space :: enum
-{
-  SCREEN,
-  WORLD,
-}
-
-// TODO: Collapse all this back into the renderer
-
-// NOTE: This is not integrated with the general asset system and deals with actual textures and such...
-// TODO: Finish up render pass system and integrate with batching system...
-// batches would probably include a renderpass, the immediate space, and the primitive
-Immediate_State :: struct
-{
-  vertex_buffers: [FRAMES_IN_FLIGHT]GPU_Buffer,
-  vertex_count:   u32, // ALL vertices for current frame
-
-  pipeline: Pipeline,
-
-  white_texture: Texture_Handle,
-
-  batches: [dynamic; 256]Immediate_Batch,
-}
-
-// Just a view into the main vertex buffer
-// TODO: Maybe each batch should store vertices itself so that we can check if there is a batch
-// that matches state but is not the current batch?
-Immediate_Batch :: struct
-{
-  vertex_base:  u32, // First vertex in batch
-  vertex_count: u32, // How many vertices in batch
-
-  primitive: Vertex_Primitive,
-  texture:   Texture_Handle,
-  space:     Immediate_Space,
-  depth:     Depth_Test_Mode,
-}
-
-Immediate_Push :: struct
-{
-  transform: mat4,
-  vertices:  rawptr,
-}
-
-// Internal state
-@(private="file")
-immediate: Immediate_State
-
-init_immediate_renderer :: proc()
-{
-  // Just passing a mesh index even though this system doesn't use indexed rendering.
-  for &buffer in immediate.vertex_buffers
-  {
-    buffer = make_vertex_buffer(Immediate_Vertex, MAX_IMMEDIATE_VERTEX_COUNT, {.CPU_MAPPED, .VERTEX_DATA})
-  }
-
-  ok: bool
-  immediate.pipeline, ok = make_pipeline("immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
-  assert(ok)
-
-  // immediate.white_texture = load_texture("white.png", nonlinear_color=true)
-  append(&immediate.batches, Immediate_Batch{})
-}
-
-immediate_frame_reset :: proc()
-{
-  immediate.vertex_count = 0
-  clear(&immediate.batches)
-  append(&immediate.batches, Immediate_Batch{})
-}
-
-// Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Vertex_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
-{
-  current := immediate.batches[len(immediate.batches) - 1]
-  if current.primitive != wish_primitive ||
-     current.space     != wish_space     ||
-     current.texture   != wish_texture   ||
-     current.depth     != wish_depth
-  {
-    appended := append(&immediate.batches, Immediate_Batch {
-      vertex_base = immediate.vertex_count,
-      primitive   = wish_primitive,
-      texture     = wish_texture,
-      space       = wish_space,
-      depth       = wish_depth,
-    })
-
-    if appended == 0
-    {
-      log.errorf("Too many immediate draw batches.")
-    }
-  }
-}
-
-// NOTE: Does not check batch info. Trusts the caller to make sure that all batch info is right
-immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0.0})
-{
-  if immediate.vertex_count + 1 < MAX_IMMEDIATE_VERTEX_COUNT
-  {
-    // TODO: It is probably inefficient to write invidual vertices directly into the host coherent buffer
-    // Could easily buffer these up.
-    vertex_ptr := cast([^]Immediate_Vertex)immediate.vertex_buffers[curr_frame_idx()].cpu_base
-
-    current := &immediate.batches[len(immediate.batches) - 1]
-
-    // Write into the current batch.
-    offset := current.vertex_base + current.vertex_count
-
-    // To the gpu buffer!
-    vertex_ptr[offset] =
-    {
-      position = position,
-      uv       = uv,
-      color    = color,
-    }
-
-    immediate.vertex_count += 1
-
-    // And remember to add to the current batches count.
-    current.vertex_count += 1
-  }
-  else
-  {
-    log.errorf("Too many immediate vertices.", immediate.vertex_count)
-  }
-}
-
-// NOTE: Can control if flushing world space immediates, screen space immediates, or both
-// This is used to draw any world space immediates in the main pass, allowing them to recive MSAA and to sample
-// the main scene's depth buffer if they wish
-// TODO: Maybe consider just having two different immediate systems, one for things that should be flushed in the main pass
-// And others that ought to be flushed in the overlay/ui pass
-immediate_flush :: proc(flush_world := false, flush_screen := false)
-{
-  if immediate.vertex_count > 0
-  {
-    bind_pipeline(immediate.pipeline)
-
-    // Screenspace
-    orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, -1, 1)
-
-    // Worldspace
-    perspective  := camera_perspective(state.camera, window_aspect_ratio(state.window)) * camera_view(state.camera)
-
-    for batch in immediate.batches
-    {
-      if batch.vertex_count > 0
-      {
-        transform: mat4
-        switch batch.space
-        {
-        case .SCREEN:
-          if !flush_screen { continue } // We shouldn't flush screen immediates
-          transform = orthographic
-        case .WORLD:
-          if !flush_world { continue } // We shouldn't flush world immediates
-          transform = perspective
-        }
-
-        push := Immediate_Push{transform = transform, vertices = immediate.vertex_buffers[curr_frame_idx()].gpu_base}
-        vk_draw_vertices(immediate.pipeline, batch.vertex_base, batch.vertex_count, push)
-      }
-    }
-  }
-}
-
 draw_quad :: proc {
   draw_quad_screen,
   draw_quad_world,
@@ -187,7 +7,7 @@ draw_quad :: proc {
 
 draw_quad_screen :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE,
                          top_left_uv: vec2 = {0.0, 1.0}, bottom_right_uv: vec2 = {1.0, 0.0},
-                         texture: Texture_Handle = immediate.white_texture)
+                         texture: Texture_Handle = WHITE_TEXTURE)
 {
   immediate_begin(.TRIANGLES, texture, .SCREEN, .ALWAYS)
 
@@ -227,7 +47,7 @@ draw_quad_screen :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE
 
 draw_quad_world :: proc(center, normal: vec3, w, h: f32, color := WHITE,
                         uv0: vec2 = {0.0, 1.0}, uv1: vec2 = {1.0, 0.0},
-                        texture: Texture_Handle = immediate.white_texture, depth_test: Depth_Test_Mode = .LESS)
+                        texture: Texture_Handle = WHITE_TEXTURE, depth_test: Depth_Test_Mode = .LESS)
 {
   immediate_begin(.TRIANGLES, texture, .WORLD, depth_test)
 
@@ -281,7 +101,7 @@ draw_line :: proc
 // NOTE: A 2d line so takes in screen coordinates!
 draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE)
 {
-  immediate_begin(.LINES, immediate.white_texture, .SCREEN, .ALWAYS)
+  immediate_begin(.LINES, WHITE_TEXTURE, .SCREEN, .ALWAYS)
 
   immediate_vertex({xy0.x, xy0.y, 0}, color=rgba)
   immediate_vertex({xy1.x, xy1.y, 0}, color=rgba)
@@ -291,7 +111,7 @@ draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE)
 draw_line_world :: proc(xyz0, xyz1: vec3, color := WHITE,
                         depth_test: Depth_Test_Mode = .LESS)
 {
-  immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
+  immediate_begin(.LINES, WHITE_TEXTURE, .WORLD, depth_test)
 
   immediate_vertex(xyz0, color=color)
   immediate_vertex(xyz1, color=color)
@@ -302,7 +122,7 @@ draw_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
 {
   corners := box_corners(xyz_min, xyz_max)
 
-  immediate_begin(.TRIANGLES, immediate.white_texture, .WORLD, depth_test)
+  immediate_begin(.TRIANGLES, WHITE_TEXTURE, .WORLD, depth_test)
 
   immediate_vertex(corners[0], color)
   immediate_vertex(corners[1], color)
@@ -356,7 +176,7 @@ draw_fill_box :: proc(xyz_min, xyz_max: vec3, color := WHITE,
 draw_box :: proc(corners: [8]vec3, color := WHITE,
                  depth_test: Depth_Test_Mode = .LESS)
 {
-  immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
+  immediate_begin(.LINES, WHITE_TEXTURE, .WORLD, depth_test)
 
   // Back
   draw_line(corners[0], corners[1], color)
@@ -382,7 +202,7 @@ draw_box :: proc(corners: [8]vec3, color := WHITE,
 draw_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
                      depth_test: Depth_Test_Mode = .LESS)
 {
-  immediate_begin(.TRIANGLES, immediate.white_texture, .WORLD, depth_test)
+  immediate_begin(.TRIANGLES, WHITE_TEXTURE, .WORLD, depth_test)
 
   // Triangle sides
   immediate_vertex(tip, color)
@@ -416,7 +236,7 @@ draw_sphere :: proc(center: vec3, radius: f32, color := WHITE,
                     longitude_rings := 16,
                     depth_test: Depth_Test_Mode = .LESS)
 {
-  immediate_begin(.LINES, immediate.white_texture, .WORLD, depth_test)
+  immediate_begin(.LINES, WHITE_TEXTURE, .WORLD, depth_test)
 
   point :: proc(theta, phi, radius: f32, center: vec3) -> vec3
   {

@@ -105,13 +105,19 @@ make_render_target :: proc(width, height: u32, attachments: []Attachment_Descrip
 {
   assert(len(attachments) < cap(target.attachments), "Too many attachments specified for render target creation.")
 
+
   for attachment in attachments
   {
-    texture: Texture
+    format:  Pixel_Format
+    type:    Texture_Type
+    sampler: Sampler_Preset
+
     switch attachment
     {
       case .COLOR:
-        texture = alloc_texture(.D2, {.TARGET}, .RGBA16F, .CLAMP_LINEAR, u32(state.window.w), u32(state.window.h))
+        format  = .RGBA16F
+        type    = .D2
+        sampler = .CLAMP_LINEAR
       case .HDR_COLOR:
         unimplemented()
       case .DEPTH:
@@ -123,8 +129,11 @@ make_render_target :: proc(width, height: u32, attachments: []Attachment_Descrip
       case .DEPTH_CUBE_ARRAY:
         unimplemented()
     }
+
+    texture := alloc_texture(type, {.TARGET}, format, sampler, u32(state.window.w), u32(state.window.h))
     append(&target.attachments, texture)
   }
+
 
   return target
 }
