@@ -1047,7 +1047,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
   image_copy_barriers: [dynamic; N]vk.ImageMemoryBarrier2
   image_read_barriers: [dynamic; N]vk.ImageMemoryBarrier2
 
-  for upload in state.renderer.upload_queue
+  for upload in uploads
   {
     switch dst in upload.dst
     {
