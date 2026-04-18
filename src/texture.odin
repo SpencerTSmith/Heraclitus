@@ -285,6 +285,8 @@ make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false)
 
     texture = make_texture_from_data(.D2, format, .REPEAT_TRILINEAR, {data}, w, h)
     ok = true
+
+    print("%v, index:%v", file_name, texture.index)
   }
   else
   {

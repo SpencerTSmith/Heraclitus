@@ -211,6 +211,7 @@ upload_texture :: proc(data: []byte, dst: Texture)
     src_buffer = state.renderer.staging_buffer[curr_frame_idx()],
     src_offset = state.renderer.staging_offset,
     dst        = dst,
+    size       = len(data),
   }
 
   // Copy to staging.

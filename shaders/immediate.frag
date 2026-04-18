@@ -16,4 +16,5 @@ void main()
 {
   // frag_color = fs_in.color;
   frag_color = texture(textures_2D[nonuniformEXT(push.texture_index)], fs_in.uv) * fs_in.color;
+  // frag_color = vec4(fs_in.uv, 0, 1);
 }
