@@ -5,14 +5,6 @@ import "core:time"
 import "core:log"
 import "base:runtime"
 
-import "vendor:glfw"
-
-Color_Push :: struct
-{
-  color:    vec4,
-  vertices: rawptr,
-}
-
 // TODO: Probably split game specific things from rendering specific things
 State :: struct {
   main_context :runtime.Context,
@@ -229,14 +221,16 @@ main :: proc()
       {
         defer end_render_pass()
 
-        immediate_begin(.TRIANGLES, {}, .SCREEN, .DISABLED)
-        {
-          defer immediate_flush(true, true)
+        // for e in all_entities()
+        // {
+        //   draw_entity(e)
+        // }
+        // mega_draw()
 
-          draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
-          draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
-          draw_debug_stats()
-        }
+        draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
+        draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
+        draw_debug_stats()
+        immediate_flush(true, true)
       }
     }
 
@@ -250,8 +244,8 @@ free_state :: proc()
 
   free_vulkan()
 
-  glfw.DestroyWindow(state.window.handle)
-  // glfw.Terminate() // Causing crashes?
+  free_window(&state.window)
+
   log.infof("Arena Size at closedown: %v", state.perm.peak_used)
   delete(state.perm_mem)
 }

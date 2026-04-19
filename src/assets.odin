@@ -153,46 +153,18 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
   return handle, ok
 }
 
-// Sometimes want to add a texture without going through load texture path.
+// Sometimes want to add a texture without going through load texture path... i.e. loading fonts
 register_texture :: proc(texture: ^Texture) -> (handle: Texture_Handle)
 {
-  make_texture_bindless(texture)
   handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
   append(&assets.texture_catalog.assets, texture^)
 
   return handle
 }
 
-get_texture :: proc
-{
-  get_texture_by_handle,
-  get_texture_by_name,
-}
-
-get_texture_by_handle :: proc(handle: Texture_Handle) -> ^Texture
+get_texture :: proc(handle: Texture_Handle) -> ^Texture
 {
   return &assets.texture_catalog.assets[handle]
-}
-
-// NOTE: I know this is slow, but its helpful for testing things quickly
-get_texture_by_name :: proc(name: string) -> (texture: ^Texture)
-{
-  path := join_file_path({TEXTURE_DIR, name}, context.temp_allocator) // Temp for checking, if we really need to load it... permanent alloc in load_texture
-
-  // Already loaded
-  if path in assets.texture_catalog.path_map
-  {
-    texture = get_texture(assets.texture_catalog.path_map[path])
-  }
-  else
-  {
-    log.infof("Loading Texture %v", name)
-    // Load it if not already
-    handle := load_texture(name)
-    texture = get_texture(handle)
-  }
-
-  return texture
 }
 
 load_skybox :: proc(file_paths: [6]string) -> (handle: Texture_Handle, ok: bool)

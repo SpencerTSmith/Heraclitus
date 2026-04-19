@@ -17,8 +17,8 @@ Texture_Type :: enum u32
 @(rodata)
 MAX_TEXTURES: [Texture_Type]u32 =
 {
-  .D2 = 512,
-  .CUBE = 4,
+  .D2         = 512,
+  .CUBE       = 4, // Skyboxes
   .CUBE_ARRAY = 1, // Just for point light shadow maps.
 }
 
@@ -39,7 +39,7 @@ Texture_Usage_Flags :: bit_set[Texture_Usage_Flag]
 Sampler_Preset :: enum u32
 {
   REPEAT_NEAREST,
-  REPEAT_TRILINEAR,
+  REPEAT_TRILINEAR, // Max anisotropy, too.
   CLAMP_LINEAR,
   CLAMP_WHITE,
 }
@@ -62,8 +62,8 @@ Texture :: struct
   type:        Texture_Type,
   width:       u32,
   height:      u32,
-  samples:     u32, // Only for multisampled textures, 0 if not
-  array_count: u32, // Only for array textures, 0 if not
+  samples:     u32, // Only for multisampled textures, 1 if not
+  array_count: u32, // Only for array textures, 1 if not
   mip_count:   u32,
   format:      Pixel_Format,
   sampler:     Sampler_Preset,
@@ -88,12 +88,6 @@ Pixel_Format :: enum u32
   DEPTH32,
 }
 
-make_samplers :: proc() -> (samplers: [Sampler_Preset]u32)
-{
-
-  return samplers
-}
-
 make_texture :: proc
 {
   make_texture_from_data,
@@ -112,29 +106,6 @@ free_texture :: proc(texture: ^Texture)
 {
   // TODO: Not needed at this stage, since just using arena for everything.
   texture^ = {}
-}
-
-bind_texture :: proc
-{
-  bind_texture_to_slot,
-  bind_texture_to_name,
-  bind_texture_by_asset,
-}
-
-bind_texture_to_slot :: proc(slot: u32, texture: Texture)
-{
-
-}
-
-bind_texture_to_name :: proc(name: string, texture: Texture)
-{
-
-}
-
-bind_texture_by_asset :: proc(name: string, handle: Texture_Handle)
-{
-  texture := get_texture(handle)^
-  bind_texture_to_name(name, texture)
 }
 
 alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pixel_Format, sampler: Sampler_Preset,
@@ -170,10 +141,6 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
   // TODO: Cube map upload
 
   return texture
-}
-
-make_texture_bindless :: proc(texture: ^Texture)
-{
 }
 
 format_for_channels :: proc(channels: u32, nonlinear_color: bool = false) -> Pixel_Format

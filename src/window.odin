@@ -7,10 +7,6 @@ import "core:math"
 
 import "vendor:glfw"
 
-GL_MAJOR :: 4
-GL_MINOR :: 6
-glUniformHandleui64ARB: proc "c" (location: i32, value: u64)
-
 Window :: struct
 {
   handle: glfw.WindowHandle,
@@ -39,7 +35,6 @@ make_window :: proc(window_width:  int,
   if glfw.Init() == glfw.TRUE
   {
     glfw.WindowHint(glfw.RESIZABLE, glfw.FALSE)
-
     glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API)
 
     c_title := strings.clone_to_cstring(window_title, context.temp_allocator)
@@ -90,4 +85,11 @@ make_window :: proc(window_width:  int,
   }
 
   return window, ok
+}
+
+free_window :: proc(window: ^Window)
+{
+  glfw.DestroyWindow(window.handle)
+  glfw.Terminate() // Causing crashes?
+  window^ = {}
 }

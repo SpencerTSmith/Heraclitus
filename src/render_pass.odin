@@ -105,7 +105,6 @@ make_render_target :: proc(width, height: u32, attachments: []Attachment_Descrip
 {
   assert(len(attachments) < cap(target.attachments), "Too many attachments specified for render target creation.")
 
-
   for attachment in attachments
   {
     format:  Pixel_Format
@@ -173,7 +172,6 @@ draw_skybox :: proc(handle: Texture_Handle)
 
   texture := get_texture(handle)^
   assert(texture.type == .CUBE)
-  bind_texture("skybox", get_texture(handle)^)
 
   gl.DrawArrays(gl.TRIANGLES, 0, 36)
 }

@@ -2,8 +2,6 @@ package main
 
 import "core:log"
 
-// TODO: Handles
-
 Entity_Flags :: enum
 {
   UNUSED,

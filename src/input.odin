@@ -188,7 +188,7 @@ poll_input_state :: proc(window: Window, dt_s: f64)
   {
     for glfw_code in 0..=glfw.MOUSE_BUTTON_LAST
     {
-      button := glfw_mouse_to_internal(glfw_code)
+      button := GLFW_MOUSE_MAP[glfw_code]
 
       if button != .NONE
       {
@@ -213,7 +213,7 @@ poll_input_state :: proc(window: Window, dt_s: f64)
   // elements than necessary probably
   for glfw_key in 0..=glfw.KEY_LAST
   {
-    key := glfw_key_to_internal(glfw_key)
+    key := GLFW_KEY_MAP[glfw_key]
 
     if key != .NONE
     {
@@ -355,8 +355,8 @@ mouse_position_delta :: proc() -> (delta: vec2)
 // NOTE: Do not look behind this curtain, ugly ugly ugly,
 // Mostly just want to not have a bunch of glfw related code everywhere
 // So translation table
-@(private="file")
-glfw_key_map: [glfw.KEY_LAST + 1]Key =
+@(rodata,private="file")
+GLFW_KEY_MAP: [glfw.KEY_LAST + 1]Key =
 {
   glfw.KEY_SPACE         = .SPACE,
   glfw.KEY_APOSTROPHE    = .APOSTROPHE,
@@ -452,14 +452,8 @@ glfw_key_map: [glfw.KEY_LAST + 1]Key =
   glfw.KEY_RIGHT_SUPER   = .RIGHT_SUPER,
 }
 
-@(private="file")
-glfw_key_to_internal :: proc(glfw_code: int) -> Key
-{
-  return glfw_key_map[glfw_code]
-}
-
-@(private="file")
-glfw_mouse_map: [glfw.MOUSE_BUTTON_LAST + 1]Mouse_Button =
+@(rodata,private="file")
+GLFW_MOUSE_MAP: [glfw.MOUSE_BUTTON_LAST + 1]Mouse_Button =
 {
   glfw.MOUSE_BUTTON_LEFT   = .LEFT,
   glfw.MOUSE_BUTTON_RIGHT  = .RIGHT,
@@ -469,10 +463,4 @@ glfw_mouse_map: [glfw.MOUSE_BUTTON_LAST + 1]Mouse_Button =
   glfw.MOUSE_BUTTON_6      = .M6,
   glfw.MOUSE_BUTTON_7      = .M7,
   glfw.MOUSE_BUTTON_8      = .M8,
-}
-
-@(private="file")
-glfw_mouse_to_internal :: proc(glfw_code: int) -> Mouse_Button
-{
-  return glfw_mouse_map[glfw_code]
 }

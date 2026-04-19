@@ -307,7 +307,7 @@ generate_glsl :: proc()
   // fmt.sbprintf(&b, "};\n\n")
 
   fmt.sbprintf(&b, "layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {{\n")
-  fmt.sbprintf(&b, "  Immediate_Vertex immediate_vertices[];\n")
+  fmt.sbprintf(&b, "  Immediate_Vertex v[];\n")
   fmt.sbprintf(&b, "};\n\n")
 
   // TODO: Can probably generate these instead of hard coding, might not be worth the effort...

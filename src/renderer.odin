@@ -55,7 +55,7 @@ Renderer :: struct
 
   draw_commands: [FRAMES_IN_FLIGHT]GPU_Buffer(Draw_Command),
   draw_uniforms: [FRAMES_IN_FLIGHT]GPU_Buffer(Draw_Uniform),
-  draw_head:     int, // Start of current portion
+  draw_head:     int, // Start of batch
   draw_count:    int, // Total
 
   // Immediate/dynamic vertex data
@@ -63,7 +63,7 @@ Renderer :: struct
   {
     vertex_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer(Immediate_Vertex),
     vertex_count:  int, // TOTAL for the current frame
-    batches: [dynamic; 256]Immediate_Batch,
+    batches:       [dynamic; 256]Immediate_Batch,
   },
 
   frame_began: bool,
@@ -110,9 +110,16 @@ Immediate_Batch :: struct
 
 Immediate_Push :: struct
 {
-  transform:     mat4,
+  transform: mat4,
+  vertices:  rawptr,
+  texture:   u32,
+}
+
+Mega_Push :: struct
+{
+  frame_uniform: rawptr,
+  draw_uniforms: rawptr,
   vertices:      rawptr,
-  texture_index: u32,
 }
 
 init_renderer :: proc() -> (ok: bool)
@@ -137,7 +144,7 @@ init_renderer :: proc() -> (ok: bool)
 
   state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
   assert(ok)
-  // state.renderer.pipelines[.PHONG], ok = make_pipeline("simple.vert", "phong.frag", )
+  // state.renderer.pipelines[.PHONG], ok = make_pipeline("simple.vert", "phong.frag", Mega_Push, .RGBA16F)
 
   state.renderer.bloom_on = true
   state.renderer.draw_debug = true
@@ -278,11 +285,6 @@ push_draw :: proc(command: Draw_Command, uniform: Draw_Uniform)
     // Draw Command
     {
       command := command
-
-      // NOTE: Using this to index into the total buffer. As we have to do multiple
-      // multidraws per frame due to shadow mapping,
-      // gl_DrawID no longer works perfectly to index
-      command.base_instance = cast(u32)state.renderer.draw_count
       command.first_index += cast(u32)state.renderer.index_count
 
       state.renderer.draw_commands[curr_frame_idx()].cpu_base[state.renderer.draw_count] = command
@@ -303,14 +305,17 @@ push_draw :: proc(command: Draw_Command, uniform: Draw_Uniform)
 
 mega_draw :: proc()
 {
-  // Since we can't bind the base we do a frame offset here
-  // frame_offset := gpu_buffer_frame_offset(state.renderer.draw_commands)
-  // batch_offset := cast(uintptr)(frame_offset + state.renderer.draw_head * size_of(Draw_Command))
+  bind_pipeline_key(.PHONG)
 
-  batch_count := cast(i32) (state.renderer.draw_count - state.renderer.draw_head)
+  push: Mega_Push =
+  {
+    frame_uniform = state.renderer.uniform_buffer[curr_frame_idx()].gpu_base,
+    draw_uniforms = &state.renderer.draw_uniforms[curr_frame_idx()].gpu_base[state.renderer.draw_head],
+    vertices      = state.renderer.vertex_buffer.gpu_base,
+  }
 
-  // gl.MultiDrawElementsIndirect(gl.TRIANGLES, gl.UNSIGNED_INT,
-  //   cast([^]gl.DrawElementsIndirectCommand)batch_offset, batch_count, 0)
+  batch_count := u32(state.renderer.draw_count - state.renderer.draw_head)
+  vk_draw_indirect(state.renderer.index_buffer, state.renderer.draw_commands[curr_frame_idx()], u32(state.renderer.draw_head), batch_count, push)
 
   state.renderer.draw_head = state.renderer.draw_count // Move head pointer up
 }
@@ -402,9 +407,9 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
 
         push: Immediate_Push =
         {
-          transform     = transform,
-          vertices      = state.renderer.immediate.vertex_buffer[curr_frame_idx()].gpu_base,
-          texture_index = get_texture(batch.texture).index,
+          transform = transform,
+          vertices  = state.renderer.immediate.vertex_buffer[curr_frame_idx()].gpu_base,
+          texture   = get_texture(batch.texture).index,
         }
         vk_draw_vertices(batch.vertex_base, batch.vertex_count, push)
       }

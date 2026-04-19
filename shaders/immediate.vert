@@ -2,7 +2,7 @@
 
 #include "generated.glsl"
 
-layout(location=0) out VS_OUT
+layout(location = 0) out VS_OUT
 {
   vec2 uv;
   vec4 color;
@@ -12,9 +12,7 @@ layout(location=0) out VS_OUT
 
 void main()
 {
-  Immediate_Vertices vertices = Immediate_Vertices(push.vertices);
-
-  Immediate_Vertex vertex = vertices.immediate_vertices[gl_VertexIndex];
+  Immediate_Vertex vertex = Immediate_Vertices(push.vertices).v[gl_VertexIndex];
 
   vec3 vert_position = vertex.position;
   vec2 vert_uv       = vertex.uv;

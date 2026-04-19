@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 18-04-2026 (11:00:05 pm)
+// NOTE: This code was generated on 19-04-2026 (09:44:39 pm)
 
 #extension GL_EXT_buffer_reference : require
 #extension GL_EXT_scalar_block_layout : require
@@ -14,7 +14,7 @@ layout(set = 0, binding = 0) uniform sampler2D   textures_2D[];
 layout(set = 0, binding = 1) uniform samplerCube textures_cube[];
 layout(set = 0, binding = 2) uniform samplerCubeArray   textures_cube_array[];
 layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {
-  Immediate_Vertex immediate_vertices[];
+  Immediate_Vertex v[];
 };
 
 

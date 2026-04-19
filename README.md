@@ -5,8 +5,6 @@ odin run src -keep-executable -out:heraclitus -debug -extra-linker-flags:"-lshad
 ```
 
 # To Do:
-- Separate samplers and textures
-- Big rewrite to replace gl backend with vulkan
 - More sophisticated UI Layout system
     - Will probably need to do caching and multiple passes
     - Probably builder code should only add widgets to list, build the tree links, and perhaps do input
@@ -20,11 +18,8 @@ odin run src -keep-executable -out:heraclitus -debug -extra-linker-flags:"-lshad
 - Potential ideas that could possibly be worth it:
     - Sort of just normalizing vectors everywhere, almost certainly redundantly... profile and find out if this is significant enough to fix
     - Cache calculated world AABB's, have dirty flag if world transform has changed and need to recalculate
-    - Clean up multidraw uniform extraction, helper for grabbing model etc so that can refactor into another level of indexing (a per object instead of per draw) rather than storing model matrix directly in the draw call uniform.
+    - Clean up mega_draw uniform extraction, helper for grabbing model etc so that can refactor into another level of indexing (a per object instead of per draw) rather than storing model matrix directly in the per draw uniform.
     - Thread pool loading of assets
-        - Need to have a fence before we begin drawing to actually upload gpu data, as that can only be done from the thread with the gl context
-            - But there is still work that can be done in parallel that actually takes a bit of time, namely computing tangents for models that don't have them
-            - Could also look into mapped staging buffers... need pbo for textures, but vertex geometry should be very simple... write into the mapped buffer from threads and issue the copy to gpu memory from main thread at the beginning of frame...
 
 # Complete:
 - Frustum culling
@@ -36,18 +31,21 @@ odin run src -keep-executable -out:heraclitus -debug -extra-linker-flags:"-lshad
     - Generates GLSL code that needs to match up with odin code (uniform struct definitions, buffer binding locations, etc) so less tedious and only need to edit one spot
 - AABB basic collision detection and response
 - Quake-style player-movement
-- AZDO OpenGL techniques:
-    - Multi-draw indirect
-    - Frames in flight sync, tripled-up persistently mapped buffers
-    - Bindless textures for model materials
-        - Still doing traditional binding api for less commonly bound textures like shadow maps, skybox, etc
+- Fully bindless rendering architecture
+    - 2 memory arenas currently, one which is full device local, and another which is device local, host visible, host coherent
+        - 1 single vulkan buffer api object for each
+        - All actual 'GPU_Buffer' structs are bump allocated out of these single buffers
+        - Buffer device address
+    - Indirect Drawing
+    - Frames in flight, tripled-up persistently mapped buffers
+    - Single descriptor array for each sampler type required
     - ALL mesh data in one big buffer
     - Vertex pulling
-- Immediate vertex rendering system, will batch calls and only submit them once we have synced the frame
+- Immediate vertex rendering system, will batch groups
     - AABB, sphere, and vector debug visuals
     - Text rendering
 - Point light shadow mapping
-    - Cube map array render target... pretty efficient storage, and can minimize draw calls with instanced rendering (6 instances, one for each map side)
+    - Cube map array render target... pretty efficient storage, instanced rendering (6 instances, one for each map side)
     - Culls entities if not intersecting light radius sphere
     - Configurable, can have cheaper non shadow casting point lights
         - These are stored together on CPU in the same array (just a bool to distinguish) but are uploaded separately to GPU... Little less branchy in shader.

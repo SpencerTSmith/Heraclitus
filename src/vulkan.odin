@@ -812,6 +812,9 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       vks.samplers[.REPEAT_TRILINEAR] = create_sampler(.LINEAR, .LINEAR, .LINEAR, .REPEAT, anisitropy=props.limits.maxSamplerAnisotropy)
       vks.samplers[.CLAMP_LINEAR]     = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_EDGE)
       vks.samplers[.CLAMP_WHITE]      = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_BORDER, border=.FLOAT_OPAQUE_WHITE)
+
+      // Push one invalid internal so that index/handle 0 maps to an invalid internal
+      vk_push_internal({})
     }
     else
     {
@@ -1036,6 +1039,14 @@ vk_get_pipeline :: proc(internal: Renderer_Internal) -> (pipeline: vk.Pipeline)
   return vk_get_render_internal(internal).(vk.Pipeline)
 }
 
+// NOTE: For figuring out how far a buffer was allocated from the base of the backing vulkan arena buffer.
+@(private="file")
+vk_gpu_buffer_offset :: proc(buffer: $B/GPU_Buffer, arena: Vulkan_Arena) -> (offset: vk.DeviceSize)
+{
+  offset = vk.DeviceSize(uintptr(buffer.gpu_base)) - vk.DeviceSize(arena.gpu_base)
+  return offset
+}
+
 vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
 {
   // TODO: Could probably collapse some of these since use linear allocations....
@@ -1063,8 +1074,8 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
       case GPU_Buffer(byte):
         region: vk.BufferCopy =
         {
-          srcOffset = vk.DeviceSize(uintptr(upload.src_buffer.gpu_base)) - vk.DeviceSize(vks.arenas[.HOST].gpu_base) + vk.DeviceSize(upload.src_offset),
-          dstOffset = vk.DeviceSize(uintptr(dst.gpu_base)) - vk.DeviceSize(vks.arenas[.DEVICE].gpu_base) + vk.DeviceSize(upload.dst_offset),
+          srcOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.HOST]) + vk.DeviceSize(upload.src_offset),
+          dstOffset = vk_gpu_buffer_offset(dst, vks.arenas[.DEVICE]) + vk.DeviceSize(upload.dst_offset),
           size      = vk.DeviceSize(upload.size),
         }
         // NOTE: Hardcoded to be barrier at vertex stage
@@ -1084,7 +1095,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
       case Texture:
         region: vk.BufferImageCopy =
         {
-          bufferOffset = vk.DeviceSize(uintptr(upload.src_buffer.gpu_base)) - vk.DeviceSize(vks.arenas[.HOST].gpu_base) + vk.DeviceSize(upload.src_offset),
+          bufferOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.HOST]) + vk.DeviceSize(upload.src_offset),
           imageExtent  = {width=dst.width,height=dst.height,depth=1}, // NOTE: Hardcoded 2D images only!!
           imageOffset  = {0,0,0}, // NOTE: Hardcoded... no atlasing for now, i suppose.
           imageSubresource =
@@ -1392,12 +1403,36 @@ vk_draw_vertices :: proc(first_vertex, vertex_count: u32, push: $Push_Type)
   vk.CmdDraw(vk_curr_cmd(), vertex_count, 1, first_vertex, 0)
 }
 
-vk_draw_indirect :: proc(pipeline: Pipeline, commands: GPU_Buffer(Draw_Command), uniforms: GPU_Buffer(Draw_Uniform), count: u32)
+@(private="file")
+vk_index_type :: proc($index_type: typeid) -> (vk_type: vk.IndexType)
 {
-  // assert()
-  // // NOTE: Hardcoded that we know the buffer comes from this arena.
-  //
-  // vk.CmdDrawIndexedIndirect(vk_curr_cmd(), vks.arenas[.HOST].buffer, , count, size_of(Draw_Command))
+  switch size_of(index_type)
+  {
+    case 1:
+      vk_type = .UINT8
+    case 2:
+      vk_type = .UINT16
+    case 4:
+      vk_type = .UINT32
+    case:
+      panic("Index type size invalid.")
+  }
+
+  return vk_type
+}
+
+vk_draw_indirect :: proc(indices: GPU_Buffer($Index_Type), commands: GPU_Buffer(Draw_Command), draw_offset, draw_count: u32, push: $Push_Type)
+{
+  assert(.CPU_MAPPED in commands.flags)
+
+  vk.CmdBindIndexBuffer(vk_curr_cmd(), vks.arenas[.DEVICE].buffer, vk_gpu_buffer_offset(indices, vks.arenas[.DEVICE]), vk_index_type(Index_Type))
+
+  push := push
+  vk.CmdPushConstants(vk_curr_cmd(), vks.pipeline_layout,
+                      {.VERTEX, .FRAGMENT, .COMPUTE}, 0, size_of(push), &push)
+
+  byte_offset := vk_gpu_buffer_offset(commands, vks.arenas[.HOST]) + vk.DeviceSize(draw_offset * size_of(Draw_Command))
+  vk.CmdDrawIndexedIndirect(vk_curr_cmd(), vks.arenas[.HOST].buffer, byte_offset, draw_count, size_of(Draw_Command))
 }
 
 @(private="file")

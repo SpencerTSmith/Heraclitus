@@ -63,7 +63,7 @@ F32_MAX :: max(f32)
 U64_MAX :: max(u64)
 
 // Purely for convenience because I am lazy and don't want to go to top of file to import a module to do a little print debugging
-print :: fmt.printfln
+print :: fmt.println
 
 // Hmm, good idea? Just hate having to import and prepend for such common operations
 vec2 :: glsl.vec2

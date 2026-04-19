@@ -20,8 +20,8 @@ GPU_Buffer :: struct($Type: typeid)
 {
   flags: GPU_Buffer_Flags,
 
-  cpu_base: [^]Type,
-  gpu_base: rawptr,
+  cpu_base: [^]Type, // Not always filled.
+  gpu_base: [^]Type, // NOTE: NOT for dereferencing, just for using the compiler to do pointer math somtimes.
 
   count: int,
 }
@@ -30,7 +30,7 @@ make_gpu_buffer :: proc($Type: typeid, count: int, flags: GPU_Buffer_Flags) -> (
 {
   gpu_ptr, cpu_ptr := vk_alloc_buffer(size_of(Type) * count, flags)
 
-  buffer.gpu_base = gpu_ptr
+  buffer.gpu_base = cast([^]Type)gpu_ptr
   buffer.cpu_base = cast([^]Type)cpu_ptr
   buffer.flags    = flags
   buffer.count    = count
@@ -59,7 +59,7 @@ gpu_buffer_as_bytes :: proc(buffer: GPU_Buffer($Type)) -> (byte_buffer: GPU_Buff
   byte_buffer =
   {
     cpu_base = cast([^]byte)buffer.cpu_base,
-    gpu_base = buffer.gpu_base,
+    gpu_base = cast([^]byte)buffer.gpu_base,
     count    = size_of(Type) * buffer.count,
     flags    = buffer.flags,
   }
