@@ -112,7 +112,7 @@ Immediate_Push :: struct
 {
   transform: mat4,
   texture:   u32,
-  vertices:  rawptr,
+  vertices:  [^]Immediate_Vertex,
 }
 
 Mega_Push :: struct
@@ -125,7 +125,7 @@ Mega_Push :: struct
 init_renderer :: proc() -> (ok: bool)
 {
   init_vulkan(state.window)
-  generate_glsl()
+  generate_slang()
 
   state.renderer.vertex_buffer   = make_gpu_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
   state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_VERTICES, {.INDEX_DATA, .DEVICE_LOCAL})
@@ -144,7 +144,6 @@ init_renderer :: proc() -> (ok: bool)
 
   state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", Immediate_Push, .RGBA16F)
   assert(ok)
-  // state.renderer.pipelines[.PHONG], ok = make_pipeline("simple.vert", "phong.frag", Mega_Push, .RGBA16F)
 
   state.renderer.bloom_on = true
   state.renderer.draw_debug = true

@@ -1,5 +1,7 @@
 package slang
 
+// NOTE: This is a very minimal binding, just enough to compile a shader
+
 when ODIN_OS == .Windows
 {
   foreign import lib "src/slang/lib/slang.lib"
@@ -15,6 +17,13 @@ Result    :: distinct i32
 ProfileID :: distinct i32
 
 result_failed :: #force_inline proc(r: Result) -> bool { return r < 0 }
+
+MatrixLayoutMode :: enum u32
+{
+	UNKNOWN,
+	ROW_MAJOR,
+	COLUMN_MAJOR,
+}
 
 CompileTarget :: enum i32
 {
@@ -299,7 +308,7 @@ SessionDesc :: struct {
   targets:                  [^]TargetDesc,
   targetCount:              int,
   flags:                    i32,
-  defaultMatrixLayoutMode:  u32,
+  defaultMatrixLayoutMode:  MatrixLayoutMode,
   searchPaths:              [^]cstring,
   searchPathCount:          int,
   preprocessorMacros:       rawptr,

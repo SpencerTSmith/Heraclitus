@@ -162,92 +162,93 @@ GLSL_Layout :: enum
 
 Nil_Push :: struct {}
 
-@(private="file")
-to_glsl_basic_type_string :: proc(type: typeid, allow_vec: bool) -> string
+@(rodata,private="file")
+SLANG_TYPE_TABLE: []struct{type: typeid, slang: string} =
 {
-  s: string
-  switch type {
-  case f32:
-    s = "float"
-  case mat4:
-    s = "mat4"
-  case vec2:
-    if allow_vec { s = "vec2" }
-  case vec3:
-    if allow_vec { s = "vec3" }
-  case vec4:
-    if allow_vec { s = "vec4" }
-  case u32:
-    s = "uint"
-  case i32:
-    s = "int"
-  case rawptr:
-    s = "uint64_t"
-  }
-
-  return s
+  {i32,  "int"},
+  {u32,  "uint"},
+  {u64,  "uint64_t"},
+  {f32,  "float"},
+  {vec2, "float2"},
+  {vec3, "float3"},
+  {vec4, "float4"},
+  {mat4, "float4x4"},
 }
 
 @(private="file")
-to_glsl_struct :: proc(b: ^strings.Builder, t: typeid, prefix: string = "struct", suffix: string = "", allow_vec: bool = true)
+slang_primitive :: proc(type: typeid) -> (name: string)
+{
+  for item in SLANG_TYPE_TABLE
+  {
+    if type == item.type
+    {
+      name = item.slang
+    }
+  }
+
+  return name
+}
+
+@(private="file")
+to_slang_struct :: proc(b: ^strings.Builder, t: typeid)
 {
   assert(reflect.is_struct(type_info_of(t)))
 
-  fmt.sbprintf(b, "%v %v {{\n", prefix, t)
+  fmt.sbprintf(b, "struct %v\n{{\n", t)
   for field in reflect.struct_fields_zipped(t)
   {
-    if reflect.is_struct(field.type)
+    is_array   := reflect.is_array(field.type)
+    is_pointer := reflect.is_multi_pointer(field.type)
+
+    primitive := slang_primitive(field.type.id)
+
+    if primitive != ""
     {
-      // TODO: Assert that we have already generated the code for this struct, if not we need to go do that before we generate this struct
-      // GLSL does not allow out of order declaration
-      fmt.sbprintf(b, "  %v %v;\n", field.type.id, field.name)
+      fmt.sbprintf(b, "  %v ", primitive)
+    }
+    else if is_array
+    {
+      array_info := field.type.variant.(reflect.Type_Info_Array)
+
+      array_primitive := slang_primitive(array_info.elem.id)
+      if array_primitive != ""
+      {
+        fmt.sbprintf(b, "  %v ", array_primitive)
+      }
+      else
+      {
+        fmt.sbprintf(b, "  %v ", array_info.elem.id)
+      }
+    }
+    else if is_pointer
+    {
+      fmt.sbprintf(b, "  %v ", field.type.variant.(reflect.Type_Info_Multi_Pointer).elem.id)
     }
     else
     {
-      basic := to_glsl_basic_type_string(field.type.id, allow_vec)
-
-      // Wasn't one of the above basic types
-      if basic == ""
-      {
-        info := reflect.type_info_base(type_info_of(field.type.id))
-
-        // Is it an array?
-        if reflect.is_array(info)
-        {
-          array_info := info.variant.(reflect.Type_Info_Array)
-
-          // Is it possibly an array of basic types?
-          array_type := to_glsl_basic_type_string(array_info.elem.id, allow_vec)
-
-          if array_type == ""
-          {
-            // NOTE: Its an array of structures probably, but an assumption
-            assert(reflect.is_struct(array_info.elem), "Unkown array type enountered for GLSL Code Generation")
-
-            fmt.sbprintf(b, "  %v %v[%v];\n", array_info.elem.id, field.name, array_info.count)
-          }
-          else
-          {
-            // Its an array of basic types
-            fmt.sbprintf(b, "  %v %v[%v];\n", array_type, field.name, array_info.count)
-          }
-        }
-        else
-        {
-          log.errorf("Uh oh, don't know how to handle this type for GLSL Code Generation: %v", field)
-        }
-      }
-      else
-      { // Was just a basic type
-        fmt.sbprintf(b, "  %v %v;\n", basic, field.name)
-      }
+      fmt.sbprintf(b, "  %v ", field.type.id)
     }
+
+    if is_pointer
+    {
+      fmt.sbprintf(b, "*")
+    }
+
+    fmt.sbprintf(b, "%v", field.name)
+
+    if is_array && primitive == ""
+    {
+      array_info := field.type.variant.(reflect.Type_Info_Array)
+
+      fmt.sbprintf(b, "[%v]", array_info.count)
+    }
+
+    fmt.sbprintf(b, ";\n")
   }
-  fmt.sbprintf(b, "}%v;\n\n", suffix)
+  fmt.sbprintf(b, "}\n\n")
 }
 
-
-generate_glsl :: proc()
+generate_slang :: proc()
 {
   b := strings.builder_make(allocator=context.temp_allocator)
 
@@ -258,108 +259,24 @@ generate_glsl :: proc()
   hours := time.to_string_hms_12(now, buf2[:])
   fmt.sbprintf(&b, "// NOTE: This code was generated on %v (%v)\n\n", date, hours)
 
-  // Gotta have em
-  fmt.sbprintf(&b, "#extension GL_EXT_buffer_reference : require\n")
-  fmt.sbprintf(&b, "#extension GL_EXT_scalar_block_layout : require\n")
-  fmt.sbprintf(&b, "#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require\n")
-  fmt.sbprintf(&b, "#extension GL_EXT_nonuniform_qualifier : require\n")
-
-  //
-  // Parse and append uniform structs
-  //
-
   // TODO: There's gotta be some way to 'tag' structs as ones that need to match up with the generated GLSL code
   // That way, don't need to remember to add it here and can instead
-  // to_glsl_struct(&b, Direction_Light_Uniform)
-  // to_glsl_struct(&b, Spot_Light_Uniform)
-  // to_glsl_struct(&b, Shadow_Point_Light_Uniform)
-  // to_glsl_struct(&b, Point_Light_Uniform)
-  // to_glsl_struct(&b, Material_Uniform)
-  // to_glsl_struct(&b, Draw_Uniform)
-  // to_glsl_struct(&b, Frame_Uniform)
-  // to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
-  to_glsl_struct(&b, Immediate_Vertex, allow_vec = true)
+  to_slang_struct(&b, Direction_Light_Uniform)
+  to_slang_struct(&b, Spot_Light_Uniform)
+  to_slang_struct(&b, Shadow_Point_Light_Uniform)
+  to_slang_struct(&b, Point_Light_Uniform)
+  to_slang_struct(&b, Material_Uniform)
+  to_slang_struct(&b, Draw_Uniform)
+  to_slang_struct(&b, Frame_Uniform)
+  to_slang_struct(&b, Mesh_Vertex)
+  to_slang_struct(&b, Immediate_Vertex)
+  to_slang_struct(&b, Immediate_Push)
 
-  fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform sampler2D   textures_2D[];\n", TEXTURE_BINDING[.D2])
-  fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform samplerCube textures_cube[];\n", TEXTURE_BINDING[.CUBE])
-  fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform samplerCubeArray   textures_cube_array[];\n", TEXTURE_BINDING[.CUBE_ARRAY])
+  fmt.sbprintfln(&b, "Sampler2D textures_2D[];")
+  fmt.sbprintfln(&b, "SamplerCube textures_cube[];")
+  fmt.sbprintfln(&b, "SamplerCubeArray textures_cube_array[];")
 
-  // FIXME: Automate somehow.
-  // fmt.sbprintln(&b)
-  // fmt.sbprintf(&b, "layout(buffer_reference, std140) uniform Frame_Uniform_UBO {{\n",)
-  // fmt.sbprintf(&b, "  Frame_Uniform frame;\n")
-  // fmt.sbprintf(&b, "};\n\n")
-
-  // fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Materials {{\n",
-  //              bind_names[.MATERIALS])
-  // fmt.sbprintf(&b, "  Material_Uniform materials[];\n")
-  // fmt.sbprintf(&b, "};\n\n")
-
-  // fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Draw_Uniforms {{\n",)
-  // fmt.sbprintf(&b, "  Draw_Uniform draw_uniforms[];\n")
-  // fmt.sbprintf(&b, "};\n\n")
-  //
-  // fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Mesh_Vertices {{\n")
-  // fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
-  // fmt.sbprintf(&b, "};\n\n")
-
-  fmt.sbprintf(&b, "layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {{\n")
-  fmt.sbprintf(&b, "  Immediate_Vertex v[];\n")
-  fmt.sbprintf(&b, "};\n\n")
-
-  // TODO: Can probably generate these instead of hard coding, might not be worth the effort...
-  append_always := `
-// vec3 mesh_vertex_position(int index)
-// {
-//   return vec3(mesh_vertices[index].position[0],
-//               mesh_vertices[index].position[1],
-//               mesh_vertices[index].position[2]);
-// }
-// vec2 mesh_vertex_uv(int index)
-// {
-//   return vec2(mesh_vertices[index].uv[0],
-//               mesh_vertices[index].uv[1]);
-// }
-// vec3 mesh_vertex_normal(int index)
-// {
-//   return vec3(mesh_vertices[index].normal[0],
-//               mesh_vertices[index].normal[1],
-//               mesh_vertices[index].normal[2]);
-// }
-// vec4 mesh_vertex_tangent(int index)
-// {
-//   return vec4(mesh_vertices[index].tangent[0],
-//               mesh_vertices[index].tangent[1],
-//               mesh_vertices[index].tangent[2],
-//               mesh_vertices[index].tangent[3]);
-// }
-
-// vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
-// {
-//   return vec3(vertices[index].position[0],
-//               vertices[index].position[1],
-//               vertices[index].position[2]);
-// }
-// vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
-// {
-//   return vec2(vertices[index].uv[0],
-//               vertices[index].uv[1]);
-// }
-// vec4 immediate_vertex_color(Immediate_Vertex vertex)
-// {
-//   return vec4(vertices[index].color[0],
-//               vertices[index].color[1],
-//               vertices[index].color[2],
-//               vertices[index].color[3]);
-// }
-
-`
-
-  fmt.sbprint(&b, append_always)
-
-  err: os.Error
-  err = os.write_entire_file(SHADER_DIR + "generated.glsl", transmute([]u8) strings.to_string(b))
-  if err != nil
+  if os.write_entire_file(SHADER_DIR + "generated.slang", transmute([]u8) strings.to_string(b)) != nil
   {
     log.errorf("Failed to write meta shader.")
   }
@@ -520,38 +437,13 @@ global_session: ^slang.IGlobalSession
 
 // NOTE: Injects push constant if passed
 @(private="file")
-compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, put_push, ok: bool)
+compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
 {
   source, err := os.read_entire_file(file_name, context.temp_allocator)
-
-  has_push := push != Nil_Push
 
   if err == nil
   {
     ok = true
-
-    // Resolve all #includes and #push_constants
-    lines := strings.split_lines(string(source), context.temp_allocator)
-
-    processed_builder := strings.builder_make_none(context.temp_allocator)
-    for line in lines
-    {
-      trim := strings.trim_space(line)
-
-      if trim == "#push_constant" && has_push
-      {
-        assert(size_of(push) <= 128, "Push Constants may only be a maximum of 128 bytes.")
-        to_glsl_struct(&processed_builder, push, "layout(push_constant) uniform", "push")
-        put_push = true
-      }
-      else
-      {
-        strings.write_string(&processed_builder, line)
-        strings.write_string(&processed_builder, "\n")
-      }
-    }
-
-    processed := strings.to_string(processed_builder)
 
     if global_session == nil
     {
@@ -584,8 +476,8 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
       searchPathCount          = len(search_paths),
       compilerOptionEntries    = raw_data(compiler_options),
       compilerOptionEntryCount = u32(len(compiler_options)),
+      defaultMatrixLayoutMode  = .COLUMN_MAJOR,
     }
-
 
     session: ^slang.ISession
     global_session->createSession(&session_desc, &session)
@@ -596,7 +488,7 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
     defer { if diagnostic != nil { diagnostic->release() }}
 
     c_name := strings.clone_to_cstring(file_name, context.temp_allocator)
-    c_code := strings.clone_to_cstring(processed, context.temp_allocator)
+    c_code := strings.clone_to_cstring(string(source), context.temp_allocator)
 
     module := session->loadModuleFromSourceString(c_name, c_name, c_code, &diagnostic)
 
@@ -641,7 +533,6 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
 
       // So don't have to deal with slang release bullshit.
       code = slice.clone(slice.bytes_from_ptr(spv_blob->getBufferPointer(), int(spv_blob->getBufferSize())), context.temp_allocator)
-      ok = true
     }
     else
     {
@@ -659,7 +550,7 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
     ok = false
   }
 
-  return code, put_push, ok
+  return code, ok
 }
 
 // NOTE: For now will not do recursive includes, but maybe won't be necessary
@@ -672,7 +563,7 @@ make_pipeline :: proc(name: string, $push: typeid, color_format: Pixel_Format, d
 
   if strings.ends_with(path, ".slang")
   {
-    code, put_push, ok = compile_shader_file(path, push)
+    code, ok = compile_shader_file(path)
   }
   else if strings.ends_with(path, ".spv")
   {
@@ -683,13 +574,6 @@ make_pipeline :: proc(name: string, $push: typeid, color_format: Pixel_Format, d
   else
   {
     log.errorf("Don't know how to handle this shader file type.", path)
-  }
-
-  has_push := push != Nil_Push
-  if has_push && !put_push
-  {
-    log.errorf("Shaders: %v,%v, Push constants type passed but no #push_constants.", path)
-    // This might be recoverable so just proceed
   }
 
   if ok
