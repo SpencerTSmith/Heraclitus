@@ -36,6 +36,9 @@ Pipeline :: struct
 {
   internal: Renderer_Internal,
 
+  color_format: Pixel_Format,
+  depth_format: Pixel_Format,
+
   // NOTE: Does not store the full path, just the name
   file_name:   string,
   modify_time: time.Time,
@@ -554,7 +557,7 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
 }
 
 // NOTE: For now will not do recursive includes, but maybe won't be necessary
-make_pipeline :: proc(name: string, $push: typeid, color_format: Pixel_Format, depth_format: Pixel_Format = .NONE) -> (pipeline: Pipeline, ok: bool)
+make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pixel_Format = .NONE) -> (pipeline: Pipeline, ok: bool)
 {
   path := join_file_path({SHADER_DIR, name}, context.temp_allocator)
 
@@ -578,54 +581,55 @@ make_pipeline :: proc(name: string, $push: typeid, color_format: Pixel_Format, d
 
   if ok
   {
-    pipeline.internal = vk_make_pipeline(code, color_format, depth_format, size_of(push))
+    pipeline.internal = vk_make_pipeline(code, color_format, depth_format)
+
+    pipeline.color_format = color_format
+    pipeline.depth_format = depth_format
 
     pipeline.file_name = name
     pipeline.modify_time, _ = os.modification_time_by_path(path)
-
-    pipeline.push = push
   }
 
   return pipeline, ok
 }
 
-hot_reload_shaders :: proc(shaders: ^[Pipeline_Key]Pipeline, allocator: runtime.Allocator)
+hot_reload_shaders :: proc(shaders: ^[Pipeline_Key]Pipeline)
 {
   // TODO: Maybe keep track of includes... any programs that include get recompiled
-  // for &s, tag in shaders
-  // {
-  //   needs_reload := false
-  //   for &p in s.files
-  //   {
-  //     path := join_file_path({SHADER_DIR, p.name}, context.temp_allocator)
-  //     new_modify_time, err := os.modification_time_by_path(path)
-  //     if err != nil
-  //     {
-  //       log.errorf("Could not collect modify time for shader file: %v... error: %v", p.name, err)
-  //       continue
-  //     }
-  //
-  //     if time.diff(new_modify_time, p.modify_time) != 0
-  //     {
-  //       needs_reload = true
-  //     }
-  //   }
-  //
-  //   if needs_reload
-  //   {
-  //     // hot, ok := make_pipeline(allocator, s.files[.VERTEX].name, s.files[.FRAGMENT].name)
-  //     // if ok
-  //     // {
-  //     //   free_pipeline(&s)
-  //     //   s = hot
-  //     //   log.debugf("Hot reloaded shader %v", tag)
-  //     // }
-  //     // else
-  //     // {
-  //     //   log.errorf("Unable to hot reload shader %v, keeping the old", tag)
-  //     // }
-  //   }
-  // }
+  for &p, tag in shaders
+  {
+    if p.file_name == "" do continue
+
+    needs_reload := false
+    path := join_file_path({SHADER_DIR, p.file_name}, context.temp_allocator)
+    new_modify_time, err := os.modification_time_by_path(path)
+
+    if err != nil
+    {
+      log.errorf("Could not collect modify time for shader file: %v... error: %v", p.file_name, err)
+      continue
+    }
+
+    if time.diff(new_modify_time, p.modify_time) != 0
+    {
+      needs_reload = true
+    }
+
+    if needs_reload
+    {
+      hot, ok := make_pipeline(p.file_name, p.color_format, p.depth_format)
+      if ok
+      {
+        free_pipeline(&p)
+        p = hot
+        log.debugf("Hot reloaded shader %v", tag)
+      }
+      else
+      {
+        log.errorf("Unable to hot reload shader %v, keeping the old", tag)
+      }
+    }
+  }
 }
 
 bind_pipeline :: proc

@@ -1801,7 +1801,7 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   return gpu_ptr, cpu_ptr
 }
 
-vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format, push_size: int) -> (internal: Renderer_Internal)
+vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format) -> (internal: Renderer_Internal)
 {
   make_shader_module :: proc(code: []byte) -> (module: vk.ShaderModule)
   {
@@ -1913,12 +1913,6 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format,
   }
 
   pipeline: vk.Pipeline
-
-  push_range: vk.PushConstantRange =
-  {
-    size = u32(push_size),
-    stageFlags = {.VERTEX, .FRAGMENT, .COMPUTE},
-  }
 
   pipeline_info: vk.GraphicsPipelineCreateInfo =
   {

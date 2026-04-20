@@ -142,7 +142,7 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", Immediate_Push, .RGBA16F)
+  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", .RGBA16F)
   assert(ok)
 
   state.renderer.bloom_on = true
@@ -156,6 +156,7 @@ begin_render_frame :: proc() -> (ok: bool)
   // TODO: Get shader hot reloading up and running
   // TODO: Bind global frame uniforms
   // TODO: Resize render targets to window size if changed
+  hot_reload_shaders(&state.renderer.pipelines)
 
   ok = vk_begin_render_frame()
 
