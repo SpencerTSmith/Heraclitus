@@ -1,7 +1,7 @@
 # Build and Run:
-Need Odin compiler and shaderc as a system library
+Need Odin compiler.
 ```bash
-odin run src -keep-executable -out:heraclitus -debug -extra-linker-flags:"-lshaderc_combined -lglslang -lglslang-default-resource-limits -lSPIRV -lSPIRV-Tools -lSPIRV-Tools-opt -lstdc++ -lm"
+odin run src -keep-executable -out:heraclitus -debug
 ```
 
 # To Do:

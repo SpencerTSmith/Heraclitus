@@ -44,7 +44,7 @@ Frame_State :: struct
 Vulkan_Arena_Kind :: enum
 {
   DEVICE,
-  HOST,
+  MAPPED,
 }
 
 #assert(size_of(vk.DeviceAddress) == size_of(rawptr))
@@ -693,7 +693,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       if !ok { log.panicf("Unable to create device local vulkan arena.") }
 
       // Entire thing gets mapped to a buffer, will never need extra raw memory.
-      vks.arenas[.HOST], ok = make_vulkan_arena(vks.logical, vks.physical,
+      vks.arenas[.MAPPED], ok = make_vulkan_arena(vks.logical, vks.physical,
                                                 256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER, .INDIRECT_BUFFER},
                                                 {.HOST_VISIBLE, .HOST_COHERENT, .DEVICE_LOCAL}, 0)
       if !ok { log.panicf("Unable to create host vulkan arena.") }
@@ -1053,7 +1053,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
   // TODO: Could probably collapse some of these since use linear allocations....
 
   // FIXME: Just assuming that this only happens from cpu -> gpu
-  vk_src_buffer := vks.arenas[.HOST].buffer
+  vk_src_buffer := vks.arenas[.MAPPED].buffer
   vk_dst_buffer := vks.arenas[.DEVICE].buffer
 
   buffer_regions:  [dynamic; N]vk.BufferCopy
@@ -1075,7 +1075,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
       case GPU_Buffer(byte):
         region: vk.BufferCopy =
         {
-          srcOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.HOST]) + vk.DeviceSize(upload.src_offset),
+          srcOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.MAPPED]) + vk.DeviceSize(upload.src_offset),
           dstOffset = vk_gpu_buffer_offset(dst, vks.arenas[.DEVICE]) + vk.DeviceSize(upload.dst_offset),
           size      = vk.DeviceSize(upload.size),
         }
@@ -1096,7 +1096,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
       case Texture:
         region: vk.BufferImageCopy =
         {
-          bufferOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.HOST]) + vk.DeviceSize(upload.src_offset),
+          bufferOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.MAPPED]) + vk.DeviceSize(upload.src_offset),
           imageExtent  = {width=dst.width,height=dst.height,depth=1}, // NOTE: Hardcoded 2D images only!!
           imageOffset  = {0,0,0}, // NOTE: Hardcoded... no atlasing for now, i suppose.
           imageSubresource =
@@ -1432,8 +1432,8 @@ vk_draw_indirect :: proc(indices: GPU_Buffer($Index_Type), commands: GPU_Buffer(
   vk.CmdPushConstants(vk_curr_cmd(), vks.pipeline_layout,
                       {.VERTEX, .FRAGMENT, .COMPUTE}, 0, size_of(push), &push)
 
-  byte_offset := vk_gpu_buffer_offset(commands, vks.arenas[.HOST]) + vk.DeviceSize(draw_offset * size_of(Draw_Command))
-  vk.CmdDrawIndexedIndirect(vk_curr_cmd(), vks.arenas[.HOST].buffer, byte_offset, draw_count, size_of(Draw_Command))
+  byte_offset := vk_gpu_buffer_offset(commands, vks.arenas[.MAPPED]) + vk.DeviceSize(draw_offset * size_of(Draw_Command))
+  vk.CmdDrawIndexedIndirect(vk_curr_cmd(), vks.arenas[.MAPPED].buffer, byte_offset, draw_count, size_of(Draw_Command))
 }
 
 @(private="file")
@@ -1790,7 +1790,7 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   if .CPU_MAPPED in flags
   {
     assert(.DEVICE_LOCAL not_in flags, "Currently no support for device local cpu mapped memory.")
-    arena = &vks.arenas[.HOST]
+    arena = &vks.arenas[.MAPPED]
   }
 
   gpu_ptr_: vk.DeviceAddress
