@@ -457,14 +457,14 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
     {
       structureSize = size_of(slang.TargetDesc),
       format        = .SPIRV,
-      profile       = global_session->findProfile("spirv_1_6"),
+      profile       = global_session->findProfile("glsl_450"),
       flags         = .GENERATE_SPIRV_DIRECTLY,
     }
 
-
     compiler_options: []slang.CompilerOptionEntry =
     {
-      { name = .VulkanUseEntryPointName, value = { intValue0 = 1 }}
+      { name = .VulkanUseEntryPointName, value = { intValue0 = 1 }},
+      { name = .VulkanUseGLLayout,       value = { intValue0 = 1 }},
     }
 
     search_path  := strings.clone_to_cstring(SHADER_DIR, context.temp_allocator)
@@ -485,7 +485,6 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
     session: ^slang.ISession
     global_session->createSession(&session_desc, &session)
     defer session->release()
-
 
     diagnostic: ^slang.IBlob
     defer { if diagnostic != nil { diagnostic->release() }}
@@ -516,21 +515,21 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
 
       if slang.result_failed(session->createCompositeComponentType(raw_data(components), len(components), &composite, &diagnostic))
       {
-        log.errorf("Error compiling shader:\n%s", string(([^]byte)(diagnostic->getBufferPointer())[:diagnostic->getBufferSize()]))
+        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
       }
       defer composite->release()
 
       linked: ^slang.IComponentType
       if slang.result_failed(composite->link(&linked, &diagnostic))
       {
-        log.errorf("Error compiling shader:\n%s", string(([^]byte)(diagnostic->getBufferPointer())[:diagnostic->getBufferSize()]))
+        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
       }
       defer linked->release()
 
       spv_blob: ^slang.IBlob
       if slang.result_failed(linked->getTargetCode(0, &spv_blob, &diagnostic))
       {
-        log.errorf("Error compiling shader:\n%s", string(([^]byte)(diagnostic->getBufferPointer())[:diagnostic->getBufferSize()]))
+        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
       }
       defer spv_blob->release()
 
@@ -539,10 +538,9 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
     }
     else
     {
-      log.errorf("Error compiling shader.")
       if diagnostic != nil
       {
-        // TODO:
+        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
       }
       ok = false
     }

@@ -561,7 +561,6 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     required_device_features11: vk.PhysicalDeviceVulkan11Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-      // shaderDrawParameters = true,
       pNext = &required_device_features12,
     }
     required_device_features: vk.PhysicalDeviceFeatures2 =
