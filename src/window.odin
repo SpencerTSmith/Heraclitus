@@ -30,7 +30,7 @@ make_window :: proc(window_width:  int,
                     window_height: int,
                     window_title:  string) -> (window: Window, ok: bool)
 {
-  // glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
+  glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
 
   if glfw.Init() == glfw.TRUE
   {

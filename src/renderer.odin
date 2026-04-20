@@ -111,8 +111,8 @@ Immediate_Batch :: struct
 Immediate_Push :: struct
 {
   transform: mat4,
-  vertices:  rawptr,
   texture:   u32,
+  vertices:  rawptr,
 }
 
 Mega_Push :: struct
@@ -142,7 +142,7 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.vert", "immediate.frag", Immediate_Push, .RGBA16F)
+  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", Immediate_Push, .RGBA16F)
   assert(ok)
   // state.renderer.pipelines[.PHONG], ok = make_pipeline("simple.vert", "phong.frag", Mega_Push, .RGBA16F)
 

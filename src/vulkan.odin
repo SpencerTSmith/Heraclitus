@@ -561,6 +561,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     required_device_features11: vk.PhysicalDeviceVulkan11Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+      shaderDrawParameters = true,
       pNext = &required_device_features12,
     }
     required_device_features: vk.PhysicalDeviceFeatures2 =
@@ -1800,7 +1801,7 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   return gpu_ptr, cpu_ptr
 }
 
-vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_format: Pixel_Format, push_size: int) -> (internal: Renderer_Internal)
+vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format, push_size: int) -> (internal: Renderer_Internal)
 {
   make_shader_module :: proc(code: []byte) -> (module: vk.ShaderModule)
   {
@@ -1817,10 +1818,8 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
     return module
   }
 
-  vert_mod := make_shader_module(vert_code)
-  defer vk.DestroyShaderModule(vks.logical, vert_mod, nil)
-  frag_mod := make_shader_module(frag_code)
-  defer vk.DestroyShaderModule(vks.logical, frag_mod, nil)
+  module := make_shader_module(code)
+  defer vk.DestroyShaderModule(vks.logical, module, nil)
 
   // // //
   // The Pain begins
@@ -1828,8 +1827,8 @@ vk_make_pipeline :: proc(vert_code, frag_code: []byte, color_format, depth_forma
 
   stages: []vk.PipelineShaderStageCreateInfo =
   {
-    { sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX}, module = vert_mod, pName = "main", },
-    { sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = frag_mod, pName = "main", }
+    { sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.VERTEX}, module = module, pName = "vert_main", },
+    { sType = .PIPELINE_SHADER_STAGE_CREATE_INFO, stage = {.FRAGMENT}, module = module, pName = "frag_main", }
   }
 
   // Do vertex pulling.

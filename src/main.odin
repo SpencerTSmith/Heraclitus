@@ -227,8 +227,9 @@ main :: proc()
         // }
         // mega_draw()
 
-        draw_quad(position, 100, 100, color=LEARN_OPENGL_ORANGE)
+        draw_quad(position, 300, 500, color=LEARN_OPENGL_ORANGE)
         draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
+        draw_quad_world({0,5,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
         draw_debug_stats()
         immediate_flush(true, true)
       }

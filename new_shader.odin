@@ -100,11 +100,11 @@ Spot_Light_Uniform :: struct #align(16)
 
 Material_Uniform :: struct
 {
-  // Handles
-  diffuse:  u64,
-  specular: u64,
-  emissive: u64,
-  normal:   u64,
+  // Indices
+  diffuse:  u32,
+  specular: u32,
+  emissive: u32,
+  normal:   u32,
 
   shininess: f32,
 }
@@ -120,6 +120,11 @@ Frame_Uniform :: struct
   z_far:           f32,
   scene_extents:   vec4,
 
+  // Texture descriptor heap indices
+  sun_shadow_index:   u32,
+  point_shadow_index: u32,
+  skybox_index:       u32,
+
   shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
   shadow_points_count: u32,
 
@@ -128,11 +133,6 @@ Frame_Uniform :: struct
 
   sun_light:    Direction_Light_Uniform,
   flash_light:  Spot_Light_Uniform,
-
-  // Texture descriptor heap indices
-  sun_shadow_index:   u32,
-  point_shadow_index: u32,
-  skybox_index:       u32,
 }
 
 Draw_Command :: struct
@@ -270,92 +270,41 @@ generate_glsl :: proc()
 
   // TODO: There's gotta be some way to 'tag' structs as ones that need to match up with the generated GLSL code
   // That way, don't need to remember to add it here and can instead
-  // to_glsl_struct(&b, Direction_Light_Uniform)
-  // to_glsl_struct(&b, Spot_Light_Uniform)
-  // to_glsl_struct(&b, Shadow_Point_Light_Uniform)
-  // to_glsl_struct(&b, Point_Light_Uniform)
-  // to_glsl_struct(&b, Material_Uniform)
-  // to_glsl_struct(&b, Draw_Uniform)
-  // to_glsl_struct(&b, Frame_Uniform)
-  // to_glsl_struct(&b, Mesh_Vertex, allow_vec4 = false)
-  to_glsl_struct(&b, Immediate_Vertex, allow_vec = true)
+  to_glsl_struct(&b, Direction_Light_Uniform)
+  to_glsl_struct(&b, Spot_Light_Uniform)
+  to_glsl_struct(&b, Shadow_Point_Light_Uniform)
+  to_glsl_struct(&b, Point_Light_Uniform)
+  to_glsl_struct(&b, Material_Uniform)
+  to_glsl_struct(&b, Draw_Uniform)
+  to_glsl_struct(&b, Frame_Uniform)
+  to_glsl_struct(&b, Mesh_Vertex)
+  to_glsl_struct(&b, Immediate_Vertex)
 
   fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform sampler2D   textures_2D[];\n", TEXTURE_BINDING[.D2])
   fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform samplerCube textures_cube[];\n", TEXTURE_BINDING[.CUBE])
   fmt.sbprintf(&b, "layout(set = 0, binding = %v) uniform samplerCubeArray   textures_cube_array[];\n", TEXTURE_BINDING[.CUBE_ARRAY])
 
-  // FIXME: Automate somehow.
-  // fmt.sbprintln(&b)
-  // fmt.sbprintf(&b, "layout(buffer_reference, std140) uniform Frame_Uniform_UBO {{\n",)
-  // fmt.sbprintf(&b, "  Frame_Uniform frame;\n")
-  // fmt.sbprintf(&b, "};\n\n")
+  // FIXME: Automate somehow. I have an idea for every time a gpu buffer is made at game start it registers a queue to be printed out here.
+  fmt.sbprintln(&b)
+  fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Frame_Uniforms {{\n",)
+  fmt.sbprintf(&b, "  Frame_Uniform v;\n")
+  fmt.sbprintf(&b, "};\n\n")
 
-  // fmt.sbprintf(&b, "layout(binding = %v, std430) readonly buffer Mesh_Materials {{\n",
-  //              bind_names[.MATERIALS])
-  // fmt.sbprintf(&b, "  Material_Uniform materials[];\n")
-  // fmt.sbprintf(&b, "};\n\n")
+  fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Mesh_Materials {{\n")
+  fmt.sbprintf(&b, "  Material_Uniform v[];\n")
+  fmt.sbprintf(&b, "};\n\n")
 
-  // fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Draw_Uniforms {{\n",)
-  // fmt.sbprintf(&b, "  Draw_Uniform draw_uniforms[];\n")
-  // fmt.sbprintf(&b, "};\n\n")
-  //
-  // fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Mesh_Vertices {{\n")
-  // fmt.sbprintf(&b, "  Mesh_Vertex mesh_vertices[];\n")
-  // fmt.sbprintf(&b, "};\n\n")
+  fmt.sbprintf(&b, "layout(buffer_reference, std430) readonly buffer Draw_Uniforms {{\n",)
+  fmt.sbprintf(&b, "  Draw_Uniform v[];\n")
+  fmt.sbprintf(&b, "};\n\n")
+
+  fmt.sbprintf(&b, "layout(buffer_reference, scalar) readonly buffer Mesh_Vertices {{\n")
+  fmt.sbprintf(&b, "  Mesh_Vertex v[];\n")
+  fmt.sbprintf(&b, "};\n\n")
 
   fmt.sbprintf(&b, "layout(buffer_reference, scalar) readonly buffer Immediate_Vertices {{\n")
   fmt.sbprintf(&b, "  Immediate_Vertex v[];\n")
   fmt.sbprintf(&b, "};\n\n")
-
-  // TODO: Can probably generate these instead of hard coding, might not be worth the effort...
-  append_always := `
-// vec3 mesh_vertex_position(int index)
-// {
-//   return vec3(mesh_vertices[index].position[0],
-//               mesh_vertices[index].position[1],
-//               mesh_vertices[index].position[2]);
-// }
-// vec2 mesh_vertex_uv(int index)
-// {
-//   return vec2(mesh_vertices[index].uv[0],
-//               mesh_vertices[index].uv[1]);
-// }
-// vec3 mesh_vertex_normal(int index)
-// {
-//   return vec3(mesh_vertices[index].normal[0],
-//               mesh_vertices[index].normal[1],
-//               mesh_vertices[index].normal[2]);
-// }
-// vec4 mesh_vertex_tangent(int index)
-// {
-//   return vec4(mesh_vertices[index].tangent[0],
-//               mesh_vertices[index].tangent[1],
-//               mesh_vertices[index].tangent[2],
-//               mesh_vertices[index].tangent[3]);
-// }
-
-// vec3 immediate_vertex_position(Immediate_Vertices vertices, int index)
-// {
-//   return vec3(vertices[index].position[0],
-//               vertices[index].position[1],
-//               vertices[index].position[2]);
-// }
-// vec2 immediate_vertex_uv(Immediate_Vertices vertices, int index)
-// {
-//   return vec2(vertices[index].uv[0],
-//               vertices[index].uv[1]);
-// }
-// vec4 immediate_vertex_color(Immediate_Vertex vertex)
-// {
-//   return vec4(vertices[index].color[0],
-//               vertices[index].color[1],
-//               vertices[index].color[2],
-//               vertices[index].color[3]);
-// }
-
-`
-
-  fmt.sbprint(&b, append_always)
 
   err: os.Error
   err = os.write_entire_file(SHADER_DIR + "generated.glsl", transmute([]u8) strings.to_string(b))
@@ -457,7 +406,6 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
   return uniform
 }
 
-
 // NOTE: Assumes the shadow CUBE map is a CUBE so 1:1 aspect ratio for each side
 point_light_projviews :: proc(light: Point_Light) -> [6]mat4
 {
@@ -492,13 +440,10 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
      emissive != nil &&
      normal   != nil
   {
-     // NOTE: We are bindless with materials now!
-     // So we just send over indexes
-
-     // uniform.diffuse  = diffuse.handle
-     // uniform.specular = specular.handle
-     // uniform.emissive = emissive.handle
-     // uniform.normal   = normal.handle
+     uniform.diffuse  = diffuse.index
+     uniform.specular = specular.index
+     uniform.emissive = emissive.index
+     uniform.normal   = normal.index
 
      uniform.shininess = material.shininess
   }
@@ -514,7 +459,6 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
 }
 
 
-// NOTE: Injects push constant if passed
 @(private="file")
 global_session: ^slang.IGlobalSession
 
@@ -558,6 +502,7 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
       slang.createGlobalSession(slang.SLANG_API_VERSION, &global_session)
     }
 
+
     target: slang.TargetDesc =
     {
       structureSize = size_of(slang.TargetDesc),
@@ -596,9 +541,9 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
     defer { if diagnostic != nil { diagnostic->release() }}
 
     c_name := strings.clone_to_cstring(file_name, context.temp_allocator)
-    c_code := strings.clone_to_cstring(processed, context.temp_allocator)
+    c_str  := strings.clone_to_cstring(processed, context.temp_allocator)
 
-    module := session->loadModuleFromSourceString(c_name, c_name, c_code, &diagnostic)
+    module := session->loadModuleFromSourceString(c_name, c_name, c_str, &diagnostic)
 
     if module != nil
     {
@@ -632,15 +577,27 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
       }
       defer linked->release()
 
-      spv_blob: ^slang.IBlob
-      if slang.result_failed(linked->getTargetCode(0, &spv_blob, &diagnostic))
+
+      vert_blob: ^slang.IBlob
+      if slang.result_failed(linked->getEntryPointCode(0, 0, &vert_blob, &diagnostic))
       {
         log.errorf("Error compiling shader:\n%s", string(([^]byte)(diagnostic->getBufferPointer())[:diagnostic->getBufferSize()]))
       }
-      defer spv_blob->release()
+      defer vert_blob->release()
+
+      frag_blob: ^slang.IBlob
+      if slang.result_failed(linked->getEntryPointCode(1, 0, &frag_blob, &diagnostic))
+      {
+        log.errorf("Error compiling shader:\n%s", string(([^]byte)(diagnostic->getBufferPointer())[:diagnostic->getBufferSize()]))
+      }
+      defer frag_blob->release()
+
+      assert(vert_blob != nil)
+      assert(frag_blob != nil)
 
       // So don't have to deal with slang release bullshit.
-      code = slice.clone(slice.bytes_from_ptr(spv_blob->getBufferPointer(), int(spv_blob->getBufferSize())), context.temp_allocator)
+      vert_code = slice.clone(slice.bytes_from_ptr(vert_blob->getBufferPointer(), int(vert_blob->getBufferSize())))
+      frag_code = slice.clone(slice.bytes_from_ptr(frag_blob->getBufferPointer(), int(frag_blob->getBufferSize())))
       ok = true
     }
     else
@@ -659,38 +616,36 @@ compile_shader_file :: proc(file_name: string, $push: typeid) -> (code: []byte, 
     ok = false
   }
 
-  return code, put_push, ok
+  return vert_code, frag_code, put_push, ok
 }
 
 // NOTE: For now will not do recursive includes, but maybe won't be necessary
-make_pipeline :: proc(name: string, $push: typeid, color_format: Pixel_Format, depth_format: Pixel_Format = .NONE) -> (pipeline: Pipeline, ok: bool)
+make_pipeline :: proc(name: string, $push: typeid,
+                      color_format: Pixel_Format, depth_format: Pixel_Format = .NONE) -> (pipeline: Pipeline, ok: bool)
 {
   path := join_file_path({SHADER_DIR, name}, context.temp_allocator)
 
   code: []byte
-  put_push: bool
-
-  if strings.ends_with(path, ".slang")
+  vert, frag: []byte
+  if !strings.ends_with(path, ".slang")
   {
-    code, put_push, ok = compile_shader_file(path, push)
-  }
-  else if strings.ends_with(path, ".spv")
-  {
-    error: os.Error
-    code, error = os.read_entire_file(path, context.temp_allocator)
-    ok = error == nil
+    vert, frag, _, ok = compile_shader_file(context.temp_allocator, path, push)
+    _=os.write_entire_file(SHADER_DIR + "immediate.vert.spv", vert)
+    _=os.write_entire_file(SHADER_DIR + "immediate.frag.spv", frag)
   }
   else
   {
-    log.errorf("Don't know how to handle this shader file type.", path)
+    code,_ = os.read_entire_file(SHADER_DIR + "shader.spv", context.temp_allocator)
+    ok = true
+    print(code)
   }
 
-  has_push := push != Nil_Push
-  if has_push && !put_push
-  {
-    log.errorf("Shaders: %v,%v, Push constants type passed but no #push_constants.", path)
-    // This might be recoverable so just proceed
-  }
+  // has_push := push != Nil_Push
+  // if has_push && !put_push
+  // {
+  //   log.errorf("Shaders: %v, Push constants type passed but no #push_constants.", name)
+  //   // This might be recoverable so just proceed
+  // }
 
   if ok
   {
