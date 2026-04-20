@@ -8,7 +8,7 @@ when ODIN_OS == .Windows
 }
 when ODIN_OS == .Linux
 {
-  foreign import lib "lib/libslang.so"
+  foreign import lib "libslang.so"
 }
 
 SLANG_API_VERSION :: 0
