@@ -292,7 +292,7 @@ void main()
     };
 
     vec3 point_phong = point_phong(temp, diffuse_sample, specular_sample, material.shininess,
-                                    normal, view_direction, fs_in.world_position);
+                                   normal, view_direction, fs_in.world_position);
     point_phong *= point_shadow;
 
     all_point_phong += point_phong;

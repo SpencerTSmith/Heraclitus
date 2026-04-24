@@ -1,4 +1,5 @@
 import generated;
+import common;
 
 struct VSOutput
 {
@@ -22,5 +23,5 @@ VSOutput vert_main(uniform Immediate_Push push, uint vid : SV_VulkanVertexID)
 [shader("fragment")]
 float4 frag_main(uniform Immediate_Push push, VSOutput fs_in) : SV_Target0
 {
-  return textures_2D[NonUniformResourceIndex(push.texture)].Sample(fs_in.uv) * fs_in.color;
+  return sample2D(push.texture, fs_in.uv) * fs_in.color;
 }

@@ -103,11 +103,11 @@ Spot_Light_Uniform :: struct #align(16)
 
 Material_Uniform :: struct
 {
-  // Handles
-  diffuse:  u64,
-  specular: u64,
-  emissive: u64,
-  normal:   u64,
+  // Descriptor indices
+  diffuse:  u32,
+  specular: u32,
+  emissive: u32,
+  normal:   u32,
 
   shininess: f32,
 }
@@ -274,10 +274,7 @@ generate_slang :: proc()
   to_slang_struct(&b, Mesh_Vertex)
   to_slang_struct(&b, Immediate_Vertex)
   to_slang_struct(&b, Immediate_Push)
-
-  fmt.sbprintfln(&b, "Sampler2D textures_2D[];")
-  fmt.sbprintfln(&b, "SamplerCube textures_cube[];")
-  fmt.sbprintfln(&b, "SamplerCubeArray textures_cube_array[];")
+  to_slang_struct(&b, Mega_Push)
 
   if os.write_entire_file(SHADER_DIR + "generated.slang", transmute([]u8) strings.to_string(b)) != nil
   {
@@ -415,10 +412,10 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
      // NOTE: We are bindless with materials now!
      // So we just send over indexes
 
-     // uniform.diffuse  = diffuse.handle
-     // uniform.specular = specular.handle
-     // uniform.emissive = emissive.handle
-     // uniform.normal   = normal.handle
+     uniform.diffuse  = diffuse.index
+     uniform.specular = specular.index
+     uniform.emissive = emissive.index
+     uniform.normal   = normal.index
 
      uniform.shininess = material.shininess
   }

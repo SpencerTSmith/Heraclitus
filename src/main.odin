@@ -181,7 +181,7 @@ main :: proc()
   //
   // make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
   //
-  // make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
+  make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
   //
   // make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
 
@@ -221,11 +221,11 @@ main :: proc()
       {
         defer end_render_pass()
 
-        // for e in all_entities()
-        // {
-        //   draw_entity(e)
-        // }
-        // mega_draw()
+        for e in all_entities()
+        {
+          draw_entity(e)
+        }
+        mega_draw()
 
         draw_quad(position, 300, 500, color=LEARN_OPENGL_ORANGE)
         draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))

@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 20-04-2026 (04:49:46 am)
+// NOTE: This code was generated on 23-04-2026 (04:27:35 pm)
 
 struct Direction_Light_Uniform
 {
@@ -42,10 +42,10 @@ struct Point_Light_Uniform
 
 struct Material_Uniform
 {
-  uint64_t diffuse;
-  uint64_t specular;
-  uint64_t emissive;
-  uint64_t normal;
+  uint diffuse;
+  uint specular;
+  uint emissive;
+  uint normal;
   float shininess;
 }
 
@@ -100,6 +100,11 @@ struct Immediate_Push
   Immediate_Vertex *vertices;
 }
 
-Sampler2D textures_2D[];
-SamplerCube textures_cube[];
-SamplerCubeArray textures_cube_array[];
+struct Mega_Push
+{
+  Frame_Uniform *frame_uniform;
+  Draw_Uniform *draw_uniforms;
+  Mesh_Vertex *vertices;
+  Material_Uniform *material_uniforms;
+}
+
