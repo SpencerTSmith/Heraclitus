@@ -101,7 +101,11 @@ Frame_Uniform :: struct
   camera_position: vec4,
   z_near:          f32,
   z_far:           f32,
-  scene_extents:   vec4,
+
+  // Texture descriptor heap indices
+  sun_shadow_index:   u32,
+  point_shadow_index: u32,
+  skybox_index:       u32,
 
   shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
   shadow_points_count: u32,
@@ -111,11 +115,6 @@ Frame_Uniform :: struct
 
   sun_light:    Direction_Light_Uniform,
   flash_light:  Spot_Light_Uniform,
-
-  // Texture descriptor heap indices
-  sun_shadow_index:   u32,
-  point_shadow_index: u32,
-  skybox_index:       u32,
 }
 
 Draw_Command :: struct
@@ -258,6 +257,7 @@ generate_slang :: proc()
   to_slang_struct(&b, Immediate_Vertex)
   to_slang_struct(&b, Immediate_Push)
   to_slang_struct(&b, Mega_Push)
+  to_slang_struct(&b, Skybox_Push)
 
   if os.write_entire_file(SHADER_DIR + "generated.slang", transmute([]u8) strings.to_string(b)) != nil
   {
@@ -594,7 +594,6 @@ hot_reload_shaders :: proc(shaders: ^[Pipeline_Key]Pipeline)
 
 bind_pipeline :: proc
 {
-  bind_pipeline_direct,
   bind_pipeline_key,
 }
 

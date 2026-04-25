@@ -2,6 +2,18 @@ package main
 
 import "core:log"
 import "core:mem"
+import "core:time"
+
+FRAMES_IN_FLIGHT :: 3
+TARGET_FPS :: 240
+TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
+
+MAX_DRAWS     :: 64 * mem.Kilobyte
+MAX_VERTICES  :: 4 * mem.Megabyte
+MAX_INDICES   :: 8 * mem.Megabyte
+MAX_MATERIALS :: 512
+
+MAX_IMMEDIATE_VERTICES :: 256 * mem.Kilobyte
 
 GPU_Upload :: struct
 {
@@ -85,13 +97,6 @@ Renderer :: struct
   draw_debug:  bool,
 }
 
-MAX_DRAWS     :: 64 * mem.Kilobyte
-MAX_VERTICES  :: 4 * mem.Megabyte
-MAX_INDICES   :: 8 * mem.Megabyte
-MAX_MATERIALS :: 512
-
-MAX_IMMEDIATE_VERTICES :: 256 * mem.Kilobyte
-
 Immediate_Vertex :: struct
 {
   position: vec3,
@@ -169,6 +174,9 @@ init_renderer :: proc() -> (ok: bool)
   state.renderer.pipelines[.PHONG], ok = make_pipeline("test.slang", .RGBA16F, .DEPTH32)
   assert(ok)
 
+  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32)
+  assert(ok)
+
   state.renderer.bloom_on = true
   state.renderer.draw_debug = true
 
@@ -193,6 +201,11 @@ begin_render_frame :: proc() -> (ok: bool)
       view            = view,
       proj_view       = projection * view,
       camera_position = vec4_from_3(state.camera.position),
+      z_near          = state.camera.z_near,
+      z_far           = state.camera.z_far,
+      sun_light       = direction_light_uniform(state.sun),
+      flash_light     = spot_light_uniform(state.flashlight),
+      skybox_index    = get_texture(state.skybox).index,
     }
 
     vk_do_uploads(state.renderer.upload_queue)
@@ -220,7 +233,7 @@ flush_render_frame :: proc(to_display: Texture)
 }
 
 @(private="file")
-copy_to_staging :: proc(data: []$Type) -> (staging_offset, byte_size: int)
+push_to_staging :: proc(data: []$Type) -> (staging_offset, byte_size: int)
 {
   byte_size = len(data) * size_of(Type)
 
@@ -229,6 +242,7 @@ copy_to_staging :: proc(data: []$Type) -> (staging_offset, byte_size: int)
   // No room from here to the end of the physical buffer... check if we can potentially wrap around
   if state.renderer.staging_offset + byte_size >= state.renderer.staging_buffer.count
   {
+    // If our tail is behind us and there's room, wrap
     if byte_size < tail
     {
       state.renderer.staging_offset = 0
@@ -256,7 +270,7 @@ copy_to_staging :: proc(data: []$Type) -> (staging_offset, byte_size: int)
 @(private="file")
 queue_buffer_upload :: proc(data: []$Type, dst: GPU_Buffer(Type), dst_offset: int)
 {
-  staging_offset, byte_size := copy_to_staging(data)
+  staging_offset, byte_size := push_to_staging(data)
   byte_offset := dst_offset * size_of(Type)
 
   upload: GPU_Upload =
@@ -271,9 +285,18 @@ queue_buffer_upload :: proc(data: []$Type, dst: GPU_Buffer(Type), dst_offset: in
   ensure(append(&state.renderer.upload_queue, upload) == 1)
 }
 
-upload_texture :: proc(data: []byte, dst: Texture)
+upload_texture :: proc(datas: [][]byte, dst: Texture)
 {
-  staging_offset, byte_size := copy_to_staging(data)
+  assert(len(datas) == int(dst.array_count))
+
+  staging_offset := -1
+  byte_size: int
+  for data in datas
+  {
+    offset, part_size := push_to_staging(data)
+    byte_size += part_size
+    if staging_offset == -1 { staging_offset = offset }
+  }
 
   upload: GPU_Upload =
   {
@@ -463,3 +486,16 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
   }
 }
 
+draw_skybox :: proc(handle: Texture_Handle)
+{
+  bind_pipeline(.SKYBOX)
+
+  // Get the depth func before and reset after this call
+  // TODO: Do this everywhere, ie push and pop GL state
+  // depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
+  // gl.DepthFunc(gl.LEQUAL)
+  // defer gl.DepthFunc(u32(depth_func_before))
+
+  push := Skybox_Push{frame_uniform = state.renderer.uniform_buffer[curr_frame_idx()].gpu_base}
+  vk_draw_vertices(0, 36, push)
+}

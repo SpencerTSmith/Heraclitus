@@ -61,8 +61,7 @@ init_state :: proc() -> (ok: bool)
 
   state.mode = .EDIT // Edit by default
 
-  state.window = make_window(WINDOW_DEFAULT_W, WINDOW_DEFAULT_H,
-                             WINDOW_DEFAULT_TITLE) or_return
+  state.window = make_window() or_return
 
   state.camera =
   {
@@ -114,17 +113,17 @@ init_state :: proc() -> (ok: bool)
   // init_menu() or_return
 
   state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
-  //
-  // cube_map_sides: [6]string =
-  // {
-  //   "skybox/right.jpg",
-  //   "skybox/left.jpg",
-  //   "skybox/top.jpg",
-  //   "skybox/bottom.jpg",
-  //   "skybox/front.jpg",
-  //   "skybox/back.jpg",
-  // }
-  // state.skybox = load_skybox(cube_map_sides) or_return
+
+  cube_map_sides: [6]string =
+  {
+    "skybox/right.jpg",
+    "skybox/left.jpg",
+    "skybox/top.jpg",
+    "skybox/bottom.jpg",
+    "skybox/front.jpg",
+    "skybox/back.jpg",
+  }
+  state.skybox = load_skybox(cube_map_sides) or_return
 
   return true
 }
@@ -229,6 +228,8 @@ main :: proc()
           draw_entity(e)
         }
         mega_draw()
+
+        draw_skybox(state.skybox)
 
       }
     }

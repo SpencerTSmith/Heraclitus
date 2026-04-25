@@ -691,7 +691,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       vks.arenas[.DEVICE], ok = make_vulkan_arena(vks.logical, vks.physical, 256 * mem.Megabyte,
                                                   {.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER,
                                                    .VERTEX_BUFFER, .INDEX_BUFFER},
-                                                  {.DEVICE_LOCAL}, 512 * mem.Megabyte)
+                                                  {.DEVICE_LOCAL}, 1 * mem.Gigabyte)
       if !ok { log.panicf("Unable to create device local vulkan arena.") }
 
       // Entire thing gets mapped to a buffer, will never need extra raw memory.
@@ -1100,7 +1100,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
         region: vk.BufferImageCopy =
         {
           bufferOffset = vk_gpu_buffer_offset(upload.src_buffer, vks.arenas[.MAPPED]) + vk.DeviceSize(upload.src_offset),
-          imageExtent  = {width=dst.width,height=dst.height,depth=1}, // NOTE: Hardcoded 2D images only!!
+          imageExtent  = {width=dst.width,height=dst.height,depth=1}, // NOTE: Hardcoded 2D textures only!!
           imageOffset  = {0,0,0}, // NOTE: Hardcoded... no atlasing for now, i suppose.
           imageSubresource =
           {
@@ -1694,8 +1694,13 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
     }
   }
 
+  array_count := array_count
+
   flags: vk.ImageCreateFlags
-  if type == .CUBE || type == .CUBE_ARRAY { flags |= {.CUBE_COMPATIBLE} }
+  if type == .CUBE || type == .CUBE_ARRAY
+  {
+    flags |= {.CUBE_COMPATIBLE}
+  }
 
   image_info: vk.ImageCreateInfo =
   {

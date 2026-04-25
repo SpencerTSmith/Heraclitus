@@ -2,13 +2,14 @@ package main
 
 import "core:log"
 
-Entity_Flags :: enum
+Entity_Flag :: enum
 {
   UNUSED,
   COLLISION,
   RENDERABLE,
   STATIC, // Should never 'move'
 }
+Entity_Flags :: bit_set[Entity_Flag]
 
 Entity_Handle :: struct
 {
@@ -28,7 +29,7 @@ Entity :: struct
   age: u32,
   next_free: Entity_Handle, // Should be 0 if this is a valid entity
 
-  flags: bit_set[Entity_Flags],
+  flags: Entity_Flags,
 
   position: vec3,
   scale:    vec3,
@@ -54,7 +55,7 @@ all_entities :: proc() -> (entities: []Entity)
 
 entity_handle_valid :: proc(handle: Entity_Handle) -> bool
 {
-  return handle != {} && handle.slot < u32(len(state.entities.pool)) && state.entities.pool[handle.slot].age == handle.age
+  return handle != {} && state.entities.pool[handle.slot].age == handle.age
 }
 
 @(private="file")
@@ -98,7 +99,7 @@ alloc_entity :: proc() -> (handle: Entity_Handle)
 
 // NOTE: Automatically sets the aabb of the entity to match the AABB of the model
 make_entity :: proc(model_file: string = "",
-                    flags: bit_set[Entity_Flags] = {.COLLISION, .RENDERABLE},
+                    flags: bit_set[Entity_Flag] = {.COLLISION, .RENDERABLE},
                     position: vec3 = {0, 0, 0},
                     rotation: vec3 = {0, 0, 0},
                     scale:    vec3 = {1, 1, 1},

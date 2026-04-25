@@ -1,7 +1,5 @@
 package main
 
-import gl "vendor:OpenGL"
-
 Render_Target :: struct
 {
   attachments: [dynamic; 4]Texture,
@@ -66,6 +64,11 @@ Render_Pass :: struct
   face_cull:   Face_Cull_Mode,
   blend:       Blend_Mode,
   viewport:    Viewport, // Optional, see flags
+}
+
+Skybox_Push :: struct
+{
+  frame_uniform: [^]Frame_Uniform,
 }
 
 MAIN_PASS :: Render_Pass {
@@ -156,20 +159,4 @@ begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
 end_render_pass :: proc()
 {
   vk_end_render_pass()
-}
-
-draw_skybox :: proc(handle: Texture_Handle)
-{
-  // bind_shader(.SKYBOX)
-
-  // Get the depth func before and reset after this call
-  // TODO: Do this everywhere, ie push and pop GL state
-  depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
-  gl.DepthFunc(gl.LEQUAL)
-  defer gl.DepthFunc(u32(depth_func_before))
-
-  texture := get_texture(handle)^
-  assert(texture.type == .CUBE)
-
-  gl.DrawArrays(gl.TRIANGLES, 0, 36)
 }

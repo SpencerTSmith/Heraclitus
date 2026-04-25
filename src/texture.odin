@@ -110,6 +110,13 @@ alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pi
     mip_count = u32(math.floor(math.log2(f64(max(width, height))))) + 1
   }
 
+  array_count := array_count
+
+  if type == .CUBE || type == .CUBE_ARRAY
+  {
+    array_count *= 6
+  }
+
   texture.internal, texture.index = vk_alloc_texture(type, usage, format, sampler, width, height, samples, array_count, mip_count)
   texture.width       = width
   texture.height      = height
@@ -127,9 +134,7 @@ make_texture_from_data :: proc(type: Texture_Type, format: Pixel_Format, sampler
                                datas: [][]byte, width, height: u32, samples: u32 = 1) -> (texture: Texture)
 {
   texture = alloc_texture(type, {}, format, sampler, width, height, samples)
-  upload_texture(datas[0], texture)
-
-  // TODO: Cube map upload
+  upload_texture(datas, texture)
 
   return texture
 }

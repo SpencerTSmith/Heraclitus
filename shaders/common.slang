@@ -1,12 +1,28 @@
 import generated;
 
+[[vk::binding(0)]]
 Sampler2D textures_2D[];
+[[vk::binding(1)]]
 SamplerCube textures_cube[];
+[[vk::binding(2)]]
 SamplerCubeArray textures_cube_array[];
 
-float4 sample2D(uint index, float2 uv)
+// TODO: It might be worth having a separate paths for when the index is actually uniform
+float4 sample_2D(uint index, float2 uv)
 {
   return textures_2D[NonUniformResourceIndex(index)].Sample(uv);
+}
+float4 sample_cube(uint index, float3 uvw)
+{
+  return textures_cube[NonUniformResourceIndex(index)].Sample(uvw);
+}
+float4 sample_2D_uniform(uint index, float2 uv)
+{
+  return textures_2D[index].Sample(uv);
+}
+float4 sample_cube_uniform(uint index, float3 uvw)
+{
+  return textures_cube[index].Sample(uvw);
 }
 
 float point_shadow(uint cube_array_index, uint light_index,

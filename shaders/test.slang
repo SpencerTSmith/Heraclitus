@@ -31,7 +31,7 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
 
   Material_Uniform material = push.material_uniforms[draw.material_index];
 
-  float4 diffuse_sample = sample2D(material.diffuse, i.uv);
+  float4 diffuse_sample = sample_2D(material.diffuse, i.uv);
 
   return diffuse_sample;
 }

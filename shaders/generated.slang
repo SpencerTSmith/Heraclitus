@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 25-04-2026 (07:07:56 am)
+// NOTE: This code was generated on 25-04-2026 (09:17:13 pm)
 
 struct Direction_Light_Uniform
 {
@@ -66,16 +66,15 @@ struct Frame_Uniform
   float4 camera_position;
   float z_near;
   float z_far;
-  float4 scene_extents;
+  uint sun_shadow_index;
+  uint point_shadow_index;
+  uint skybox_index;
   Shadow_Point_Light_Uniform shadow_point_lights[8];
   uint shadow_points_count;
   Point_Light_Uniform point_lights[128];
   uint points_count;
   Direction_Light_Uniform sun_light;
   Spot_Light_Uniform flash_light;
-  uint sun_shadow_index;
-  uint point_shadow_index;
-  uint skybox_index;
 }
 
 struct Mesh_Vertex
@@ -106,5 +105,10 @@ struct Mega_Push
   Draw_Uniform *draw_uniforms;
   Mesh_Vertex *vertices;
   Material_Uniform *material_uniforms;
+}
+
+struct Skybox_Push
+{
+  Frame_Uniform *frame_uniform;
 }
 

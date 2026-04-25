@@ -6,19 +6,10 @@ import "core:log"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:path/filepath"
-import "core:time"
 import "core:os"
 
 // NOTE: For everything that doesn't have a home yet
-WINDOW_DEFAULT_TITLE :: "Heraclitus"
-WINDOW_DEFAULT_W :: 1280 * 1.5
-WINDOW_DEFAULT_H :: 720  * 1.5
-
 DEFAULT_FONT_SIZE :: 25.0
-
-FRAMES_IN_FLIGHT :: 3
-TARGET_FPS :: 240
-TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
 
 Program_Mode :: enum
 {
