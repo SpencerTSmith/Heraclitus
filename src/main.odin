@@ -7,7 +7,7 @@ import "base:runtime"
 
 // TODO: Probably split game specific things from rendering specific things
 State :: struct {
-  main_context :runtime.Context,
+  main_context: runtime.Context,
 
   running: bool,
 
@@ -112,7 +112,7 @@ init_state :: proc() -> (ok: bool)
   init_assets()
 
   // init_menu() or_return
-  //
+
   state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
   //
   // cube_map_sides: [6]string =
@@ -174,24 +174,24 @@ main :: proc()
   last_frame_time := time.tick_now()
   dt_s := 0.0
 
-  // for pos in DEFAULT_MODEL_POSITIONS
-  // {
-  //   make_entity("cube/BoxTextured.gltf", position=pos - {20,0,30})
-  // }
-  //
-  // make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
-  //
-  make_entity("cube/BoxTextured.gltf", position={0, -2, -30}, scale={10.0, 10.0, 10.0})
-  //
-  // make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
 
-  // make_entity("guitar/scene.gltf", position={5.0, 0.0, 4.0}, scale={0.01, 0.01, 0.01})
+  make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
 
-  // make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
+  make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
 
-  position := vec2{100, 100}
+  for pos in DEFAULT_MODEL_POSITIONS
+  {
+    make_entity("cube/BoxTextured.gltf", position=pos)
+  }
 
-  main_target := make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
+  make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
+
+  make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
+
+  make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
+
+  make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
+
 
   for !should_close(state.window)
   {
@@ -215,11 +215,14 @@ main :: proc()
 
     if begin_render_frame()
     {
-      defer flush_render_frame(main_target.attachments[0])
+      defer flush_render_frame(state.renderer.main_target.attachments[0])
 
-      begin_render_pass({clear_color = LEARN_OPENGL_BLUE}, &main_target)
+      begin_render_pass({clear_color = LEARN_OPENGL_BLUE}, &state.renderer.main_target)
       {
         defer end_render_pass()
+
+        draw_debug_stats()
+        immediate_flush(true, true)
 
         for e in all_entities()
         {
@@ -227,11 +230,6 @@ main :: proc()
         }
         mega_draw()
 
-        draw_quad(position, 300, 500, color=LEARN_OPENGL_ORANGE)
-        draw_quad_world({0,0,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
-        draw_quad_world({0,5,-5}, {0,0,1}, 10, 10, texture=load_texture("missing.png"))
-        draw_debug_stats()
-        immediate_flush(true, true)
       }
     }
 

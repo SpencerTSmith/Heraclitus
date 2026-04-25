@@ -72,19 +72,10 @@ Texture :: struct
 Pixel_Format :: enum u32
 {
   NONE,
-
-  // Integer
   R8,
   RGBA8,
-
-  // Non linear color space
   SRGBA8,
-
-  // Mostly for hdr.
   RGBA16F,
-
-  // Depth
-  DEPTH24_STENCIL8,
   DEPTH32,
 }
 

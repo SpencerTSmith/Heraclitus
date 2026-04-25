@@ -159,7 +159,6 @@ duplicate_entity :: proc(handle: Entity_Handle) -> (duplicate: Entity_Handle)
     {
       // HACK: doesn't sit right with me
       duplicate = alloc_entity()
-      age := duplicate.age
       copy_data := e^
       copy_data.age = duplicate.age
       get_entity(duplicate)^ = copy_data

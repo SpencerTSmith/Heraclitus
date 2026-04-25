@@ -548,19 +548,20 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
     required_device_features12: vk.PhysicalDeviceVulkan12Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      bufferDeviceAddress                       = true,
-      descriptorIndexing                        = true,
-      scalarBlockLayout                         = true,
-      shaderSampledImageArrayNonUniformIndexing = true,
-      descriptorBindingVariableDescriptorCount  = true,
-      descriptorBindingPartiallyBound           = true,
-      runtimeDescriptorArray                    = true,
+      bufferDeviceAddress                          = true,
+      descriptorIndexing                           = true,
+      scalarBlockLayout                            = true,
+      shaderSampledImageArrayNonUniformIndexing    = true,
+      descriptorBindingVariableDescriptorCount     = true,
+      descriptorBindingPartiallyBound              = true,
+      runtimeDescriptorArray                       = true,
       descriptorBindingSampledImageUpdateAfterBind = true,
       pNext = &required_device_features13,
     }
     required_device_features11: vk.PhysicalDeviceVulkan11Features =
     {
       sType = .PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+      shaderDrawParameters = true,
       pNext = &required_device_features12,
     }
     required_device_features: vk.PhysicalDeviceFeatures2 =
@@ -571,6 +572,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
         shaderInt64       = true,
         samplerAnisotropy = true,
         imageCubeArray    = true,
+        multiDrawIndirect = true,
       },
       pNext = &required_device_features11,
     }
@@ -686,15 +688,17 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // Memory
       // // //
       // FIXME: Ok should probably just be a variable.
-      vks.arenas[.DEVICE], ok = make_vulkan_arena(vks.logical, vks.physical,
-                                                  256 * mem.Megabyte, {.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER},
-                                                  {.DEVICE_LOCAL}, 256 * mem.Megabyte)
+      vks.arenas[.DEVICE], ok = make_vulkan_arena(vks.logical, vks.physical, 256 * mem.Megabyte,
+                                                  {.TRANSFER_DST, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER,
+                                                   .VERTEX_BUFFER, .INDEX_BUFFER},
+                                                  {.DEVICE_LOCAL}, 512 * mem.Megabyte)
       if !ok { log.panicf("Unable to create device local vulkan arena.") }
 
       // Entire thing gets mapped to a buffer, will never need extra raw memory.
-      vks.arenas[.MAPPED], ok = make_vulkan_arena(vks.logical, vks.physical,
-                                                256 * mem.Megabyte, {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS, .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER, .INDIRECT_BUFFER},
-                                                {.HOST_VISIBLE, .HOST_COHERENT, .DEVICE_LOCAL}, 0)
+      vks.arenas[.MAPPED], ok = make_vulkan_arena(vks.logical, vks.physical, 512 * mem.Megabyte,
+                                                  {.TRANSFER_SRC, .UNIFORM_BUFFER, .SHADER_DEVICE_ADDRESS,
+                                                   .STORAGE_BUFFER, .VERTEX_BUFFER, .INDEX_BUFFER, .INDIRECT_BUFFER},
+                                                  {.HOST_VISIBLE, .HOST_COHERENT, .DEVICE_LOCAL}, 0)
       if !ok { log.panicf("Unable to create host vulkan arena.") }
 
       // // //
@@ -1423,7 +1427,8 @@ vk_index_type :: proc($index_type: typeid) -> (vk_type: vk.IndexType)
 
 vk_draw_indirect :: proc(indices: GPU_Buffer($Index_Type), commands: GPU_Buffer(Draw_Command), draw_offset, draw_count: u32, push: $Push_Type)
 {
-  assert(.CPU_MAPPED in commands.flags)
+  assert(.CPU_MAPPED   in commands.flags)
+  assert(.DEVICE_LOCAL in indices.flags)
 
   vk.CmdBindIndexBuffer(vk_curr_cmd(), vks.arenas[.DEVICE].buffer, vk_gpu_buffer_offset(indices, vks.arenas[.DEVICE]), vk_index_type(Index_Type))
 
@@ -1497,7 +1502,6 @@ VK_FORMAT_TABLE: [Pixel_Format]vk.Format =
   .SRGBA8           = .R8G8B8A8_SRGB,
   .RGBA16F          = .R16G16B16A16_SFLOAT,
   .DEPTH32          = .D32_SFLOAT,
-  .DEPTH24_STENCIL8 = .D24_UNORM_S8_UINT,
 }
 
 @(private="file")
@@ -1509,8 +1513,6 @@ vk_aspect_from_format :: proc(format: Pixel_Format) -> (aspect: vk.ImageAspectFl
     log.warnf("Tried to obtain vulkan aspect from NONE color format.")
   case .R8, .RGBA8, .SRGBA8, .RGBA16F:
     aspect |= {.COLOR}
-  case .DEPTH24_STENCIL8:
-    aspect |= {.DEPTH, .STENCIL}
   case .DEPTH32:
     aspect |= {.DEPTH}
   }
@@ -1540,8 +1542,6 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
             panic("Idiot.")
           case .R8, .RGBA8, .SRGBA8, .RGBA16F:
             layout = .COLOR_ATTACHMENT_OPTIMAL
-          case .DEPTH24_STENCIL8:
-            layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL
           case .DEPTH32:
             layout = .DEPTH_ATTACHMENT_OPTIMAL
         }
@@ -1558,8 +1558,6 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
   color_attachment_infos: [dynamic; cap(target.attachments)]vk.RenderingAttachmentInfo
   depth_attachment_info: vk.RenderingAttachmentInfo
   have_depth_attachment := false
-  depth_stencil_attachment_info: vk.RenderingAttachmentInfo
-  have_depth_stencil_attachment := false
   for &attachment in target.attachments
   {
     vk_target := vk_get_image(attachment.internal)
@@ -1591,14 +1589,11 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
         assert(!have_depth_attachment, "More than 1 depth attachment for render pass.")
         depth_attachment_info = attachment_info
         have_depth_attachment = true
-      case .DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-        assert(!have_depth_stencil_attachment, "More than 1 depth attachment for render pass.")
-        depth_stencil_attachment_info = attachment_info
-        have_depth_stencil_attachment = true
     }
 
     // This attachment is now a target, so future pipeline barriers can know about it.
-    // FIXME: This state change should probably bundled with the call to pipeline barriers somehow
+
+    // FIXME: This state change should probably be changed in the higher level renderer code
     attachment.state = .TARGET
   }
 
@@ -1613,7 +1608,6 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
     colorAttachmentCount = u32(len(color_attachment_infos)),
     pColorAttachments    = raw_data(color_attachment_infos[:]),
     pDepthAttachment     = have_depth_attachment ? &depth_attachment_info : nil,
-    pStencilAttachment   = have_depth_stencil_attachment ? &depth_stencil_attachment_info : nil,
   }
 
   vk.CmdBeginRendering(vk_curr_cmd(), &rendering_info)
@@ -1633,15 +1627,30 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
     offset = {0, 0},
     extent = {pass.viewport.w, pass.viewport.h},
   }
+
   vk.CmdSetViewport(vk_curr_cmd(), 0, 1, &viewport)
   vk.CmdSetScissor(vk_curr_cmd(), 0, 1, &scissor)
-  vk.CmdSetCullMode(vk_curr_cmd(), {})
-  vk.CmdSetDepthTestEnable(vk_curr_cmd(), false)
-  vk.CmdSetDepthWriteEnable(vk_curr_cmd(), false)
+
+  VK_CULL_TABLE: [Face_Cull_Mode]vk.CullModeFlags =
+  {
+    .DISABLED = {},
+    .FRONT    = {.FRONT},
+    .BACK     = {.BACK},
+  }
+
+  vk.CmdSetCullMode(vk_curr_cmd(), VK_CULL_TABLE[pass.face_cull])
+
+  // FIXME:
+  vk.CmdSetDepthTestEnable(vk_curr_cmd(), true)
+  vk.CmdSetDepthWriteEnable(vk_curr_cmd(), true)
   vk.CmdSetDepthCompareOp(vk_curr_cmd(), .LESS_OR_EQUAL)
+
+  // FIXME:
   vk.CmdSetDepthBiasEnable(vk_curr_cmd(), false)
-  vk.CmdSetStencilTestEnable(vk_curr_cmd(), false)
   vk.CmdSetDepthBias(vk_curr_cmd(), 0, 0, 0)
+
+  // FIXME:
+  vk.CmdSetStencilTestEnable(vk_curr_cmd(), false)
   vk.CmdSetStencilOp(vk_curr_cmd(), {.FRONT, .BACK}, .KEEP, .KEEP, .KEEP, .ALWAYS)
 }
 
@@ -1674,8 +1683,8 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
 
   if .TARGET in usage
   {
-    vk_usage += {.STORAGE, .TRANSFER_SRC}
-    if format == .DEPTH32 || format == .DEPTH24_STENCIL8
+    vk_usage += {.TRANSFER_SRC}
+    if format == .DEPTH32
     {
       vk_usage += {.DEPTH_STENCIL_ATTACHMENT}
     }
@@ -1901,14 +1910,12 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format)
 
   vk_color_format   := VK_FORMAT_TABLE[color_format]
   vk_depth_format   := VK_FORMAT_TABLE[depth_format]
-  vk_stencil_format := VK_FORMAT_TABLE[depth_format] if depth_format == .DEPTH24_STENCIL8 else .UNDEFINED
   rendering: vk.PipelineRenderingCreateInfo =
   {
     sType                   = .PIPELINE_RENDERING_CREATE_INFO,
     colorAttachmentCount    = 1 if color_format != .NONE else 0,
     pColorAttachmentFormats = &vk_color_format,
     depthAttachmentFormat   = vk_depth_format,
-    stencilAttachmentFormat = vk_stencil_format,
   }
 
   pipeline: vk.Pipeline

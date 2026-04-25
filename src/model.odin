@@ -528,15 +528,15 @@ draw_model :: proc(model: Model, model_mat: mat4, mul_color: vec4 = WHITE, insta
 {
   for mesh in model.meshes
   {
-    true_offset := model.index_offset + mesh.index_offset
+    true_index := model.index_offset + mesh.index_offset
 
     command: Draw_Command =
     {
       count          = mesh.index_count,
       base_vertex    = model.vertex_offset,
       instance_count = cast(u32)instances,
-      first_index    = cast(u32)true_offset,
-      base_instance  = 0, // We set this in push_draw, as it will know what that ought to be.
+      first_index    = true_index,
+      base_instance  = 0,
     }
 
     material := model.materials[mesh.material_index]

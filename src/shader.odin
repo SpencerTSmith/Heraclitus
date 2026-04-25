@@ -1,6 +1,5 @@
 package main
 
-import "base:runtime"
 import "core:os"
 import "core:log"
 import "core:strings"
@@ -12,25 +11,6 @@ import "core:reflect"
 import "slang"
 
 SHADER_DIR :: "shaders" + PATH_SLASH
-
-Pipeline_Key :: enum
-{
-  PHONG,
-  SKYBOX,
-  RESOLVE_HDR,
-  SUN_DEPTH,
-  POINT_DEPTH,
-  GAUSSIAN,
-  GET_BRIGHT,
-  IMMEDIATE,
-}
-
-Shader_Type :: enum u32
-{
-  VERTEX,
-  FRAGMENT,
-  COMPUTE,
-}
 
 Pipeline :: struct
 {
@@ -51,7 +31,7 @@ Pipeline :: struct
 MAX_SHADOW_POINT_LIGHTS :: 8
 MAX_POINT_LIGHTS :: 128
 
-Shadow_Point_Light_Uniform :: struct #align(16)
+Shadow_Point_Light_Uniform :: struct
 {
   proj_views: [6]mat4,
 
@@ -64,7 +44,7 @@ Shadow_Point_Light_Uniform :: struct #align(16)
   ambient:   f32,
 }
 
-Point_Light_Uniform :: struct #align(16)
+Point_Light_Uniform :: struct
 {
   position:  vec4,
 
@@ -75,7 +55,7 @@ Point_Light_Uniform :: struct #align(16)
   ambient:   f32,
 }
 
-Direction_Light_Uniform :: struct #align(16)
+Direction_Light_Uniform :: struct
 {
   proj_view: mat4,
 
@@ -87,7 +67,7 @@ Direction_Light_Uniform :: struct #align(16)
   ambient:   f32,
 }
 
-Spot_Light_Uniform :: struct #align(16)
+Spot_Light_Uniform :: struct
 {
   position:     vec4,
   direction:    vec4,
@@ -148,7 +128,9 @@ Draw_Command :: struct
 }
 
 // Maybe consider pulling these out, these could just be indices, since will be redundantly uploading for passes drawing the same objects, shadow mapping, main passes, etc.
-Draw_Uniform :: struct
+// Also because a matrix is in this struct it aligns itself to 16 rather than 8, which is not great for matching up with a scalar gpu buffer,
+// so add this alignment qualifier as we never actually touch this info cpu-side => no-simd => no benefit to 16 alignment.
+Draw_Uniform :: struct #align(8)
 {
   model:     mat4,
   mul_color: vec4,
@@ -260,7 +242,8 @@ generate_slang :: proc()
   now := time.now()
   date  := time.to_string_dd_mm_yyyy(now, buf[:])
   hours := time.to_string_hms_12(now, buf2[:])
-  fmt.sbprintf(&b, "// NOTE: This code was generated on %v (%v)\n\n", date, hours)
+  fmt.sbprintfln(&b, "// NOTE: This code was generated on %v (%v)\n", date, hours)
+  // fmt.sbprintfln(&b, "import common;")
 
   // TODO: There's gotta be some way to 'tag' structs as ones that need to match up with the generated GLSL code
   // That way, don't need to remember to add it here and can instead
@@ -278,7 +261,7 @@ generate_slang :: proc()
 
   if os.write_entire_file(SHADER_DIR + "generated.slang", transmute([]u8) strings.to_string(b)) != nil
   {
-    log.errorf("Failed to write meta shader.")
+    log.errorf("Failed to write slang structs.")
   }
 }
 
@@ -403,29 +386,12 @@ material_uniform :: proc(material: Material) -> (uniform: Material_Uniform)
   emissive := get_texture(material.emissive)
   normal   := get_texture(material.normal)
 
-  // NOTE: Only send over the info if all the textures have been loaded
-  if diffuse  != nil &&
-     specular != nil &&
-     emissive != nil &&
-     normal   != nil
-  {
-     // NOTE: We are bindless with materials now!
-     // So we just send over indexes
+  uniform.diffuse  = diffuse.index
+  uniform.specular = specular.index
+  uniform.emissive = emissive.index
+  uniform.normal   = normal.index
 
-     uniform.diffuse  = diffuse.index
-     uniform.specular = specular.index
-     uniform.emissive = emissive.index
-     uniform.normal   = normal.index
-
-     uniform.shininess = material.shininess
-  }
-  else
-  {
-    // TODO: Maybe consider having the missing purple texture always
-    // present at a specific index in the texture_handles ssbo
-    // so that can be set instead,
-    log.warnf("Tried to set material with unloaded material")
-  }
+  uniform.shininess = material.shininess
 
   return uniform
 }
@@ -557,7 +523,6 @@ make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pi
   path := join_file_path({SHADER_DIR, name}, context.temp_allocator)
 
   code: []byte
-  put_push: bool
 
   if strings.ends_with(path, ".slang")
   {

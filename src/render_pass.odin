@@ -9,10 +9,8 @@ Render_Target :: struct
 
 Attachment_Description :: enum u8
 {
-  COLOR,
-  HDR_COLOR,
+  COLOR, // HDR always right now. If i ever do a gbuffer type thing probably then time to be more granular
   DEPTH,
-  DEPTH_STENCIL,
   DEPTH_CUBE,
   DEPTH_CUBE_ARRAY,
 }
@@ -29,7 +27,6 @@ Depth_Test_Mode :: enum u8
   DISABLED,
   ALWAYS,
   LESS,
-  LESS_EQUAL,
 }
 
 Vertex_Primitive :: enum u8
@@ -116,23 +113,24 @@ make_render_target :: proc(width, height: u32, attachments: []Attachment_Descrip
       case .COLOR:
         format  = .RGBA16F
         type    = .D2
-        sampler = .CLAMP_LINEAR
-      case .HDR_COLOR:
-        unimplemented()
+        sampler = .CLAMP_WHITE
       case .DEPTH:
-        unimplemented()
-      case .DEPTH_STENCIL:
-        unimplemented()
+        format  = .DEPTH32
+        type    = .D2
+        sampler = .CLAMP_WHITE
       case .DEPTH_CUBE:
-        unimplemented()
+        format  = .DEPTH32
+        type    = .CUBE
+        sampler = .CLAMP_WHITE
       case .DEPTH_CUBE_ARRAY:
-        unimplemented()
+        format  = .DEPTH32
+        type    = .CUBE
+        sampler = .CLAMP_WHITE
     }
 
     texture := alloc_texture(type, {.TARGET}, format, sampler, u32(state.window.w), u32(state.window.h))
     append(&target.attachments, texture)
   }
-
 
   return target
 }

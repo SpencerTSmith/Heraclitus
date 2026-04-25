@@ -18,6 +18,18 @@ GPU_Upload :: struct
   size:       int,
 }
 
+Pipeline_Key :: enum
+{
+  PHONG,
+  SKYBOX,
+  RESOLVE_HDR,
+  SUN_DEPTH,
+  POINT_DEPTH,
+  GAUSSIAN,
+  GET_BRIGHT,
+  IMMEDIATE,
+}
+
 Renderer :: struct
 {
   pipelines: [Pipeline_Key]Pipeline,
@@ -25,16 +37,17 @@ Renderer :: struct
 
   // TODO: Hmm maybe should be enum array too, these must all be the same dimensions as backbuffer
   // so simple to loop over enum array when resizing swapchain/window
-  // hdr_ms_buffer:     Framebuffer,
-  // post_buffer:       Framebuffer,
-  // ping_pong_buffers: [2]Framebuffer,
-  //
-  // point_depth_buffer: Framebuffer,
-  // sun_depth_buffer:   Framebuffer,
+  main_target: Render_Target,
+  post_target: Render_Target,
+
+  ping_pong_targets: [2]Render_Target,
+
+  point_shadow_target: Render_Target,
+  sun_shadow_target:   Render_Target,
 
   bound_pipeline: Pipeline,
 
-  upload_queue: [dynamic; 32]GPU_Upload,
+  upload_queue: [dynamic; 256]GPU_Upload,
 
   // Mega buffers
   vertex_buffer:   GPU_Buffer(Mesh_Vertex),
@@ -50,8 +63,9 @@ Renderer :: struct
 
   uniform_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer(Frame_Uniform),
 
-  staging_buffer: [FRAMES_IN_FLIGHT]GPU_Buffer(byte),
+  staging_buffer: GPU_Buffer(byte),
   staging_offset: int,
+  staging_tails:  [FRAMES_IN_FLIGHT]int,
 
   draw_commands: [FRAMES_IN_FLIGHT]GPU_Buffer(Draw_Command),
   draw_uniforms: [FRAMES_IN_FLIGHT]GPU_Buffer(Draw_Uniform),
@@ -72,8 +86,8 @@ Renderer :: struct
 }
 
 MAX_DRAWS     :: 64 * mem.Kilobyte
-MAX_VERTICES  :: 4  * mem.Megabyte
-MAX_INDICES   :: 16 * mem.Megabyte
+MAX_VERTICES  :: 4 * mem.Megabyte
+MAX_INDICES   :: 8 * mem.Megabyte
 MAX_MATERIALS :: 512
 
 MAX_IMMEDIATE_VERTICES :: 256 * mem.Kilobyte
@@ -128,12 +142,17 @@ init_renderer :: proc() -> (ok: bool)
   init_vulkan(state.window)
   generate_slang()
 
+  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR, .DEPTH})
+  state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
+
   state.renderer.vertex_buffer   = make_gpu_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
-  state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_VERTICES, {.INDEX_DATA, .DEVICE_LOCAL})
+  state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_INDICES, {.INDEX_DATA, .DEVICE_LOCAL})
   state.renderer.material_buffer = make_gpu_buffer(Material_Uniform, MAX_MATERIALS, {.STORAGE_DATA, .DEVICE_LOCAL})
 
   state.renderer.uniform_buffer = make_ring_gpu_buffers(Frame_Uniform, 1, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
-  state.renderer.staging_buffer = make_ring_gpu_buffers(byte, 64 * mem.Megabyte, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
+
+  // FIXME: Just brute forcing staging being simple by having a GINORMOUS staging buffer
+  state.renderer.staging_buffer = make_gpu_buffer(byte, 448 * mem.Megabyte, {.STORAGE_DATA, .CPU_MAPPED})
 
   state.renderer.draw_commands = make_ring_gpu_buffers(Draw_Command, MAX_DRAWS, {.STORAGE_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
   state.renderer.draw_uniforms = make_ring_gpu_buffers(Draw_Uniform, MAX_DRAWS, {.STORAGE_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
@@ -143,11 +162,11 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch.
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", .RGBA16F)
+  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32)
   assert(ok)
 
   // FIXME: Using test shaders.
-  state.renderer.pipelines[.PHONG], ok = make_pipeline("test.slang", .RGBA16F)
+  state.renderer.pipelines[.PHONG], ok = make_pipeline("test.slang", .RGBA16F, .DEPTH32)
   assert(ok)
 
   state.renderer.bloom_on = true
@@ -158,8 +177,6 @@ init_renderer :: proc() -> (ok: bool)
 
 begin_render_frame :: proc() -> (ok: bool)
 {
-  // TODO: Get shader hot reloading up and running
-  // TODO: Bind global frame uniforms
   // TODO: Resize render targets to window size if changed
   hot_reload_shaders(&state.renderer.pipelines)
 
@@ -167,6 +184,17 @@ begin_render_frame :: proc() -> (ok: bool)
 
   if ok
   {
+    projection := camera_perspective(state.camera, window_aspect_ratio(state.window))
+    view       := camera_view(state.camera)
+    // Write out frame uniforms
+    state.renderer.uniform_buffer[curr_frame_idx()].cpu_base[0] =
+    {
+      projection      = projection,
+      view            = view,
+      proj_view       = projection * view,
+      camera_position = vec4_from_3(state.camera.position),
+    }
+
     vk_do_uploads(state.renderer.upload_queue)
     clear(&state.renderer.upload_queue)
     state.renderer.frame_began = true
@@ -178,63 +206,84 @@ begin_render_frame :: proc() -> (ok: bool)
 // NOTE: Will use the very first attachment
 flush_render_frame :: proc(to_display: Texture)
 {
+  state.renderer.staging_tails[curr_frame_idx()] = state.renderer.staging_offset
+
   state.renderer.immediate.vertex_count = 0
   clear(&state.renderer.immediate.batches)
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
   state.renderer.draw_count = 0
   state.renderer.draw_head  = 0
-  state.renderer.staging_offset = 0
 
   vk_flush_render_frame(to_display)
   state.renderer.frame_began = false
 }
 
-// This may be voodoo with the polymorphism
+@(private="file")
+copy_to_staging :: proc(data: []$Type) -> (staging_offset, byte_size: int)
+{
+  byte_size = len(data) * size_of(Type)
+
+  tail := state.renderer.staging_tails[curr_frame_idx()]
+
+  // No room from here to the end of the physical buffer... check if we can potentially wrap around
+  if state.renderer.staging_offset + byte_size >= state.renderer.staging_buffer.count
+  {
+    if byte_size < tail
+    {
+      state.renderer.staging_offset = 0
+    }
+    else
+    {
+      panic("Unable to push anything more to GPU staging buffer!")
+    }
+  }
+  else if state.renderer.staging_offset < tail && state.renderer.staging_offset + byte_size >= tail
+  {
+    panic("Unable to push anything more to GPU staging buffer!")
+  }
+
+  staging_ptr := uintptr(state.renderer.staging_buffer.cpu_base) + uintptr(state.renderer.staging_offset)
+  mem.copy(rawptr(staging_ptr), raw_data(data), byte_size)
+
+  staging_offset = state.renderer.staging_offset
+
+  state.renderer.staging_offset += byte_size
+
+  return staging_offset, byte_size
+}
+
+@(private="file")
 queue_buffer_upload :: proc(data: []$Type, dst: GPU_Buffer(Type), dst_offset: int)
 {
-  byte_size   := len(data) * size_of(Type)
+  staging_offset, byte_size := copy_to_staging(data)
   byte_offset := dst_offset * size_of(Type)
-
-  assert(state.renderer.staging_offset + byte_size < state.renderer.staging_buffer[curr_frame_idx()].count)
 
   upload: GPU_Upload =
   {
-    src_buffer = state.renderer.staging_buffer[curr_frame_idx()],
-    src_offset = state.renderer.staging_offset,
+    src_buffer = state.renderer.staging_buffer,
+    src_offset = staging_offset,
     dst        = gpu_buffer_as_bytes(dst),
     dst_offset = byte_offset,
     size       = byte_size,
   }
 
-  // Copy to staging.
-  staging_ptr := uintptr(state.renderer.staging_buffer[curr_frame_idx()].cpu_base) + uintptr(state.renderer.staging_offset)
-  mem.copy(rawptr(staging_ptr), raw_data(data), upload.size)
-
-  append(&state.renderer.upload_queue, upload)
-
-  state.renderer.staging_offset += upload.size
+  ensure(append(&state.renderer.upload_queue, upload) == 1)
 }
 
 upload_texture :: proc(data: []byte, dst: Texture)
 {
-  assert(state.renderer.staging_offset + len(data) < state.renderer.staging_buffer[curr_frame_idx()].count)
+  staging_offset, byte_size := copy_to_staging(data)
 
   upload: GPU_Upload =
   {
-    src_buffer = state.renderer.staging_buffer[curr_frame_idx()],
-    src_offset = state.renderer.staging_offset,
+    src_buffer = state.renderer.staging_buffer,
+    src_offset = staging_offset,
     dst        = dst,
-    size       = len(data),
+    size       = byte_size,
   }
 
-  // Copy to staging.
-  staging_ptr := uintptr(state.renderer.staging_buffer[curr_frame_idx()].cpu_base) + uintptr(state.renderer.staging_offset)
-  mem.copy(rawptr(staging_ptr), raw_data(data), upload.size)
-
-  append(&state.renderer.upload_queue, upload)
-
-  state.renderer.staging_offset += upload.size
+  ensure(append(&state.renderer.upload_queue, upload) == 1)
 }
 
 upload_model :: proc(vertices: []Mesh_Vertex, indices: []Mesh_Index) -> (vertex_offset, index_offset: u32)
@@ -265,12 +314,11 @@ upload_materials :: proc(materials: ^[]Material)
   if (state.renderer.material_count + len(materials)) < MAX_MATERIALS
   {
     uniforms := make([]Material_Uniform, len(materials), context.temp_allocator)
-    write_offset := state.renderer.material_count * size_of(uniforms[0])
 
     for &material, idx in materials
     {
       uniforms[idx] = material_uniform(material)
-      material.buffer_index = u32(state.renderer.material_count)
+      material.buffer_index = u32(idx + state.renderer.material_count)
     }
 
     queue_buffer_upload(uniforms, state.renderer.material_buffer, state.renderer.material_count)
@@ -287,18 +335,8 @@ push_draw :: proc(command: Draw_Command, uniform: Draw_Uniform)
 {
   if (state.renderer.draw_count + 1 < MAX_DRAWS)
   {
-    // Draw Command
-    {
-      command := command
-      command.first_index += cast(u32)state.renderer.index_count
-
-      state.renderer.draw_commands[curr_frame_idx()].cpu_base[state.renderer.draw_count] = command
-    }
-
-    // Draw Uniform
-    {
-      state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[state.renderer.draw_count] = uniform
-    }
+    state.renderer.draw_commands[curr_frame_idx()].cpu_base[state.renderer.draw_count] = command
+    state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[state.renderer.draw_count] = uniform
 
     state.renderer.draw_count += 1
   }
@@ -319,6 +357,8 @@ mega_draw :: proc()
     vertices      = state.renderer.vertex_buffer.gpu_base,
     material_uniforms = state.renderer.material_buffer.gpu_base,
   }
+
+  // print(state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[0], state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[1])
 
   batch_count := u32(state.renderer.draw_count - state.renderer.draw_head)
   vk_draw_indirect(state.renderer.index_buffer, state.renderer.draw_commands[curr_frame_idx()], u32(state.renderer.draw_head), batch_count, push)

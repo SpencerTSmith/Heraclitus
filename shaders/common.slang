@@ -23,3 +23,10 @@ float3 point_phong(Point_Light_Uniform light, float3 diffuse_sample, float3 spec
   // TODO
   return 0.0;
 }
+
+float3 phong_ambient(float ambient_intensity, float3 color)
+{
+	float3 ambient = ambient_intensity * color;
+
+  return ambient;
+}

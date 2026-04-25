@@ -1,15 +1,16 @@
 import generated;
+import common;
 
 struct VSOutput
 {
-  float2   uv       : TEXCOORD0;
   float4   position : SV_Position;
+  float2   uv;
   float3   normal; // FIXME: Info contained in TBN matrix.
   float4   world_position;
   float4   sun_space_position;
   float3x3 TBN;
 
-  flat uint draw_id;
+  nointerpolation uint draw_id;
 }
 
 [shader("vertex")]
@@ -51,7 +52,7 @@ float4 frag_main(uniform Mega_Push push, VSOutput i) : SV_Target0
 
   Material_Uniform material = push.material_uniforms[draw.material_index];
 
-  float4 mult_color = push.draw_uniforms[i.draw_id];
+  float4 mul_color = draw.mul_color;
 
   float alpha            = sample2D(material.diffuse, i.uv).a;
   float3 diffuse_sample  = sample2D(material.diffuse, i.uv).rgb;
@@ -65,17 +66,19 @@ float4 frag_main(uniform Mega_Push push, VSOutput i) : SV_Target0
   // Find actual transformed normal
   float3 normal = normalize(mul(i.TBN, normal_map));
 
-  float3 view_direction = normalize(frame->camera_position.xyz - i.world_position);
+  float3 view_direction = normalize(frame->camera_position.xyz - i.world_position.xyz);
 
   float3 ambient = float3(0.02);
 
   float3 all_point_phong = float3(0.0);
-
   for (uint shadow_index = 0; shadow_index < frame->shadow_points_count; shadow_index++)
   {
     Shadow_Point_Light_Uniform light = frame->shadow_point_lights[shadow_index];
 
-    float point_shadow = 1.0 - point_shadow(point_shadow_index);
+    float point_shadow = 1.0 - point_shadow(point_shadow_index, shadow_index,
+                                            i.world_position.xyz, normal,
+                                            light.position.xyz, light.radius,
+                                            frame->camera_position.xyz);
 
     Point_Light_Uniform temp =
     {
@@ -87,8 +90,11 @@ float4 frag_main(uniform Mega_Push push, VSOutput i) : SV_Target0
     };
 
     float3 point_phong = point_phong(temp, diffuse_sample, specular_sample, material.shininess,
-                                     normal, view_direction, i.world_position);
+                                     normal, view_direction, i.world_position.xyz);
+    point_phong *= point_shadow;
+
+    ambient += phong_ambient(light.ambient, light.color.xyz);
   }
 
-  return result;
+  return float4(result, alpha) * mul_color;
 }

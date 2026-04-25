@@ -120,7 +120,7 @@ mat4_orthographic :: proc(left, right, bottom, top, near, far: f32) -> (m: mat4)
 
   return m
 }
-mat4_look_at      :: glsl.mat4LookAt
+mat4_look_at :: glsl.mat4LookAt
 
 lerp :: glsl.lerp
 

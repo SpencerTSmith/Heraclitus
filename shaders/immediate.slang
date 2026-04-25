@@ -3,9 +3,9 @@ import common;
 
 struct VSOutput
 {
-  float2 uv    : TEXCOORD0;
-  float4 color : COLOR0;
-  float4 pos   : SV_Position;
+  float4 position : SV_Position;
+  float2 uv       : TEXCOORD0;
+  float4 color    : TEXCOORD1;
 }
 
 [shader("vertex")]
@@ -14,9 +14,9 @@ VSOutput vert_main(uniform Immediate_Push push, uint vid : SV_VulkanVertexID)
   Immediate_Vertex vertex = push.vertices[vid];
 
   VSOutput o;
-  o.uv    = vertex.uv;
-  o.color = vertex.color;
-  o.pos   = mul(push.transform, float4(vertex.position, 1.0));
+  o.uv       = vertex.uv;
+  o.color    = vertex.color;
+  o.position = mul(push.transform, float4(vertex.position, 1.0));
   return o;
 }
 
