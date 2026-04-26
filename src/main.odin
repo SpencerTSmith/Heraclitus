@@ -102,7 +102,7 @@ init_state :: proc() -> (ok: bool)
     inner_cutoff = cos(radians(cast(f32)12.5)),
     outer_cutoff = cos(radians(cast(f32)17.5)),
   }
-  state.flashlight_on = true
+  state.flashlight_on = false
 
   init_entities()
   init_renderer()
@@ -303,6 +303,14 @@ main :: proc()
         do_editor(&state.camera, dt_s)
       case .MENU:
         update_menu()
+    }
+
+    for &e in all_entities()
+    {
+      if e.point_light != nil
+      {
+        e.point_light.position = e.position
+      }
     }
 
     // RENDER

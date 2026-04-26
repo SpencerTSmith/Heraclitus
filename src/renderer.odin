@@ -153,6 +153,9 @@ init_renderer :: proc() -> (ok: bool)
   state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR, .DEPTH})
   state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
 
+  state.renderer.point_shadow_target = make_render_target(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, {.DEPTH})
+  state.renderer.sun_shadow_target   = make_render_target(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, {.DEPTH})
+
   state.renderer.vertex_buffer   = make_gpu_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
   state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_INDICES, {.INDEX_DATA, .DEVICE_LOCAL})
   state.renderer.material_buffer = make_gpu_buffer(Material_Uniform, MAX_MATERIALS, {.STORAGE_DATA, .DEVICE_LOCAL})
@@ -213,38 +216,44 @@ begin_render_frame :: proc() -> (ok: bool)
       camera_position  = vec4_from_3(state.camera.position),
       z_near           = state.camera.z_near,
       z_far            = state.camera.z_far,
-      sun_light        = direction_light_uniform(state.sun),
-      flash_light      = spot_light_uniform(state.flashlight),
-      skybox_index     = get_texture(state.skybox).index,
+      sun_light        = direction_light_uniform(state.sun) if state.sun_on else {},
+      flash_light      = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
+      skybox_index     = get_texture(state.skybox).index if state.sun_on else get_texture(WHITE_TEXTURE).index,
       sun_shadow_index = get_texture(WHITE_TEXTURE).index,
     }
 
+    camera_frustum := make_frustum(state.camera, window_aspect_ratio(state.window))
     for pl in state.point_lights
     {
-      // Try to add shadow casting to the shadow casting array first
-      if pl.cast_shadows && frame.shadow_points_count <= MAX_SHADOW_POINT_LIGHTS
+      // Cull any point lights that don't cast light into the camera frustum
+      light_sphere := make_sphere(pl.position, pl.radius)
+      if sphere_inside_frustum(light_sphere, camera_frustum)
       {
-        idx := frame.shadow_points_count
-        frame.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
-        frame.shadow_points_count += 1
-      }
-      else
-      {
-        // If we had too many try to add to the normal point lights
-        if pl.cast_shadows
+        // Try to add shadow casting to the shadow casting array first
+        if pl.cast_shadows && frame.shadow_points_count <= MAX_SHADOW_POINT_LIGHTS
         {
-          log.errorf("Too many shadow casting point lights! Attempting to add to non shadow casting lights.")
-        }
-
-        if frame.points_count <= MAX_POINT_LIGHTS
-        {
-          idx := frame.points_count
-          frame.point_lights[idx] = point_light_uniform(pl)
-          frame.points_count += 1
+          idx := frame.shadow_points_count
+          frame.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
+          frame.shadow_points_count += 1
         }
         else
         {
-          log.errorf("Too many point lights! Ignoring.")
+          // If we had too many try to add to the normal point lights
+          if pl.cast_shadows
+          {
+            log.errorf("Too many shadow casting point lights! Attempting to add to non shadow casting lights.")
+          }
+
+          if frame.points_count <= MAX_POINT_LIGHTS
+          {
+            idx := frame.points_count
+            frame.point_lights[idx] = point_light_uniform(pl)
+            frame.points_count += 1
+          }
+          else
+          {
+            log.errorf("Too many point lights! Ignoring.")
+          }
         }
       }
     }

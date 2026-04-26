@@ -421,7 +421,7 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
     {
       structureSize = size_of(slang.TargetDesc),
       format        = .SPIRV,
-      profile       = global_session->findProfile("glsl_450"),
+      profile       = global_session->findProfile("spirv_1_6"),
       flags         = .GENERATE_SPIRV_DIRECTLY,
     }
 
@@ -460,45 +460,18 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
 
     if module != nil
     {
-      vert_entry_point: ^slang.IEntryPoint
-      module->findEntryPointByName("vert_main", &vert_entry_point)
-      defer vert_entry_point->release()
-
-      frag_entry_point: ^slang.IEntryPoint
-      module->findEntryPointByName("frag_main", &frag_entry_point)
-      defer frag_entry_point->release()
-
-      components: []^slang.IComponentType =
+      spirv_blob: ^slang.IBlob
+      if slang.result_failed(module->getTargetCode(0, &spirv_blob, &diagnostic))
       {
-        module,
-        vert_entry_point,
-        frag_entry_point,
+        if diagnostic != nil
+        {
+          log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
+        }
       }
-
-      composite: ^slang.IComponentType
-
-      if slang.result_failed(session->createCompositeComponentType(raw_data(components), len(components), &composite, &diagnostic))
-      {
-        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
-      }
-      defer composite->release()
-
-      linked: ^slang.IComponentType
-      if slang.result_failed(composite->link(&linked, &diagnostic))
-      {
-        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
-      }
-      defer linked->release()
-
-      spv_blob: ^slang.IBlob
-      if slang.result_failed(linked->getTargetCode(0, &spv_blob, &diagnostic))
-      {
-        log.errorf("Error compiling shader:\n%v", cstring(cast([^]byte)diagnostic->getBufferPointer()))
-      }
-      defer spv_blob->release()
+      defer spirv_blob->release()
 
       // So don't have to deal with slang release bullshit.
-      code = slice.clone(slice.bytes_from_ptr(spv_blob->getBufferPointer(), int(spv_blob->getBufferSize())), context.temp_allocator)
+      code = slice.clone(slice.bytes_from_ptr(spirv_blob->getBufferPointer(), int(spirv_blob->getBufferSize())), context.temp_allocator)
     }
     else
     {

@@ -51,17 +51,17 @@ Frustum_Face :: enum
 }
 Frustum :: distinct [Frustum_Face]Plane
 
-make_frustum :: proc(camera: Camera, aspect_ratio, z_near, z_far: f32) -> (frustum: Frustum)
+make_frustum :: proc(camera: Camera, aspect_ratio: f32) -> (frustum: Frustum)
 {
   forward, up, right := get_camera_axes(camera)
 
   // Half the width of the vertical axis of view
-  half_v_side := z_far * tan(radians(camera.curr_fov_y) * 0.5)
+  half_v_side := camera.z_far * tan(radians(camera.curr_fov_y) * 0.5)
   // Half the width of the horizontal axis of view
   half_h_side := aspect_ratio * half_v_side
 
-  near_forward := z_near * forward
-  far_forward  := z_far * forward
+  near_forward := camera.z_near * forward
+  far_forward  := camera.z_far * forward
 
   // Self explanatory I think, normals point into the frustum
   frustum[.NEAR] = make_plane(forward, camera.position + near_forward)
@@ -105,10 +105,27 @@ sphere_inside_frustum :: proc(sphere: Sphere, frustum: Frustum) -> (inside: bool
   return inside
 }
 
-make_sphere :: proc(aabb: AABB) -> (sphere: Sphere)
+make_sphere :: proc
+{
+  make_sphere_from_aabb,
+  make_sphere_direct,
+}
+
+make_sphere_from_aabb :: proc(aabb: AABB) -> (sphere: Sphere)
 {
   sphere.center = aabb_center(aabb)
   sphere.radius = length(aabb.max - sphere.center)
+
+  return sphere
+}
+
+make_sphere_direct :: proc(center: vec3, radius: f32) -> (sphere: Sphere)
+{
+  sphere =
+  {
+    center = center,
+    radius = radius
+  }
 
   return sphere
 }
