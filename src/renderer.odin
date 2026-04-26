@@ -225,7 +225,6 @@ begin_render_frame :: proc() -> (ok: bool)
         idx := frame.shadow_points_count
         frame.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
         frame.shadow_points_count += 1
-        print(frame.shadow_point_lights[idx])
       }
       else
       {
