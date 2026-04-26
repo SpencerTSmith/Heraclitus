@@ -36,10 +36,10 @@ Menu_Item_Info :: struct
 @(private="file")
 menu: Menu
 
-init_menu :: proc () -> (ok: bool)
+init_menu :: proc ()
 {
-  menu.title_font, ok = make_font("Diablo_Light.ttf", 90.0)
-  menu.item_font, ok  = make_font("Diablo_Light.ttf", 50.0)
+  menu.title_font = make_font("Diablo_Light.ttf", 90.0)
+  menu.item_font  = make_font("Diablo_Light.ttf", 50.0)
 
   menu.items =
   {
@@ -47,8 +47,6 @@ init_menu :: proc () -> (ok: bool)
     .RESET  = {"Reset",  "", false, {0, 0}, {0, 0}},
     .QUIT   = {"Quit",   "Confirm Quit?", false, {0, 0}, {0, 0}},
   }
-
-  return ok
 }
 
 toggle_menu :: proc()
@@ -68,7 +66,7 @@ toggle_menu :: proc()
   }
 }
 
-update_menu_input :: proc()
+update_menu :: proc()
 {
   // Stinks but kind of have to do this to figure out the size
   // once I start work on the generalized ui system... can replace
@@ -139,12 +137,12 @@ update_menu_input :: proc()
 
 draw_menu :: proc()
 {
-  // bind_framebuffer(DEFAULT_FRAMEBUFFER)
-  // clear_framebuffer(DEFAULT_FRAMEBUFFER, color=LEARN_OPENGL_BLUE)
+  begin_render_pass({clear_color=LEARN_OPENGL_BLUE}, &state.renderer.main_target)
+  defer end_render_pass()
 
   x_title := f32(state.window.w) * 0.5
   y_title := f32(state.window.h) * 0.2
-  draw_text("Heraclitus", menu.title_font, x_title, y_title, WHITE, .CENTER)
+  draw_text(state.window.title, menu.title_font, x_title, y_title, WHITE, .CENTER)
 
   for info, item in menu.items
   {
@@ -172,6 +170,6 @@ draw_menu :: proc()
               color, .CENTER)
   }
 
-  immediate_flush(flush_world=false, flush_screen=true)
+  immediate_flush(flush_world=true, flush_screen=true)
 }
 

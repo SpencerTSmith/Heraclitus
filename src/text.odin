@@ -50,7 +50,7 @@ Text_Alignment :: enum
   RIGHT,
 }
 
-make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool)
+make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool) #optional_ok
 {
   rel_path := join_file_path({FONT_DIR, file_name}, context.temp_allocator)
 
@@ -106,6 +106,11 @@ make_font :: proc(file_name: string, pixel_height: f32) -> (font: Font, ok: bool
     {
       log.error("STB Truetype could not init font file: %s", rel_path)
     }
+  }
+
+  if !ok
+  {
+    font = state.default_font
   }
 
   return font, ok

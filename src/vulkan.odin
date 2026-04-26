@@ -35,7 +35,6 @@ Frame_State :: struct
 {
   pool:      vk.CommandPool,
   buffer:    vk.CommandBuffer,
-  fence:     vk.Fence,
   semaphore: vk.Semaphore,
 }
 
@@ -81,16 +80,18 @@ Vulkan_Internal :: union
 @(private="file")
 vks: struct
 {
-  instance:   vk.Instance,
-  messenger:  vk.DebugUtilsMessengerEXT,
-  physical:   vk.PhysicalDevice,
-  logical:    vk.Device,
-  queues:     [Queue_Kind]vk.Queue,
-  surface:    vk.SurfaceKHR,
-  swapchain:  Swapchain,
-  frames:     [FRAMES_IN_FLIGHT]Frame_State,
-  curr_index: [enum {FRAME,TARGET}]u32, // Is this voodoo?
-  arenas:     [Vulkan_Arena_Kind]Vulkan_Arena,
+  instance:        vk.Instance,
+  messenger:       vk.DebugUtilsMessengerEXT,
+  physical:        vk.PhysicalDevice,
+  logical:         vk.Device,
+  queues:          [Queue_Kind]vk.Queue,
+  surface:         vk.SurfaceKHR,
+  swapchain:       Swapchain,
+  frame_semaphore: vk.Semaphore,
+  frames:          [FRAMES_IN_FLIGHT]Frame_State,
+  acquired_image:  u32,
+  current_frame:   u32,
+  arenas:          [Vulkan_Arena_Kind]Vulkan_Arena,
 
   samplers: [Sampler_Preset]vk.Sampler,
 
@@ -556,6 +557,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       descriptorBindingPartiallyBound              = true,
       runtimeDescriptorArray                       = true,
       descriptorBindingSampledImageUpdateAfterBind = true,
+      timelineSemaphore                            = true,
       pNext = &required_device_features13,
     }
     required_device_features11: vk.PhysicalDeviceVulkan11Features =
@@ -647,6 +649,20 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // Frame stuff
       // // //
 
+      time_semaphore_type_info: vk.SemaphoreTypeCreateInfo =
+      {
+        sType         = .SEMAPHORE_TYPE_CREATE_INFO,
+        semaphoreType = .TIMELINE,
+        initialValue  = 0,
+      }
+      time_semaphore_info: vk.SemaphoreCreateInfo =
+      {
+        sType = .SEMAPHORE_CREATE_INFO,
+        pNext = &time_semaphore_type_info,
+      }
+      vk_assert(vk.CreateSemaphore(vks.logical, &time_semaphore_info, nil, &vks.frame_semaphore),
+                "Unable to create vulkan frame timeline semaphore.")
+
       for &frame in vks.frames
       {
         pool_info: vk.CommandPoolCreateInfo =
@@ -667,14 +683,6 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
         }
         vk_assert(vk.AllocateCommandBuffers(vks.logical, &buffer_info, &frame.buffer),
                   "Unable to allocate vulkan command buffer.")
-
-        fence_info: vk.FenceCreateInfo =
-        {
-          sType = .FENCE_CREATE_INFO,
-          flags = {.SIGNALED},
-        }
-        vk_assert(vk.CreateFence(vks.logical, &fence_info, nil, &frame.fence),
-                  "Unable to create vulkan fence")
 
         semaphore_info: vk.SemaphoreCreateInfo =
         {
@@ -1230,15 +1238,23 @@ vk_begin_render_frame :: proc() -> (ok: bool)
 
   A_SECOND :: 1000000000
 
-  frame := vks.frames[vks.curr_index[.FRAME]]
-  vk_assert(vk.WaitForFences(vks.logical, 1, &frame.fence, true, A_SECOND),
-            "Unable to wait on vulkan fence.")
+  frame := vks.frames[curr_frame_idx()]
 
-  vk_assert(vk.ResetFences(vks.logical, 1, &frame.fence),
-            "Unable to reset vulkan fence.")
+  if state.renderer.frame_count + 1 > FRAMES_IN_FLIGHT
+  {
+    wait_value := state.renderer.frame_count + 1 - FRAMES_IN_FLIGHT
+    wait_info: vk.SemaphoreWaitInfo =
+    {
+      sType          = .SEMAPHORE_WAIT_INFO,
+      pSemaphores    = &vks.frame_semaphore,
+      semaphoreCount = 1,
+      pValues        = &wait_value,
+    }
+    vk.WaitSemaphores(vks.logical, &wait_info, A_SECOND)
+  }
 
   // Try to acquire an image, when we do: signal this frames semaphore we can start rendering.
-  if acquire := vk.AcquireNextImageKHR(vks.logical, vks.swapchain.handle, A_SECOND, frame.semaphore, {}, &vks.curr_index[.TARGET]);
+  if acquire := vk.AcquireNextImageKHR(vks.logical, vks.swapchain.handle, A_SECOND, frame.semaphore, {}, &vks.acquired_image);
      acquire != .SUCCESS
   {
     if state.window.should_resize || acquire == .ERROR_OUT_OF_DATE_KHR
@@ -1276,8 +1292,8 @@ vk_begin_render_frame :: proc() -> (ok: bool)
 
 vk_flush_render_frame :: proc(to_display: Texture)
 {
-  frame := vks.frames[vks.curr_index[.FRAME]]
-  target := vks.swapchain.targets[vks.curr_index[.TARGET]]
+  frame := vks.frames[curr_frame_idx()]
+  target := vks.swapchain.targets[vks.acquired_image]
 
   display_image := vk_get_image(to_display.internal)
 
@@ -1338,13 +1354,17 @@ vk_flush_render_frame :: proc(to_display: Texture)
   wait_info   := semaphore_submit_info(frame.semaphore, {.COLOR_ATTACHMENT_OUTPUT})
 
   // After submitting we signal that this target is ready for presentation.
-  signal_info := semaphore_submit_info(target.semaphore, {.ALL_GRAPHICS})
+  signal_info: []vk.SemaphoreSubmitInfo =
+  {
+    semaphore_submit_info(target.semaphore, {.ALL_GRAPHICS}),
+    semaphore_submit_info(vks.frame_semaphore, {.ALL_COMMANDS}, state.renderer.frame_count + 1),
+  }
 
   submit_info: vk.SubmitInfo2 =
   {
     sType                    = .SUBMIT_INFO_2,
-    pSignalSemaphoreInfos    = &signal_info,
-    signalSemaphoreInfoCount = 1,
+    pSignalSemaphoreInfos    = raw_data(signal_info),
+    signalSemaphoreInfoCount = u32(len(signal_info)),
     pWaitSemaphoreInfos      = &wait_info,
     waitSemaphoreInfoCount   = 1,
     pCommandBufferInfos      = &cmd_info,
@@ -1354,7 +1374,7 @@ vk_flush_render_frame :: proc(to_display: Texture)
   // Submit all rendering commands for this frame, waiting for the image,
   // and signalling that we are done rendering
   // as well as fencing this frame
-  vk_assert(vk.QueueSubmit2(vks.queues[.GRAPHICS], 1, &submit_info, frame.fence),
+  vk_assert(vk.QueueSubmit2(vks.queues[.GRAPHICS], 1, &submit_info, {}),
             "Unable to submit vulkan command buffer recording.")
 
   // Finally wait to present until this target is done with rendering.
@@ -1366,7 +1386,7 @@ vk_flush_render_frame :: proc(to_display: Texture)
     swapchainCount     = 1,
     pWaitSemaphores    = &target.semaphore, // Wait for all draws to be done on this target
     waitSemaphoreCount = 1,
-    pImageIndices      = &vks.curr_index[.TARGET],
+    pImageIndices      = &vks.acquired_image,
   }
 
   if present := vk.QueuePresentKHR(vks.queues[.PRESENT], &present_info);
@@ -1383,13 +1403,6 @@ vk_flush_render_frame :: proc(to_display: Texture)
       log.errorf("Unable to submit vulkan image for presentation: %v.", present)
     }
   }
-
-  vks.curr_index[.FRAME] = (vks.curr_index[.FRAME] + 1) % len(vks.frames)
-}
-
-curr_frame_idx :: proc() -> (idx: u32)
-{
-  return vks.curr_index[.FRAME]
 }
 
 vk_bind_pipeline :: proc(pipeline: Pipeline)
@@ -1443,7 +1456,7 @@ vk_draw_indirect :: proc(indices: GPU_Buffer($Index_Type), commands: GPU_Buffer(
 @(private="file")
 vk_curr_cmd :: proc() -> (buffer: vk.CommandBuffer)
 {
-  buffer = vks.frames[vks.curr_index[.FRAME]].buffer
+  buffer = vks.frames[curr_frame_idx()].buffer
   return buffer
 }
 
@@ -1949,12 +1962,12 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format)
 }
 
 @(private="file")
-semaphore_submit_info :: proc(semaphore: vk.Semaphore, stage: vk.PipelineStageFlags2) -> (info: vk.SemaphoreSubmitInfo)
+semaphore_submit_info :: proc(semaphore: vk.Semaphore, stage: vk.PipelineStageFlags2, value: u64 = 1) -> (info: vk.SemaphoreSubmitInfo)
 {
   info =
   {
-    sType = .SEMAPHORE_SUBMIT_INFO,
-    value = 1,
+    sType    = .SEMAPHORE_SUBMIT_INFO,
+    value    = value,
     stageMask = stage,
     semaphore = semaphore,
   }
@@ -2100,10 +2113,11 @@ free_vulkan :: proc()
     vk.FreeMemory(vks.logical, arena.memory, nil)
     vk.DestroyBuffer(vks.logical, arena.buffer, nil)
   }
+
+  vk.DestroySemaphore(vks.logical, vks.frame_semaphore, nil)
   for frame in vks.frames
   {
     vk.DestroyCommandPool(vks.logical, frame.pool, nil)
-    vk.DestroyFence(vks.logical, frame.fence, nil)
     vk.DestroySemaphore(vks.logical, frame.semaphore, nil)
   }
   free_swapchain(vks.swapchain)

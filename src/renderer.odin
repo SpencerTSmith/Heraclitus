@@ -4,7 +4,7 @@ import "core:log"
 import "core:mem"
 import "core:time"
 
-FRAMES_IN_FLIGHT :: 3
+FRAMES_IN_FLIGHT :: 2
 TARGET_FPS :: 240
 TARGET_FRAME_TIME_NS :: time.Duration(BILLION / TARGET_FPS)
 
@@ -44,6 +44,8 @@ Pipeline_Key :: enum
 
 Renderer :: struct
 {
+  frame_count: u64,
+
   pipelines: [Pipeline_Key]Pipeline,
   samplers:  [Sampler_Preset]u32,
 
@@ -183,6 +185,11 @@ init_renderer :: proc() -> (ok: bool)
   return ok
 }
 
+curr_frame_idx :: proc() -> (idx: u32)
+{
+  return u32(state.renderer.frame_count % FRAMES_IN_FLIGHT)
+}
+
 begin_render_frame :: proc() -> (ok: bool)
 {
   // TODO: Resize render targets to window size if changed
@@ -263,6 +270,7 @@ flush_render_frame :: proc(to_display: Texture)
 
   vk_flush_render_frame(to_display)
   state.renderer.frame_began = false
+  state.renderer.frame_count += 1
 }
 
 @(private="file")

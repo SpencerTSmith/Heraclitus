@@ -166,7 +166,7 @@ get_texture :: proc(handle: Texture_Handle) -> ^Texture
   return &assets.texture_catalog.assets[handle]
 }
 
-load_skybox :: proc(file_paths: [6]string) -> (handle: Texture_Handle, ok: bool)
+load_skybox :: proc(file_paths: [6]string) -> (handle: Texture_Handle, ok: bool) #optional_ok
 {
   texture: Texture
   texture, ok = make_texture_cube_map(file_paths)

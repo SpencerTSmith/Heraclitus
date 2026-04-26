@@ -87,7 +87,6 @@ init_state :: proc() -> (ok: bool)
   state.sun.direction = normalize(state.sun.direction)
   state.sun_on = true
 
-
   state.flashlight =
   {
 
@@ -109,10 +108,9 @@ init_state :: proc() -> (ok: bool)
   init_renderer()
 
   init_assets()
+  state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE)
 
-  // init_menu() or_return
-
-  state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE) or_return
+  init_menu()
 
   cube_map_sides: [6]string =
   {
@@ -123,7 +121,7 @@ init_state :: proc() -> (ok: bool)
     "skybox/front.jpg",
     "skybox/back.jpg",
   }
-  state.skybox = load_skybox(cube_map_sides) or_return
+  state.skybox = load_skybox(cube_map_sides)
 
   return true
 }
@@ -233,13 +231,78 @@ main :: proc()
 
     poll_input_state(state.window, dt_s)
 
+    if key_pressed(.ESCAPE)
+    {
+      toggle_menu()
+    }
+
+    if key_pressed(.F1)
+    {
+      state.renderer.draw_debug = !state.renderer.draw_debug
+    }
+
+    if key_pressed(.TAB)
+    {
+      state.mode = .EDIT if state.mode == .GAME else .GAME
+    }
+
+    if key_pressed(.L)
+    {
+      state.sun_on = !state.sun_on
+    }
+    if key_pressed(.P)
+    {
+      state.point_lights_on = !state.point_lights_on
+    }
+    if key_pressed(.F)
+    {
+      state.flashlight_on = !state.flashlight_on
+    }
+
+    if key_pressed(.B)
+    {
+      state.renderer.bloom_on = !state.renderer.bloom_on
+    }
+
     // UPDATE
     switch state.mode
     {
-    case .GAME:
-    case .EDIT:
-      do_editor(&state.camera, dt_s)
-    case .MENU:
+      case .GAME:
+        move_camera_game(&state.camera, dt_s)
+        state.flashlight.position  = state.camera.position
+        state.flashlight.direction = camera_forward(state.camera)
+
+        //
+        // Collision
+        //
+        for &e in all_entities()
+        {
+          if .STATIC in e.flags { continue } // Static things should not be movable
+          if .COLLISION not_in e.flags { continue }
+
+          entity_aabb := entity_world_aabb(e)
+
+          for &o in all_entities()
+          {
+            if &o == &e { continue } // Same entity
+
+            if .COLLISION not_in o.flags
+            { continue }
+
+            other_aabb := entity_world_aabb(o)
+
+            if aabbs_intersect(entity_aabb, other_aabb)
+            {
+              min_pen := aabb_min_penetration_vector(entity_aabb, other_aabb)
+
+              e.position += min_pen
+            }
+          }
+        }
+      case .EDIT:
+        do_editor(&state.camera, dt_s)
+      case .MENU:
+        update_menu()
     }
 
     // RENDER
@@ -247,22 +310,28 @@ main :: proc()
     {
       defer flush_render_frame(state.renderer.main_target.attachments[0])
 
-      begin_render_pass(MAIN_PASS, &state.renderer.main_target)
+      switch state.mode
       {
-        defer end_render_pass()
+        case .GAME, .EDIT:
+          begin_render_pass(MAIN_PASS, &state.renderer.main_target)
+          {
+            defer end_render_pass()
 
+            for e in all_entities()
+            {
+              draw_entity(e)
+            }
+            mega_draw()
 
-        for e in all_entities()
-        {
-          draw_entity(e)
-        }
-        mega_draw()
+            draw_skybox(state.skybox)
 
-        draw_skybox(state.skybox)
-
-        draw_debug_stats()
-        immediate_flush(true, true)
+            draw_debug_stats()
+            immediate_flush(true, true)
+          }
+        case .MENU:
+          draw_menu()
       }
+
     }
 
     free_all(context.temp_allocator)
