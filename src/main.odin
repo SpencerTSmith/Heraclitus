@@ -79,7 +79,7 @@ init_state :: proc() -> (ok: bool)
 
   state.sun =
   {
-    direction = {0.5, -1.0,  0.7},
+    direction = {0.0, -1.0,  0.0},
     color     = {0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
     ambient   = 0.05,
@@ -326,6 +326,19 @@ main :: proc()
             draw_skybox(state.skybox)
 
             draw_debug_stats()
+            draw_ui()
+
+            // Draw point light billboards
+            if state.point_lights_on
+            {
+              for l in state.point_lights
+              {
+                w: f32 = 1.0
+                h: f32 = 1.0
+                normal := normalize(l.position - state.camera.position) // Billboard it!
+                draw_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
+              }
+            }
             immediate_flush(true, true)
           }
         case .MENU:

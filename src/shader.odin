@@ -31,7 +31,7 @@ Pipeline :: struct
 MAX_SHADOW_POINT_LIGHTS :: 8
 MAX_POINT_LIGHTS :: 128
 
-Shadow_Point_Light_Uniform :: struct
+Shadow_Point_Light_Uniform :: struct #align(4)
 {
   proj_views: [6]mat4,
 
@@ -109,11 +109,11 @@ Frame_Uniform :: struct
 
   sun_light:    Direction_Light_Uniform,
 
-  shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
   shadow_points_count: u32,
+  shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
 
-  point_lights: [MAX_POINT_LIGHTS]Point_Light_Uniform,
   points_count: u32,
+  point_lights: [MAX_POINT_LIGHTS]Point_Light_Uniform,
 
   flash_light:  Spot_Light_Uniform,
 }
@@ -519,7 +519,8 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
 }
 
 // NOTE: For now will not do recursive includes, but maybe won't be necessary
-make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pixel_Format = .NONE) -> (pipeline: Pipeline, ok: bool)
+make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pixel_Format = .NONE,
+                      blend: Blend_Mode = .NONE, samples: u32 = 1) -> (pipeline: Pipeline, ok: bool)
 {
   path := join_file_path({SHADER_DIR, name}, context.temp_allocator)
 
@@ -542,7 +543,7 @@ make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pi
 
   if ok
   {
-    pipeline.internal = vk_make_pipeline(code, color_format, depth_format)
+    pipeline.internal = vk_make_pipeline(code, color_format, depth_format, blend, samples)
 
     pipeline.color_format = color_format
     pipeline.depth_format = depth_format

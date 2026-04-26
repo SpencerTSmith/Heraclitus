@@ -25,7 +25,7 @@ Vert_Out vert_main(uniform Mega_Push push, uint vertex_id : SV_VulkanVertexID, u
   float3x3 normal_matrix = float3x3(model);
 
   float3 tangent   = normalize(mul(normal_matrix, vertex.tangent.xyz));
-  float3 normal    = mul(normal_matrix, vertex.normal);
+  float3 normal    = normalize(mul(normal_matrix, vertex.normal));
   tangent          = normalize(tangent - dot(tangent, normal) * normal);
   float3 bitangent = cross(normal, tangent) * vertex.tangent.w;
 
@@ -123,5 +123,6 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
 
   result = all_point_phong + direction_phong + spot_phong + emissive_sample + ambient;
 
-  return float4(result, alpha) * mul_color;
+  // return float4(result, alpha) * mul_color;
+  return float4(normal * 0.5 + 0.5, 1.0);
 }

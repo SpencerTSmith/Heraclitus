@@ -1,6 +1,5 @@
 package main
 
-import "base:runtime"
 import "core:log"
 import "core:strings"
 import "core:math"
@@ -30,7 +29,7 @@ make_window :: proc(window_width  := 2560,
                     window_height := 1440,
                     window_title  := "Heraclitus") -> (window: Window, ok: bool)
 {
-  // glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
+  glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
 
   if glfw.Init() == glfw.TRUE
   {
@@ -43,22 +42,15 @@ make_window :: proc(window_width  := 2560,
     {
       ok = true
 
+      glfw.SetWindowPos(window.handle, 300, 300)
+
       window.w     = window_width
       window.h     = window_height
       window.title = window_title
 
-      // if glfw.RawMouseMotionSupported()
-      // {
-      //   glfw.SetInputMode(window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-      //   glfw.SetInputMode(window.handle, glfw.RAW_MOUSE_MOTION, 1)
-      // }
-
       // Ehh, accessing global state here....
       glfw.SetFramebufferSizeCallback(window.handle, proc "c" (window: glfw.WindowHandle, width, height: i32)
       {
-        context = runtime.default_context()
-        assert(state.window.handle == window)
-
         state.window.w = int(width)
         state.window.h = int(height)
         state.window.should_resize = true

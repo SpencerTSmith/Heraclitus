@@ -1646,9 +1646,9 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
 
   VK_CULL_TABLE: [Face_Cull_Mode]vk.CullModeFlags =
   {
-    .DISABLED = {},
-    .FRONT    = {.FRONT},
-    .BACK     = {.BACK},
+    .NONE  = {},
+    .FRONT = {.FRONT},
+    .BACK  = {.BACK},
   }
 
   vk.CmdSetCullMode(vk_curr_cmd(), VK_CULL_TABLE[pass.face_cull])
@@ -1672,11 +1672,9 @@ vk_end_render_pass :: proc()
   vk.CmdEndRendering(vk_curr_cmd())
 }
 
-// NOTE: Always pushed to device memory
-vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pixel_Format, sampler: Sampler_Preset,
-                         width, height, samples, array_count, mip_count: u32) -> (handle: Renderer_Internal, index: u32)
+@(private="file")
+vk_sample_value :: proc(samples: u32) -> (vk_samples: vk.SampleCountFlags)
 {
-  vk_samples: vk.SampleCountFlags
   switch samples
   {
     case:
@@ -1687,6 +1685,15 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
     case 4: vk_samples = {._4}
     case 8: vk_samples = {._8}
   }
+
+  return vk_samples
+}
+
+// NOTE: Always pushed to device memory
+vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format: Pixel_Format, sampler: Sampler_Preset,
+                         width, height, samples, array_count, mip_count: u32) -> (handle: Renderer_Internal, index: u32)
+{
+  vk_samples := vk_sample_value(samples)
 
   vk_usage: vk.ImageUsageFlags = {.TRANSFER_DST, .SAMPLED } // Always
   if mip_count > 1 // Will have to read to generate mips
@@ -1827,7 +1834,7 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   return gpu_ptr, cpu_ptr
 }
 
-vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format) -> (internal: Renderer_Internal)
+vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format, blend: Blend_Mode, samples: u32) -> (internal: Renderer_Internal)
 {
   make_shader_module :: proc(code: []byte) -> (module: vk.ShaderModule)
   {
@@ -1901,18 +1908,28 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format)
     lineWidth   = 1.0,
   }
 
-  // FIXME: Allow others
   multisample: vk.PipelineMultisampleStateCreateInfo =
   {
     sType                = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-    rasterizationSamples = {._1},
+    rasterizationSamples = vk_sample_value(samples),
   }
 
-  // FIXME: Not allowing transparency
+  VK_BLEND_TABLE: [Blend_Mode]struct{color_src, color_dst, alpha_src, alpha_dst: vk.BlendFactor, op: vk.BlendOp} =
+  {
+    .NONE                  = {},
+    .ALPHA_ONE_MINUS_ALPHA = {.SRC_ALPHA, .ONE_MINUS_SRC_ALPHA, .ONE, .ZERO, .ADD},
+  }
+
   blend_attach: vk.PipelineColorBlendAttachmentState =
   {
-    colorWriteMask = {.R, .G, .B, .A},
-    blendEnable    = false,
+    colorWriteMask      = {.R, .G, .B, .A},
+    blendEnable         = blend != .NONE,
+    alphaBlendOp        = VK_BLEND_TABLE[blend].op,
+    colorBlendOp        = VK_BLEND_TABLE[blend].op,
+    srcColorBlendFactor = VK_BLEND_TABLE[blend].color_src,
+    dstColorBlendFactor = VK_BLEND_TABLE[blend].color_dst,
+    srcAlphaBlendFactor = VK_BLEND_TABLE[blend].alpha_src,
+    dstAlphaBlendFactor = VK_BLEND_TABLE[blend].alpha_dst,
   }
   color_blend: vk.PipelineColorBlendStateCreateInfo =
   {

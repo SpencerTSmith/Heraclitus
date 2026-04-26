@@ -169,7 +169,7 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch.
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32)
+  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, .ALPHA_ONE_MINUS_ALPHA)
   assert(ok)
 
   // FIXME: Using test shaders.
@@ -225,6 +225,7 @@ begin_render_frame :: proc() -> (ok: bool)
         idx := frame.shadow_points_count
         frame.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
         frame.shadow_points_count += 1
+        print(frame.shadow_point_lights[idx])
       }
       else
       {

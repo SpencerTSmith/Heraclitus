@@ -262,7 +262,7 @@ move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
   camera.on_ground = false
 }
 
-editor_ui :: proc() -> (had_interaction: bool)
+do_editor_ui :: proc() -> (had_interaction: bool)
 {
   panel_pos := vec2 {f32(state.window.w) * 0.8, f32(state.window.h) * 0.1}
   ui_push_parent(ui_panel(panel_pos, 300, 100))
@@ -301,7 +301,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
 {
   move_camera_editor(camera, dt_s)
 
-  had_ui_interaction := editor_ui()
+  had_ui_interaction := do_editor_ui()
 
   //
   // 3D Editor interactions

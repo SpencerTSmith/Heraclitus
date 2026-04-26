@@ -144,7 +144,7 @@ unproject_screen_coord :: proc(screen_coord: vec2, view, proj: mat4) -> (world_c
 
   // From screen coords to ndc [-1, 1]
   ndc_x := 2 * (screen_coord.x / screen_width) - 1
-  ndc_y := 1 - 2 * (screen_coord.y / screen_height) // flip y... as screen coords grow down
+  ndc_y := 2 * (screen_coord.y / screen_height) - 1 // Since using a vulkan projection no need to flip
   ndc_z := cast(f32) -1.0 // Because screen is on the near plane
 
   ndc_coord := vec4{ndc_x, ndc_y, ndc_z, 1}

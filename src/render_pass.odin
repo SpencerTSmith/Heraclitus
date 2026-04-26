@@ -15,14 +15,14 @@ Attachment_Description :: enum u8
 
 Face_Cull_Mode :: enum u8
 {
-  DISABLED,
+  NONE,
   FRONT,
   BACK,
 }
 
 Depth_Test_Mode :: enum u8
 {
-  DISABLED,
+  NONE,
   ALWAYS,
   LESS,
 }
@@ -36,7 +36,7 @@ Vertex_Primitive :: enum u8
 // NOTE: Read left to right as src factor and dst factor
 Blend_Mode :: enum u8
 {
-  DISABLED,
+  NONE,
   ALPHA_ONE_MINUS_ALPHA,
 }
 
@@ -73,12 +73,12 @@ Skybox_Push :: struct
 
 MAIN_PASS :: Render_Pass {
   depth_test = .LESS,
-  face_cull  = .DISABLED,
+  face_cull  = .NONE,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 POST_PASS :: Render_Pass {
-  depth_test = .DISABLED,
+  depth_test = .NONE,
   face_cull  = .BACK,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
@@ -91,13 +91,13 @@ SUN_SHADOW_PASS :: Render_Pass {
 
 POINT_SHADOW_PASS :: Render_Pass {
   depth_test = .LESS,
-  face_cull  = .DISABLED,
+  face_cull  = .NONE,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 UI_PASS :: Render_Pass {
   depth_test = .LESS,
-  face_cull  = .DISABLED,
+  face_cull  = .NONE,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
