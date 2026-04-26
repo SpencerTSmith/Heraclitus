@@ -59,7 +59,7 @@ init_state :: proc() -> (ok: bool)
   mem.arena_init(&state.perm, state.perm_mem)
   state.perm_alloc = mem.arena_allocator(&state.perm)
 
-  state.mode = .EDIT // Edit by default
+  state.mode = .EDIT
 
   state.window = make_window() or_return
 
@@ -79,7 +79,7 @@ init_state :: proc() -> (ok: bool)
 
   state.sun =
   {
-    direction = {0.0, -1.0,  0.0},
+    direction = {0.5, -1.0,  0.7},
     color     = {0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
     ambient   = 0.05,
@@ -327,6 +327,8 @@ main :: proc()
 
             draw_debug_stats()
             draw_ui()
+
+            draw_line(vec2{100, 100}, vec2{300, 300})
 
             // Draw point light billboards
             if state.point_lights_on

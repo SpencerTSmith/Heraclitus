@@ -123,7 +123,7 @@ Immediate_Batch :: struct
   vertex_base:  u32, // First vertex in batch
   vertex_count: u32, // How many vertices in batch
 
-  primitive: Vertex_Primitive,
+  primitive: Immediate_Primitive,
   texture:   Texture_Handle,
   space:     Immediate_Space,
   depth:     Depth_Test_Mode,
@@ -133,6 +133,7 @@ Immediate_Push :: struct
 {
   transform: mat4,
   texture:   u32,
+  primitive: u32,
   vertices:  [^]Immediate_Vertex,
 }
 
@@ -206,15 +207,16 @@ begin_render_frame :: proc() -> (ok: bool)
     frame := &state.renderer.uniform_buffer[curr_frame_idx()].cpu_base[0]
     frame^ =
     {
-      projection      = projection,
-      view            = view,
-      proj_view       = projection * view,
-      camera_position = vec4_from_3(state.camera.position),
-      z_near          = state.camera.z_near,
-      z_far           = state.camera.z_far,
-      sun_light       = direction_light_uniform(state.sun),
-      flash_light     = spot_light_uniform(state.flashlight),
-      skybox_index    = get_texture(state.skybox).index,
+      projection       = projection,
+      view             = view,
+      proj_view        = projection * view,
+      camera_position  = vec4_from_3(state.camera.position),
+      z_near           = state.camera.z_near,
+      z_far            = state.camera.z_far,
+      sun_light        = direction_light_uniform(state.sun),
+      flash_light      = spot_light_uniform(state.flashlight),
+      skybox_index     = get_texture(state.skybox).index,
+      sun_shadow_index = get_texture(WHITE_TEXTURE).index,
     }
 
     for pl in state.point_lights
@@ -429,7 +431,7 @@ mega_draw :: proc()
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Vertex_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
+immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
 {
   current := state.renderer.immediate.batches[len(state.renderer.immediate.batches) - 1]
   if current.primitive != wish_primitive ||
@@ -516,8 +518,9 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
         push: Immediate_Push =
         {
           transform = transform,
-          vertices  = state.renderer.immediate.vertex_buffer[curr_frame_idx()].gpu_base,
           texture   = get_texture(batch.texture).index,
+          primitive = u32(batch.primitive),
+          vertices  = state.renderer.immediate.vertex_buffer[curr_frame_idx()].gpu_base,
         }
         vk_draw_vertices(batch.vertex_base, batch.vertex_count, push)
       }

@@ -27,7 +27,7 @@ Depth_Test_Mode :: enum u8
   LESS,
 }
 
-Vertex_Primitive :: enum u8
+Immediate_Primitive :: enum u8
 {
   TRIANGLES,
   LINES,

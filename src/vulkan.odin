@@ -720,10 +720,10 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       {
         bindings[type] =
         {
-          binding         = TEXTURE_BINDING[type],
+          binding         = DESCRIPTOR_BINDING[type],
           descriptorType  = .COMBINED_IMAGE_SAMPLER,
           stageFlags      = {.FRAGMENT}, // NOTE: Hope i never do vertex lighting...
-          descriptorCount = MAX_TEXTURES[type],
+          descriptorCount = MAX_DESCRIPTORS[type],
         }
         binding_flags[type] = {.PARTIALLY_BOUND, .UPDATE_AFTER_BIND}
         pool_sizes[type] =
@@ -1775,7 +1775,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
             "Unable to create vulkan image view.")
 
   // FIXME: Grace!
-  assert(vks.descriptor_counts[type] + 1 < MAX_TEXTURES[type], "No more vulkan texture descriptors available.")
+  assert(vks.descriptor_counts[type] + 1 < MAX_DESCRIPTORS[type], "No more vulkan texture descriptors available.")
 
   index = vks.descriptor_counts[type]
   vks.descriptor_counts[type] += 1
@@ -1792,7 +1792,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
   {
     sType = .WRITE_DESCRIPTOR_SET,
     dstSet = vks.descriptor_set,
-    dstBinding = TEXTURE_BINDING[type],
+    dstBinding = DESCRIPTOR_BINDING[type],
     descriptorCount = 1,
     descriptorType = .COMBINED_IMAGE_SAMPLER,
     pImageInfo = &descriptor_info,

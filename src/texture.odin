@@ -15,7 +15,7 @@ Texture_Type :: enum u32
 }
 
 @(rodata)
-MAX_TEXTURES: [Texture_Type]u32 =
+MAX_DESCRIPTORS: [Texture_Type]u32 =
 {
   .D2         = 512,
   .CUBE       = 4, // Skyboxes
@@ -23,7 +23,7 @@ MAX_TEXTURES: [Texture_Type]u32 =
 }
 
 @(rodata)
-TEXTURE_BINDING: [Texture_Type]u32 =
+DESCRIPTOR_BINDING: [Texture_Type]u32 =
 {
   .D2         = 0,
   .CUBE       = 1,

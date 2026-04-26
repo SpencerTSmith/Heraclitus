@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 26-04-2026 (05:30:15 am)
+// NOTE: This code was generated on 26-04-2026 (06:39:29 am)
 
 struct Direction_Light_Uniform
 {
@@ -96,6 +96,7 @@ struct Immediate_Push
 {
   float4x4 transform;
   uint texture;
+  uint primitive;
   Immediate_Vertex *vertices;
 }
 

@@ -91,14 +91,12 @@ draw_quad_world :: proc(center, normal: vec3, w, h: f32, color := WHITE,
   immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
 }
 
-// TODO: These should not be immediate... should be draw_line
 draw_line :: proc
 {
   draw_line_screen,
   draw_line_world,
 }
 
-// NOTE: A 2d line so takes in screen coordinates!
 draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE)
 {
   immediate_begin(.LINES, WHITE_TEXTURE, .SCREEN, .ALWAYS)
@@ -107,7 +105,6 @@ draw_line_screen :: proc(xy0, xy1: vec2, rgba := WHITE)
   immediate_vertex({xy1.x, xy1.y, 0}, color=rgba)
 }
 
-// NOTE: 3d line
 draw_line_world :: proc(xyz0, xyz1: vec3, color := WHITE,
                         depth_test: Depth_Test_Mode = .LESS)
 {

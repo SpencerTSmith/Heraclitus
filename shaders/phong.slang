@@ -35,7 +35,7 @@ Vert_Out vert_main(uniform Mega_Push push, uint vertex_id : SV_VulkanVertexID, u
   o.sun_space_position = mul(sun_proj_view, o.world_position);
   o.position           = mul(camera_proj_view, o.world_position);
   o.draw_id            = draw_id;
-  o.TBN                = transpose(float3x3(tangent, bitangent, normal));
+  o.TBN                = transpose(float3x3(tangent, bitangent, normal)); // HACK: Transpose since the constructor here takes in rows.
   return o;
 }
 
@@ -63,7 +63,6 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
 
   // Find actual transformed normal
   float3 normal = normalize(mul(i.TBN, normal_map));
-  // float3 normal = normalize(i.TBN[2]);
 
   float3 view_direction = normalize(frame.camera_position.xyz - i.world_position.xyz);
 
@@ -111,7 +110,8 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
   float3 direction_phong = direction_phong(frame.sun_light, diffuse_sample, specular_sample,
                                            material.shininess, normal, view_direction);
 
-  float shadow = 1.0 - direction_shadow(frame.sun_shadow_index, i.sun_space_position, -frame.sun_light.direction.xyz, normal);
+  float shadow = 1.0 - direction_shadow(frame.sun_shadow_index, frame.camera_position.xyz, i.world_position.xyz,
+                                        i.sun_space_position, -frame.sun_light.direction.xyz, normal);
 
   direction_phong *= shadow;
 
@@ -127,5 +127,4 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
   result = all_point_phong + direction_phong + spot_phong + emissive_sample + ambient;
 
   return float4(result, alpha) * mul_color;
-  // return float4(normal * 0.5 + 0.5, 1.0);
 }
