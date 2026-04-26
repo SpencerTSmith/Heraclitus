@@ -7,10 +7,6 @@ import "core:math"
 
 import "vendor:glfw"
 
-WINDOW_DEFAULT_TITLE :: "Heraclitus"
-WINDOW_DEFAULT_W :: 1280 * 1.5
-WINDOW_DEFAULT_H :: 720  * 1.5
-
 Window :: struct
 {
   handle: glfw.WindowHandle,
@@ -30,8 +26,8 @@ should_close :: proc(window: Window) -> bool
   return bool(glfw.WindowShouldClose(window.handle)) || !state.running
 }
 
-make_window :: proc(window_width  := 1920,
-                    window_height := 1080,
+make_window :: proc(window_width  := 2560,
+                    window_height := 1440,
                     window_title  := "Heraclitus") -> (window: Window, ok: bool)
 {
   // glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)

@@ -1,4 +1,4 @@
-// NOTE: This code was generated on 25-04-2026 (09:17:13 pm)
+// NOTE: This code was generated on 26-04-2026 (02:17:30 am)
 
 struct Direction_Light_Uniform
 {
@@ -69,11 +69,11 @@ struct Frame_Uniform
   uint sun_shadow_index;
   uint point_shadow_index;
   uint skybox_index;
+  Direction_Light_Uniform sun_light;
   Shadow_Point_Light_Uniform shadow_point_lights[8];
   uint shadow_points_count;
   Point_Light_Uniform point_lights[128];
   uint points_count;
-  Direction_Light_Uniform sun_light;
   Spot_Light_Uniform flash_light;
 }
 

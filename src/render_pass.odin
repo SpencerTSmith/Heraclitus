@@ -73,7 +73,7 @@ Skybox_Push :: struct
 
 MAIN_PASS :: Render_Pass {
   depth_test = .LESS,
-  face_cull  = .BACK,
+  face_cull  = .DISABLED,
   blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 

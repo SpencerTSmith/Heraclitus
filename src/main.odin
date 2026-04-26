@@ -191,6 +191,29 @@ main :: proc()
 
   make_entity("lantern/Lantern.gltf", position={-20, -8.0, 0}, scale={0.5, 0.5, 0.5})
 
+  make_point_light_entity({1, 1, 1}, RED, 30, 1.0, cast_shadows=true)
+
+  make_point_light_entity({5, 1, -5}, GREEN, 30, 1.0, cast_shadows=true)
+
+  make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
+
+  GRID_SIZE :: 20
+  GRID_SPACING :: 5
+  for x in 0..<GRID_SIZE
+  {
+    for y in 0..<GRID_SIZE
+    {
+      for z in 0..<GRID_SIZE
+      {
+        pos := vec3{
+          f32(x) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
+          f32(y) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2),
+          f32(z) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) - 100,
+        }
+        make_entity("cube/BoxTextured.gltf", flags={.RENDERABLE}, position=pos)
+      }
+    }
+  }
 
   for !should_close(state.window)
   {
@@ -210,18 +233,24 @@ main :: proc()
 
     poll_input_state(state.window, dt_s)
 
-    move_camera_editor(&state.camera, dt_s)
+    // UPDATE
+    switch state.mode
+    {
+    case .GAME:
+    case .EDIT:
+      do_editor(&state.camera, dt_s)
+    case .MENU:
+    }
 
+    // RENDER
     if begin_render_frame()
     {
       defer flush_render_frame(state.renderer.main_target.attachments[0])
 
-      begin_render_pass({clear_color = LEARN_OPENGL_BLUE}, &state.renderer.main_target)
+      begin_render_pass(MAIN_PASS, &state.renderer.main_target)
       {
         defer end_render_pass()
 
-        draw_debug_stats()
-        immediate_flush(true, true)
 
         for e in all_entities()
         {
@@ -231,6 +260,8 @@ main :: proc()
 
         draw_skybox(state.skybox)
 
+        draw_debug_stats()
+        immediate_flush(true, true)
       }
     }
 

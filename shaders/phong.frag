@@ -322,7 +322,7 @@ void main()
   ambient += phong_ambient(frame.sun_light.ambient, frame.sun_light.color.xyz);
 
   vec3 spot_phong = spot_phong(frame.flash_light, diffuse_sample, specular_sample, material.shininess,
-                                    normal, view_direction, fs_in.world_position);
+                               normal, view_direction, fs_in.world_position);
 
   ambient += phong_ambient(frame.flash_light.ambient, frame.flash_light.color.xyz);
 

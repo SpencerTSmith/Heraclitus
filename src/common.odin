@@ -14,8 +14,8 @@ DEFAULT_FONT_SIZE :: 25.0
 Program_Mode :: enum
 {
   GAME,
-  MENU,
   EDIT,
+  MENU,
 }
 
 MODEL_UP      :: vec3{0.0, 1.0, 0.0}

@@ -55,7 +55,7 @@ Point_Light_Uniform :: struct
   ambient:   f32,
 }
 
-Direction_Light_Uniform :: struct
+Direction_Light_Uniform :: struct #align(4)
 {
   proj_view: mat4,
 
@@ -107,13 +107,14 @@ Frame_Uniform :: struct
   point_shadow_index: u32,
   skybox_index:       u32,
 
+  sun_light:    Direction_Light_Uniform,
+
   shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
   shadow_points_count: u32,
 
   point_lights: [MAX_POINT_LIGHTS]Point_Light_Uniform,
   points_count: u32,
 
-  sun_light:    Direction_Light_Uniform,
   flash_light:  Spot_Light_Uniform,
 }
 
@@ -127,9 +128,9 @@ Draw_Command :: struct
 }
 
 // Maybe consider pulling these out, these could just be indices, since will be redundantly uploading for passes drawing the same objects, shadow mapping, main passes, etc.
-// Also because a matrix is in this struct it aligns itself to 16 rather than 8, which is not great for matching up with a scalar gpu buffer,
+// Also because a matrix is in this struct it aligns itself to 16 rather than 4, which is not great for matching up with a scalar gpu buffer,
 // so add this alignment qualifier as we never actually touch this info cpu-side => no-simd => no benefit to 16 alignment.
-Draw_Uniform :: struct #align(8)
+Draw_Uniform :: struct #align(4)
 {
   model:     mat4,
   mul_color: vec4,

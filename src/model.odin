@@ -462,7 +462,6 @@ make_model_from_file :: proc(file_name: string, allocator: runtime.Allocator) ->
                 vert1.tangent += tangent
                 vert2.tangent += tangent
 
-                // Doin' redundant work, but that's ok probably, hopefully not may models won't come without tangents
                 vert0.tangent.w = 1.0
                 vert1.tangent.w = 1.0
                 vert2.tangent.w = 1.0

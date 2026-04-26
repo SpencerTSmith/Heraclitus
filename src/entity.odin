@@ -109,7 +109,11 @@ make_entity :: proc(model_file: string = "",
 
   if handle != {}
   {
-    model := load_model(model_file)
+    model: Model_Handle
+    if model_file != ""
+    {
+      model = load_model(model_file)
+    }
 
     assert(.STATIC not_in flags || .COLLISION in flags, "Static entities must have collsion.")
 

@@ -171,7 +171,7 @@ init_renderer :: proc() -> (ok: bool)
   assert(ok)
 
   // FIXME: Using test shaders.
-  state.renderer.pipelines[.PHONG], ok = make_pipeline("test.slang", .RGBA16F, .DEPTH32)
+  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32)
   assert(ok)
 
   state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32)
@@ -192,10 +192,12 @@ begin_render_frame :: proc() -> (ok: bool)
 
   if ok
   {
+    // Write out frame uniforms
     projection := camera_perspective(state.camera, window_aspect_ratio(state.window))
     view       := camera_view(state.camera)
-    // Write out frame uniforms
-    state.renderer.uniform_buffer[curr_frame_idx()].cpu_base[0] =
+
+    frame := &state.renderer.uniform_buffer[curr_frame_idx()].cpu_base[0]
+    frame^ =
     {
       projection      = projection,
       view            = view,
@@ -208,6 +210,37 @@ begin_render_frame :: proc() -> (ok: bool)
       skybox_index    = get_texture(state.skybox).index,
     }
 
+    for pl in state.point_lights
+    {
+      // Try to add shadow casting to the shadow casting array first
+      if pl.cast_shadows && frame.shadow_points_count <= MAX_SHADOW_POINT_LIGHTS
+      {
+        idx := frame.shadow_points_count
+        frame.shadow_point_lights[idx] = shadow_point_light_uniform(pl)
+        frame.shadow_points_count += 1
+      }
+      else
+      {
+        // If we had too many try to add to the normal point lights
+        if pl.cast_shadows
+        {
+          log.errorf("Too many shadow casting point lights! Attempting to add to non shadow casting lights.")
+        }
+
+        if frame.points_count <= MAX_POINT_LIGHTS
+        {
+          idx := frame.points_count
+          frame.point_lights[idx] = point_light_uniform(pl)
+          frame.points_count += 1
+        }
+        else
+        {
+          log.errorf("Too many point lights! Ignoring.")
+        }
+      }
+    }
+
+    // Do any queued uploads
     vk_do_uploads(state.renderer.upload_queue)
     clear(&state.renderer.upload_queue)
     state.renderer.frame_began = true
@@ -375,13 +408,11 @@ mega_draw :: proc()
 
   push: Mega_Push =
   {
-    frame_uniform = state.renderer.uniform_buffer[curr_frame_idx()].gpu_base,
-    draw_uniforms = &state.renderer.draw_uniforms[curr_frame_idx()].gpu_base[state.renderer.draw_head],
-    vertices      = state.renderer.vertex_buffer.gpu_base,
+    frame_uniform     = state.renderer.uniform_buffer[curr_frame_idx()].gpu_base,
+    draw_uniforms     = &state.renderer.draw_uniforms[curr_frame_idx()].gpu_base[state.renderer.draw_head],
+    vertices          = state.renderer.vertex_buffer.gpu_base,
     material_uniforms = state.renderer.material_buffer.gpu_base,
   }
-
-  // print(state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[0], state.renderer.draw_uniforms[curr_frame_idx()].cpu_base[1])
 
   batch_count := u32(state.renderer.draw_count - state.renderer.draw_head)
   vk_draw_indirect(state.renderer.index_buffer, state.renderer.draw_commands[curr_frame_idx()], u32(state.renderer.draw_head), batch_count, push)
@@ -490,12 +521,7 @@ draw_skybox :: proc(handle: Texture_Handle)
 {
   bind_pipeline(.SKYBOX)
 
-  // Get the depth func before and reset after this call
-  // TODO: Do this everywhere, ie push and pop GL state
-  // depth_func_before: i32; gl.GetIntegerv(gl.DEPTH_FUNC, &depth_func_before)
-  // gl.DepthFunc(gl.LEQUAL)
-  // defer gl.DepthFunc(u32(depth_func_before))
-
+  // TODO: Eventually, keeping the depth func on less and not temporarily switching to lequal will cause issues.
   push := Skybox_Push{frame_uniform = state.renderer.uniform_buffer[curr_frame_idx()].gpu_base}
   vk_draw_vertices(0, 36, push)
 }
