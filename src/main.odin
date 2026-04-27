@@ -167,12 +167,7 @@ main :: proc()
   }
   defer free_state()
 
-
-  last_frame_time := time.tick_now()
-  dt_s := 0.0
-
-
-  make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={2.0, 2.0, 2.0})
+  make_entity("sponza/Sponza.gltf", flags={.RENDERABLE}, position={20, -2.0 ,-60}, scale={1.0, 1.0, 1.0})
 
   make_entity("duck/Duck.gltf", position={5.0, 0.0, -10.0})
 
@@ -183,7 +178,7 @@ main :: proc()
 
   make_entity("helmet/DamagedHelmet.gltf", position={-5.0, 0.0, 0.0})
 
-  make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -8, 0}, scale={1000.0, 1.0, 1000.0})
+  make_entity("cube/BoxTextured.gltf", flags={.COLLISION, .RENDERABLE, .STATIC}, position={0, -508, 0}, scale={1000.0, 1000.0, 1000.0})
 
   make_entity("helmet2/SciFiHelmet.gltf", position={10.0, 0.0, 0.0})
 
@@ -212,6 +207,9 @@ main :: proc()
       }
     }
   }
+
+  last_frame_time := time.tick_now()
+  dt_s := 0.0
 
   for !should_close(state.window)
   {
@@ -321,7 +319,21 @@ main :: proc()
       switch state.mode
       {
         case .GAME, .EDIT:
-          begin_render_pass(MAIN_PASS, &state.renderer.main_target)
+          if state.sun_on
+          {
+            begin_render_pass(SUN_SHADOW_PASS, &state.renderer.sun_shadow_target)
+            {
+              defer end_render_pass()
+
+              for e in all_entities()
+              {
+                draw_entity(e)
+              }
+              mega_draw(.SUN_DEPTH)
+            }
+          }
+
+          begin_render_pass(MAIN_PASS, &state.renderer.main_target, sampled={&state.renderer.sun_shadow_target})
           {
             defer end_render_pass()
 
@@ -329,27 +341,33 @@ main :: proc()
             {
               draw_entity(e)
             }
-            mega_draw()
+            mega_draw(.PHONG)
 
             draw_skybox(state.skybox)
-
-            draw_debug_stats()
-            draw_ui()
-
-            draw_line(vec2{100, 100}, vec2{300, 300})
 
             // Draw point light billboards
             if state.point_lights_on
             {
               for l in state.point_lights
               {
+                // Billboard it!
                 w: f32 = 1.0
                 h: f32 = 1.0
-                normal := normalize(l.position - state.camera.position) // Billboard it!
-                draw_quad(l.position, normal, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
+                draw_quad(l.position, l.position - state.camera.position, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
               }
             }
-            immediate_flush(true, true)
+
+            immediate_flush(.WORLD)
+          }
+
+          begin_render_pass(UI_PASS, &state.renderer.main_target)
+          {
+            defer end_render_pass()
+
+            draw_debug_stats()
+            draw_ui()
+
+            immediate_flush(.SCREEN)
           }
         case .MENU:
           draw_menu()

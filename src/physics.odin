@@ -53,7 +53,7 @@ Frustum :: distinct [Frustum_Face]Plane
 
 make_frustum :: proc(camera: Camera, aspect_ratio: f32) -> (frustum: Frustum)
 {
-  forward, up, right := get_camera_axes(camera)
+  forward, up, right := camera_axes(camera)
 
   // Half the width of the vertical axis of view
   half_v_side := camera.z_far * tan(radians(camera.curr_fov_y) * 0.5)

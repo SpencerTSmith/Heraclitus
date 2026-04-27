@@ -25,9 +25,10 @@ Depth_Test_Mode :: enum u8
   NONE,
   ALWAYS,
   LESS,
+  LESS_NO_WRITE,
 }
 
-Immediate_Primitive :: enum u8
+Vertex_Primitive :: enum u8
 {
   TRIANGLES,
   LINES,
@@ -62,7 +63,6 @@ Render_Pass :: struct
   clear_color: vec4,
   depth_test:  Depth_Test_Mode,
   face_cull:   Face_Cull_Mode,
-  blend:       Blend_Mode,
   viewport:    Viewport, // Optional, see flags
 }
 
@@ -73,35 +73,31 @@ Skybox_Push :: struct
 
 MAIN_PASS :: Render_Pass {
   depth_test = .LESS,
-  face_cull  = .NONE,
-  blend      = .ALPHA_ONE_MINUS_ALPHA,
+  face_cull  = .BACK,
 }
 
 POST_PASS :: Render_Pass {
   depth_test = .NONE,
   face_cull  = .BACK,
-  blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 SUN_SHADOW_PASS :: Render_Pass {
   depth_test = .LESS,
   face_cull  = .FRONT,
-  blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 POINT_SHADOW_PASS :: Render_Pass {
   depth_test = .LESS,
   face_cull  = .NONE,
-  blend      = .ALPHA_ONE_MINUS_ALPHA,
 }
 
 UI_PASS :: Render_Pass {
-  depth_test = .LESS,
+  depth_test = .NONE,
   face_cull  = .NONE,
-  blend      = .ALPHA_ONE_MINUS_ALPHA,
+  flags      = {.NO_CLEAR},
 }
 
-make_render_target :: proc(width, height: u32, attachments: []Attachment_Description) -> (target: Render_Target)
+make_render_target :: proc(width, height, samples: u32, attachments: []Attachment_Description) -> (target: Render_Target)
 {
   assert(len(attachments) < cap(target.attachments), "Too many attachments specified for render target creation.")
 
@@ -131,14 +127,14 @@ make_render_target :: proc(width, height: u32, attachments: []Attachment_Descrip
         sampler = .CLAMP_WHITE
     }
 
-    texture := alloc_texture(type, {.TARGET}, format, sampler, u32(state.window.w), u32(state.window.h))
+    texture := alloc_texture(type, {.TARGET}, format, sampler, width, height, samples=samples)
     append(&target.attachments, texture)
   }
 
   return target
 }
 
-begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
+begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target, sampled: []^Render_Target = {})
 {
   // May also assert that the size of these attachments are the same, but eh
   assert(len(target.attachments) != 0)
@@ -153,7 +149,7 @@ begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
     pass.viewport.h = target.attachments[0].height
   }
 
-  vk_begin_render_pass(pass, target)
+  vk_begin_render_pass(pass, target, sampled)
 }
 
 end_render_pass :: proc()

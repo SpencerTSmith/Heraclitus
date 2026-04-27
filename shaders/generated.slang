@@ -1,8 +1,9 @@
-// NOTE: This code was generated on 26-04-2026 (07:29:15 pm)
+// NOTE: This code was generated on 27-04-2026 (05:22:36 am)
 
 struct Direction_Light_Uniform
 {
   float4x4 proj_view;
+  float2 uv_offset;
   float4 direction;
   float4 color;
   float intensity;
@@ -95,9 +96,8 @@ struct Immediate_Vertex
 struct Immediate_Push
 {
   float4x4 transform;
-  uint texture;
-  uint primitive;
   Immediate_Vertex *vertices;
+  uint texture;
 }
 
 struct Mega_Push

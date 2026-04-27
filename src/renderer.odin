@@ -15,6 +15,9 @@ MAX_MATERIALS :: 512
 
 MAX_IMMEDIATE_VERTICES :: 256 * mem.Kilobyte
 
+POINT_SHADOW_MAP_SIZE  :: 512
+SUN_SHADOW_MAP_SIZE    :: 1024
+
 GPU_Upload :: struct
 {
   // Considering store pointers instead of the actual structs here.
@@ -39,7 +42,8 @@ Pipeline_Key :: enum
   POINT_DEPTH,
   GAUSSIAN,
   GET_BRIGHT,
-  IMMEDIATE,
+  IMMEDIATE_TRIANGLE,
+  IMMEDIATE_LINE,
 }
 
 Renderer :: struct
@@ -123,7 +127,7 @@ Immediate_Batch :: struct
   vertex_base:  u32, // First vertex in batch
   vertex_count: u32, // How many vertices in batch
 
-  primitive: Immediate_Primitive,
+  primitive: Vertex_Primitive,
   texture:   Texture_Handle,
   space:     Immediate_Space,
   depth:     Depth_Test_Mode,
@@ -132,9 +136,8 @@ Immediate_Batch :: struct
 Immediate_Push :: struct
 {
   transform: mat4,
-  texture:   u32,
-  primitive: u32,
   vertices:  [^]Immediate_Vertex,
+  texture:   u32,
 }
 
 Mega_Push :: struct
@@ -150,11 +153,11 @@ init_renderer :: proc() -> (ok: bool)
   init_vulkan(state.window)
   generate_slang()
 
-  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR, .DEPTH})
-  state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), {.COLOR})
+  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), 4, {.COLOR, .DEPTH})
+  state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), 1, {.COLOR})
 
-  state.renderer.point_shadow_target = make_render_target(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, {.DEPTH})
-  state.renderer.sun_shadow_target   = make_render_target(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, {.DEPTH})
+  state.renderer.point_shadow_target = make_render_target(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, 1, {.DEPTH})
+  state.renderer.sun_shadow_target   = make_render_target(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, 1, {.DEPTH})
 
   state.renderer.vertex_buffer   = make_gpu_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
   state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_INDICES, {.INDEX_DATA, .DEVICE_LOCAL})
@@ -173,14 +176,19 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch.
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, .ALPHA_ONE_MINUS_ALPHA)
+  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA)
+  assert(ok)
+  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA,
+                                                                primitive = .LINES)
   assert(ok)
 
-  // FIXME: Using test shaders.
-  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32)
+  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32, 4)
   assert(ok)
 
-  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32)
+  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32, 4)
+  assert(ok)
+
+  state.renderer.pipelines[.SUN_DEPTH], ok = make_pipeline("sun_shadow.slang", .NONE, .DEPTH32)
   assert(ok)
 
   state.renderer.bloom_on = true
@@ -219,7 +227,7 @@ begin_render_frame :: proc() -> (ok: bool)
       sun_light        = direction_light_uniform(state.sun) if state.sun_on else {},
       flash_light      = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
       skybox_index     = get_texture(state.skybox).index if state.sun_on else get_texture(WHITE_TEXTURE).index,
-      sun_shadow_index = get_texture(WHITE_TEXTURE).index,
+      sun_shadow_index = state.renderer.sun_shadow_target.attachments[0].index if state.sun_on else get_texture(WHITE_TEXTURE).index,
     }
 
     camera_frustum := make_frustum(state.camera, window_aspect_ratio(state.window))
@@ -421,9 +429,9 @@ push_draw :: proc(command: Draw_Command, uniform: Draw_Uniform)
   }
 }
 
-mega_draw :: proc()
+mega_draw :: proc(pipeline: Pipeline_Key)
 {
-  bind_pipeline_key(.PHONG)
+  bind_pipeline(pipeline)
 
   push: Mega_Push =
   {
@@ -440,7 +448,7 @@ mega_draw :: proc()
 }
 
 // Starts a new batch if necessary
-immediate_begin :: proc(wish_primitive: Immediate_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
+immediate_begin :: proc(wish_primitive: Vertex_Primitive, wish_texture: Texture_Handle, wish_space: Immediate_Space, wish_depth: Depth_Test_Mode)
 {
   current := state.renderer.immediate.batches[len(state.renderer.immediate.batches) - 1]
   if current.primitive != wish_primitive ||
@@ -497,11 +505,10 @@ immediate_vertex :: proc(position: vec3, color: vec4 = WHITE, uv: vec2 = {0.0, 0
 // the main scene's depth buffer if they wish
 // TODO: Maybe consider just having two different immediate systems, one for things that should be flushed in the main pass
 // And others that ought to be flushed in the overlay/ui pass
-immediate_flush :: proc(flush_world := false, flush_screen := false)
+immediate_flush :: proc(space: Immediate_Space)
 {
   if state.renderer.immediate.vertex_count > 0
   {
-    bind_pipeline_key(.IMMEDIATE)
 
     // Screenspace
     orthographic := mat4_orthographic(0, f32(state.window.w), f32(state.window.h), 0, -1, 1)
@@ -513,23 +520,30 @@ immediate_flush :: proc(flush_world := false, flush_screen := false)
     {
       if batch.vertex_count > 0
       {
+        if batch.space != space { continue }
+
         transform: mat4
         switch batch.space
         {
         case .SCREEN:
-          if !flush_screen { continue } // We shouldn't flush screen immediates
           transform = orthographic
         case .WORLD:
-          if !flush_world { continue } // We shouldn't flush world immediates
           transform = perspective
+        }
+
+        switch batch.primitive
+        {
+          case .TRIANGLES:
+            bind_pipeline(.IMMEDIATE_TRIANGLE)
+          case .LINES:
+            bind_pipeline(.IMMEDIATE_LINE)
         }
 
         push: Immediate_Push =
         {
           transform = transform,
-          texture   = get_texture(batch.texture).index,
-          primitive = u32(batch.primitive),
           vertices  = state.renderer.immediate.vertex_buffer[curr_frame_idx()].gpu_base,
+          texture   = get_texture(batch.texture).index,
         }
         vk_draw_vertices(batch.vertex_base, batch.vertex_count, push)
       }

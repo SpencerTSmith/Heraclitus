@@ -136,6 +136,10 @@ calc_plane_gizmo_visual :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: 
   normal = cross(gizmo.basis[0], gizmo.basis[1])
   center = center_around + ((sign_0 * gizmo.basis[0] + sign_1 * gizmo.basis[1])  * gizmo.offset)
 
+  // So the normal of the quad faces the camera, no culling accidentally, would rather not have to granularly turn off face culling
+  // when flushing debug draws in main pass.
+  normal *= sign(dot(center_around - camera_pos, normal))
+
   return center, normal
 }
 
@@ -172,10 +176,10 @@ draw_gizmo :: proc(gizmo: Editor_Gizmo, center_around, camera_pos: vec3, color: 
   {
   case .AXIS:
     position, direction := calc_axis_gizmo_visual(gizmo, center_around, camera_pos)
-    draw_vector(position, direction * gizmo.size, color, thickness=0.25, depth_test = .ALWAYS)
+    draw_vector(position, direction * gizmo.size, color, thickness=0.25)
   case .PLANE:
     center, normal := calc_plane_gizmo_visual(gizmo, center_around, camera_pos)
-    draw_quad(center, normal, gizmo.size, gizmo.size, color, depth_test = .ALWAYS)
+    draw_quad(center, normal, gizmo.size, gizmo.size, color)
   case .ROTATE:
   }
 }
@@ -224,7 +228,7 @@ move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
 
   input_direction: vec3
 
-  camera_forward, _, camera_right := get_camera_axes(camera^)
+  camera_forward, _, camera_right := camera_axes(camera^)
 
   // Z, forward
   if key_down(.W)
@@ -387,7 +391,7 @@ do_editor :: proc(camera: ^Camera, dt_s: f64)
         selected_entity.position = editor.anchor_entity_pos + delta_in_world
 
         // Visualize the movement
-        draw_vector(editor.anchor_entity_pos, delta_in_world, YELLOW, depth_test = .ALWAYS)
+        draw_vector(editor.anchor_entity_pos, delta_in_world, YELLOW)
       }
     }
   }

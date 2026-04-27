@@ -16,8 +16,12 @@ Pipeline :: struct
 {
   internal: Renderer_Internal,
 
+  // Baked states.
   color_format: Pixel_Format,
   depth_format: Pixel_Format,
+  samples:      u32,
+  primitive:    Vertex_Primitive,
+  blend:        Blend_Mode,
 
   // NOTE: Does not store the full path, just the name
   file_name:   string,
@@ -57,7 +61,9 @@ Point_Light_Uniform :: struct
 
 Direction_Light_Uniform :: struct #align(4)
 {
+  // 4 for each cascade.
   proj_view: mat4,
+  uv_offset: vec2,
 
   direction: vec4,
 
@@ -107,7 +113,7 @@ Frame_Uniform :: struct
   point_shadow_index: u32,
   skybox_index:       u32,
 
-  sun_light:    Direction_Light_Uniform,
+  sun_light: Direction_Light_Uniform,
 
   shadow_points_count: u32,
   shadow_point_lights: [MAX_SHADOW_POINT_LIGHTS]Shadow_Point_Light_Uniform,
@@ -319,41 +325,83 @@ point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform
   return uniform
 }
 
-// FIXME: AHHHHHHH... just learn how to do cascaded shadow maps
-@(private)
-prev_center: vec3
-
+// NOTE: Hardcoded center on main camera.
 direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_Light_Uniform)
 {
-  scene_bounds: f32 = 50.0
-  sun_distance: f32 = 50.0
-
-  center := state.camera.position
-
-  // FIXME: Just a hack to prevent shadow swimming until i can unstick my head out of my ass and figure
-  // out the texel snapping shit
-  if length(center - prev_center) < 10.0
+  CASCADES: [4]struct{near, far: f32} =
   {
-    center = prev_center
+    {state.camera.z_near, 10.0},
+    {10.0,                100.0},
+    {100.0,               500.0},
+    {500.0,               state.camera.z_far},
   }
 
-  prev_center = center
+  for cascade in CASCADES
+  {
+    projection := mat4_perspective(radians(state.camera.curr_fov_y), window_aspect_ratio(state.window), cascade.near, cascade.far)
+    view       := camera_view(state.camera)
 
-  light_proj := mat4_orthographic(-scene_bounds, scene_bounds, -scene_bounds, scene_bounds, 5.0, sun_distance * 2.0)
+    // Expensive
+    to_world := inverse(projection * view);
 
-  sun_position := center - (light.direction * sun_distance)
-  light_view := mat4_look_at(sun_position, center, WORLD_UP)
+    // Find the corners of this frustum in world space
+    subfrustum_corners: [dynamic; 8]vec3
+    for x in 0..<2
+    {
+      for y in 0..<2
+      {
+        for z in 0..<2
+        {
+          transformed := to_world * vec4{f32(x) * 2.0 - 1.0, f32(y) * 2.0 - 1.0, f32(z), 1.0}
+          transformed /= transformed.w
+          append(&subfrustum_corners, transformed.xyz)
+        }
+      }
+    }
 
-  uniform = Direction_Light_Uniform {
-    proj_view = light_proj * light_view,
+    // Center is just the average of all corners here
+    center: vec3
+    for corner in subfrustum_corners
+    {
+      center += corner
+    }
+    center /= f32(len(subfrustum_corners))
 
-    direction = vec4_from_3(light.direction),
+    light_view := mat4_look_at(center - light.direction, center, WORLD_UP)
 
-    color     = light.color,
+    // Now find the bounds of the frustum in light space for the projection matrix
+    min_x := max(f32)
+    max_x := min(f32)
+    min_y := max(f32)
+    max_y := min(f32)
+    min_z := max(f32)
+    max_z := min(f32)
+    for corner in subfrustum_corners
+    {
+      transformed := (light_view * vec4_from_3(corner, 1.0)).xyz
+      min_x = vmin(min_x, transformed.x)
+      max_x = vmax(max_x, transformed.x)
+      min_y = vmin(min_y, transformed.y)
+      max_y = vmax(max_y, transformed.y)
+      min_z = vmin(min_z, transformed.z)
+      max_z = vmax(max_z, transformed.z)
+    }
 
-    intensity = light.intensity,
-    ambient   = light.ambient,
+    Z_MUL :: 10.0
+    if min_z < 0 { min_z *= Z_MUL }
+    else         { min_z /= Z_MUL }
+    if max_z < 0 { max_z /= Z_MUL }
+    else         { max_z *= Z_MUL }
+
+    light_projection := mat4_orthographic(min_x, max_x, min_y, max_y, min_z, max_z)
+    uniform.proj_view = light_projection * light_view
+    break
   }
+
+  uniform.ambient = light.ambient
+  uniform.color   = light.color
+  uniform.intensity = light.intensity
+  uniform.direction = vec4_from_3(light.direction)
 
   return uniform
 }
@@ -492,8 +540,8 @@ compile_shader_file :: proc(file_name: string) -> (code: []byte, ok: bool)
 }
 
 // NOTE: For now will not do recursive includes, but maybe won't be necessary
-make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pixel_Format = .NONE,
-                      blend: Blend_Mode = .NONE, samples: u32 = 1) -> (pipeline: Pipeline, ok: bool)
+make_pipeline :: proc(name: string, color_format, depth_format: Pixel_Format, samples: u32 = 1,
+                      blend: Blend_Mode = .NONE, primitive: Vertex_Primitive = .TRIANGLES) -> (pipeline: Pipeline, ok: bool)
 {
   path := join_file_path({SHADER_DIR, name}, context.temp_allocator)
 
@@ -516,7 +564,7 @@ make_pipeline :: proc(name: string, color_format: Pixel_Format, depth_format: Pi
 
   if ok
   {
-    pipeline.internal = vk_make_pipeline(code, color_format, depth_format, blend, samples)
+    pipeline.internal = vk_make_pipeline(code, color_format, depth_format, samples, blend, primitive)
 
     pipeline.color_format = color_format
     pipeline.depth_format = depth_format

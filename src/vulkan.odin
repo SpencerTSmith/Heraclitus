@@ -792,7 +792,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       // // //
       // Samplers
       // // //
-      create_sampler :: proc(min_filter, mag_filter: vk.Filter, mipmap_mode: vk.SamplerMipmapMode,
+      make_sampler :: proc(min_filter, mag_filter: vk.Filter, mipmap_mode: vk.SamplerMipmapMode,
                              address_mode: vk.SamplerAddressMode, anisitropy: f32 = 0, border: vk.BorderColor = .FLOAT_OPAQUE_BLACK) -> (sampler: vk.Sampler)
       {
         info: vk.SamplerCreateInfo =
@@ -809,7 +809,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
           mipLodBias   = 0,
           borderColor  = border,
           maxAnisotropy = anisitropy,
-          anisotropyEnable = anisitropy != 0, // TODO:
+          anisotropyEnable = anisitropy != 0,
         }
         vk_assert(vk.CreateSampler(vks.logical, &info, nil, &sampler),
                   "Unable to create vulkan sampler.")
@@ -820,10 +820,10 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       props: vk.PhysicalDeviceProperties
       vk.GetPhysicalDeviceProperties(vks.physical, &props)
 
-      vks.samplers[.REPEAT_NEAREST]   = create_sampler(.NEAREST, .NEAREST, .NEAREST, .REPEAT)
-      vks.samplers[.REPEAT_TRILINEAR] = create_sampler(.LINEAR, .LINEAR, .LINEAR, .REPEAT, anisitropy=props.limits.maxSamplerAnisotropy)
-      vks.samplers[.CLAMP_LINEAR]     = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_EDGE)
-      vks.samplers[.CLAMP_WHITE]      = create_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_BORDER, border=.FLOAT_OPAQUE_WHITE)
+      vks.samplers[.REPEAT_NEAREST]   = make_sampler(.NEAREST, .NEAREST, .NEAREST, .REPEAT)
+      vks.samplers[.REPEAT_TRILINEAR] = make_sampler(.LINEAR, .LINEAR, .LINEAR, .REPEAT, anisitropy=props.limits.maxSamplerAnisotropy)
+      vks.samplers[.CLAMP_LINEAR]     = make_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_EDGE)
+      vks.samplers[.CLAMP_WHITE]      = make_sampler(.LINEAR, .LINEAR, .LINEAR, .CLAMP_TO_BORDER, border=.FLOAT_OPAQUE_WHITE)
 
       // Push one invalid internal so that index/handle 0 maps to an invalid internal
       vk_push_internal({})
@@ -1298,7 +1298,7 @@ vk_flush_render_frame :: proc(to_display: Texture)
   display_image := vk_get_image(to_display.internal)
 
   // Blit from display texture to the swapchain image
-  vk_transition_images(frame.buffer,
+  vk_barrier_images(frame.buffer,
   {
       // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
       vk_image_barrier_info(display_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL),
@@ -1339,7 +1339,7 @@ vk_flush_render_frame :: proc(to_display: Texture)
   vk.CmdBlitImage2(frame.buffer, &blit_info)
 
   // Transition swapchain image to be ready for present
-  vk_transition_images(frame.buffer, {vk_image_barrier_info(target.image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR)})
+  vk_barrier_images(frame.buffer, {vk_image_barrier_info(target.image, .TRANSFER_DST_OPTIMAL, .PRESENT_SRC_KHR)})
 
   vk_assert(vk.EndCommandBuffer(frame.buffer),
             "Unable to end vulkan command buffer recording.")
@@ -1533,7 +1533,35 @@ vk_aspect_from_format :: proc(format: Pixel_Format) -> (aspect: vk.ImageAspectFl
   return aspect
 }
 
-vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
+  // resolve_region: vk.ImageResolve2 =
+  // {
+  //   sType = .IMAGE_RESOLVE_2,
+  //   extent = {u32(to_display.width), u32(to_display.height), 1},
+  //   srcSubresource =
+  //   {
+  //     aspectMask = {.COLOR},
+  //     layerCount = 1,
+  //   },
+  //   dstSubresource =
+  //   {
+  //     aspectMask = {.COLOR},
+  //     layerCount = 1,
+  //   },
+  // }
+  // resolve_info: vk.ResolveImageInfo2 =
+  // {
+  //   sType = .RESOLVE_IMAGE_INFO_2,
+  //   srcImage       = display_image.image,
+  //   srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+  //   dstImage       = target.image,
+  //   dstImageLayout = .TRANSFER_DST_OPTIMAL,
+  //   pRegions       = &resolve_region,
+  //   regionCount    = 1,
+  // }
+  // vk.CmdResolveImage2(frame.buffer, &resolve_info)
+
+
+vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sampled_targets: []^Render_Target)
 {
   // Sort of jank
   to_layout :: proc(format: Pixel_Format, state: Texture_State) -> (layout: vk.ImageLayout)
@@ -1566,14 +1594,14 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
   clearing := .NO_CLEAR not_in pass.flags
 
   // Put in array so can submit all barriers in one call
-  barriers: [dynamic; cap(target.attachments)]vk.ImageMemoryBarrier2
+  barriers := make([dynamic]vk.ImageMemoryBarrier2, context.temp_allocator)
 
-  color_attachment_infos: [dynamic; cap(target.attachments)]vk.RenderingAttachmentInfo
+  color_attachment_infos: [dynamic; cap(draw_target.attachments)]vk.RenderingAttachmentInfo
   depth_attachment_info: vk.RenderingAttachmentInfo
   have_depth_attachment := false
-  for &attachment in target.attachments
+  for &attachment in draw_target.attachments
   {
-    vk_target := vk_get_image(attachment.internal)
+    vk_image := vk_get_image(attachment.internal)
 
     // Whatever it is right now. But undefined if we are clearing it, we don't care what layout it was in
     src_layout := to_layout(attachment.format, attachment.state) if !clearing else .UNDEFINED
@@ -1581,11 +1609,11 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
     // Transition to a target state for attachment
     dst_layout := to_layout(attachment.format, .TARGET)
 
-    append(&barriers, vk_image_barrier_info(vk_target.image, src_layout, dst_layout))
+    append(&barriers, vk_image_barrier_info(vk_image.image, src_layout, dst_layout))
     attachment_info: vk.RenderingAttachmentInfo =
     {
       sType       = .RENDERING_ATTACHMENT_INFO,
-      imageView   = vk_target.view,
+      imageView   = vk_image.view,
       imageLayout = dst_layout,
       // NOTE: Hardcoded depth/stencil clear values
       clearValue  = dst_layout == .COLOR_ATTACHMENT_OPTIMAL ? {color={float32=pass.clear_color}} : {depthStencil={depth=1.0,stencil=0}},
@@ -1606,12 +1634,28 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
 
     // This attachment is now a target, so future pipeline barriers can know about it.
 
-    // FIXME: This state change should probably be changed in the higher level renderer code
     attachment.state = .TARGET
   }
 
+  for to_sample in sampled_targets
+  {
+    for &attachment in to_sample.attachments
+    {
+      vk_target := vk_get_image(attachment.internal)
+
+      src_layout := to_layout(attachment.format, attachment.state)
+
+      // Transition to a fragment read state for attachment
+      dst_layout := to_layout(attachment.format, .FRAGMENT_READ)
+
+      append(&barriers, vk_image_barrier_info(vk_target.image, src_layout, dst_layout))
+
+      attachment.state = .FRAGMENT_READ
+    }
+  }
+
   // Now just uno call for all images
-  vk_transition_images(vk_curr_cmd(), barriers[:])
+  vk_barrier_images(vk_curr_cmd(), barriers[:])
 
   rendering_info: vk.RenderingInfo =
   {
@@ -1653,10 +1697,17 @@ vk_begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target)
 
   vk.CmdSetCullMode(vk_curr_cmd(), VK_CULL_TABLE[pass.face_cull])
 
-  // FIXME:
-  vk.CmdSetDepthTestEnable(vk_curr_cmd(), true)
-  vk.CmdSetDepthWriteEnable(vk_curr_cmd(), true)
-  vk.CmdSetDepthCompareOp(vk_curr_cmd(), .LESS_OR_EQUAL)
+  VK_DEPTH_TABLE: [Depth_Test_Mode]struct{test, write: b32, op: vk.CompareOp} =
+  {
+    .NONE          = {},
+    .ALWAYS        = {false, true, .LESS_OR_EQUAL},
+    .LESS          = {true, true, .LESS_OR_EQUAL},
+    .LESS_NO_WRITE = {true, false, .LESS_OR_EQUAL},
+  }
+
+  vk.CmdSetDepthTestEnable(vk_curr_cmd(), VK_DEPTH_TABLE[pass.depth_test].test)
+  vk.CmdSetDepthWriteEnable(vk_curr_cmd(), VK_DEPTH_TABLE[pass.depth_test].write)
+  vk.CmdSetDepthCompareOp(vk_curr_cmd(), VK_DEPTH_TABLE[pass.depth_test].op)
 
   // FIXME:
   vk.CmdSetDepthBiasEnable(vk_curr_cmd(), false)
@@ -1834,7 +1885,8 @@ vk_alloc_buffer :: proc(size: int, flags: GPU_Buffer_Flags) -> (gpu_ptr, cpu_ptr
   return gpu_ptr, cpu_ptr
 }
 
-vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format, blend: Blend_Mode, samples: u32) -> (internal: Renderer_Internal)
+vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format, samples: u32,
+                         blend: Blend_Mode, primitive: Vertex_Primitive) -> (internal: Renderer_Internal)
 {
   make_shader_module :: proc(code: []byte) -> (module: vk.ShaderModule)
   {
@@ -1867,10 +1919,16 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format,
   // Do vertex pulling.
   vertex: vk.PipelineVertexInputStateCreateInfo = { sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, }
 
+  VK_PRIMITIVE_TABLE: [Vertex_Primitive]vk.PrimitiveTopology =
+  {
+    .TRIANGLES = .TRIANGLE_LIST,
+    .LINES     = .LINE_LIST,
+  }
+
   assembly: vk.PipelineInputAssemblyStateCreateInfo =
   {
-    sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-    topology = .TRIANGLE_LIST
+    sType    = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+    topology = VK_PRIMITIVE_TABLE[primitive],
   }
 
   // Always. From research most desktop gpus already have these in hardware as dynamic.
@@ -2053,6 +2111,8 @@ vk_image_barrier_info :: proc(image: vk.Image, old, new: vk.ImageLayout, mip_bas
   src_stage, src_access := vk_image_layout_info(old)
   dst_stage, dst_access := vk_image_layout_info(new)
 
+  is_depth := new == .DEPTH_ATTACHMENT_OPTIMAL || old == .DEPTH_ATTACHMENT_OPTIMAL
+
   barrier_info =
   {
     sType         = .IMAGE_MEMORY_BARRIER_2,
@@ -2063,13 +2123,13 @@ vk_image_barrier_info :: proc(image: vk.Image, old, new: vk.ImageLayout, mip_bas
     oldLayout     = old,
     newLayout     = new,
     image         = image,
-    subresourceRange = vk_image_range(new == .DEPTH_ATTACHMENT_OPTIMAL ? {.DEPTH} : {.COLOR}, mip_base=mip_base, mip_count=mip_count),
+    subresourceRange = vk_image_range(is_depth ? {.DEPTH} : {.COLOR}, mip_base=mip_base, mip_count=mip_count),
   }
 
   return barrier_info
 }
 
-vk_transition_images :: proc(cmd: vk.CommandBuffer, barriers: []vk.ImageMemoryBarrier2)
+vk_barrier_images :: proc(cmd: vk.CommandBuffer, barriers: []vk.ImageMemoryBarrier2)
 {
   dependency: vk.DependencyInfo =
   {

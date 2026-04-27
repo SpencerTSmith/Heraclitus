@@ -37,12 +37,12 @@ draw_quad_screen :: proc(top_left_position: vec2, w, h: f32, color: vec4 = WHITE
   }
 
   immediate_vertex(top_left.position, top_left.color, top_left.uv)
-  immediate_vertex(top_right.position, top_right.color, top_right.uv)
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
+  immediate_vertex(top_right.position, top_right.color, top_right.uv)
 
   immediate_vertex(top_right.position, top_right.color, top_right.uv)
-  immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
+  immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
 }
 
 draw_quad_world :: proc(center, normal: vec3, w, h: f32, color := WHITE,
@@ -83,11 +83,11 @@ draw_quad_world :: proc(center, normal: vec3, w, h: f32, color := WHITE,
   }
 
   immediate_vertex(top_left.position, top_left.color, top_left.uv)
-  immediate_vertex(top_right.position, top_right.color, top_right.uv)
   immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
+  immediate_vertex(top_right.position, top_right.color, top_right.uv)
 
-  immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
   immediate_vertex(top_right.position, top_right.color, top_right.uv)
+  immediate_vertex(bottom_left.position, bottom_left.color, bottom_left.uv)
   immediate_vertex(bottom_right.position, bottom_right.color, bottom_right.uv)
 }
 

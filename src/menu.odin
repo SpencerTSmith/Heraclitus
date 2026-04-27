@@ -170,6 +170,6 @@ draw_menu :: proc()
               color, .CENTER)
   }
 
-  immediate_flush(flush_world=true, flush_screen=true)
+  immediate_flush(.SCREEN)
 }
 

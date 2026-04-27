@@ -55,7 +55,7 @@ move_camera_game :: proc(camera: ^Camera, dt_s: f64)
 
   wish_dir: vec3
 
-  camera_forward, _, camera_right := get_camera_axes(camera^)
+  camera_forward, _, camera_right := camera_axes(camera^)
 
   // Z, forward
   if key_down(.W)
@@ -293,7 +293,7 @@ camera_perspective :: proc(camera: Camera, aspect_ratio: f32) -> (perspective: m
   return mat4_perspective(radians(camera.curr_fov_y), aspect_ratio, camera.z_near, camera.z_far)
 }
 
-get_camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3)
+camera_axes :: proc(camera: Camera) -> (forward, up, right: vec3)
 {
   forward = camera_forward(camera)
   right   = normalize(cross(forward, WORLD_UP))

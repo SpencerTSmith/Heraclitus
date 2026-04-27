@@ -53,8 +53,8 @@ float3 phong_specular(float3 normal, float3 light_direction, float3 view_directi
 float shadow_bias(float3 normal, float3 to_light_dir)
 {
   float facing_dot  = max(dot(normal, to_light_dir), 0.0);
-  float slope_scale = 0.00001;
-  float min_bias    = 0.00001;
+  float slope_scale = 0.005;
+  float min_bias    = 0.001;
   float bias        = max(min_bias, slope_scale * (1.0 - facing_dot));
 
   return bias;
@@ -133,47 +133,47 @@ float direction_shadow(uint shadow_map_index, float3 camera_position, float3 wor
 {
   // Perspective divide
   float3 projected = light_space_position.xyz / light_space_position.w;
-  // From NDC to [0, 1]
-  projected = projected * 0.5 + 0.5;
-
-  if (projected.z > 1.0)
-    return 0.0;
-
-  float mapped_depth = sample_2D_uniform(shadow_map_index, projected.xy).r;
-  float actual_depth = projected.z;
-
-  int sample_count = 16;
-  float2 sample_offsets[16] = float2[] (
-    float2(-1.5, -1.5), float2(-0.5, -1.5), float2( 0.5, -1.5), float2( 1.5, -1.5),
-    float2(-1.5, -0.5), float2(-0.5, -0.5), float2( 0.5, -0.5), float2( 1.5, -0.5),
-    float2(-1.5,  0.5), float2(-0.5,  0.5), float2( 0.5,  0.5), float2( 1.5,  0.5),
-    float2(-1.5,  1.5), float2(-0.5,  1.5), float2( 0.5,  1.5), float2( 1.5,  1.5)
-  );
-
-  // Fix shadow acne, surfaces facing away get large bias, surfaces facing toward get less
-  float bias = shadow_bias(normal, normalize(to_light_dir));
+  // From NDC to [0, 1] in only the x direction.
+  projected.xy = projected.xy * 0.5 + 0.5;
 
   float shadow = 0.0;
-  float view_distance = length(camera_position - world_position);
 
-  float disk_radius = 1.0 + (view_distance / 10.0);
-  disk_radius       = clamp(disk_radius, 1.0, 4.0);
-
-  float2 texel_size = 1.0 / texture_size_uniform(shadow_map_index);
-
-  for (int i = 0; i < sample_count; ++i)
+  if (projected.z <= 1.0)
   {
-    float2 sample_uv = projected.xy + sample_offsets[i] * disk_radius * texel_size;
+    float mapped_depth = sample_2D_uniform(shadow_map_index, projected.xy).r;
+    float actual_depth = projected.z;
 
-    // Sample uvs depth
-    float map_depth = sample_2D_uniform(shadow_map_index, sample_uv).r;
+    int sample_count = 16;
+    float2 sample_offsets[16] = float2[] (
+        float2(-1.5, -1.5), float2(-0.5, -1.5), float2( 0.5, -1.5), float2( 1.5, -1.5),
+        float2(-1.5, -0.5), float2(-0.5, -0.5), float2( 0.5, -0.5), float2( 1.5, -0.5),
+        float2(-1.5,  0.5), float2(-0.5,  0.5), float2( 0.5,  0.5), float2( 1.5,  0.5),
+        float2(-1.5,  1.5), float2(-0.5,  1.5), float2( 0.5,  1.5), float2( 1.5,  1.5)
+    );
 
-    float visibility = (actual_depth - bias) > map_depth ? 1.0 : 0.0;
+    // Fix shadow acne, surfaces facing away get large bias, surfaces facing toward get less
+    float bias = shadow_bias(normal, normalize(to_light_dir));
 
-    shadow += visibility * 1.0;
+    float view_distance = length(camera_position - world_position);
+
+    float disk_radius = 1.5;
+
+    float2 texel_size = 1.0 / texture_size_uniform(shadow_map_index);
+
+    for (int i = 0; i < sample_count; ++i)
+    {
+      float2 sample_uv = projected.xy + sample_offsets[i] * disk_radius * texel_size;
+
+      // Sample uvs depth
+      float map_depth = sample_2D_uniform(shadow_map_index, sample_uv).r;
+
+      float visibility = (actual_depth - bias) > map_depth ? 1.0 : 0.0;
+
+      shadow += visibility * 1.0;
+    }
+
+    shadow /= float(sample_count);
   }
-
-  shadow /= float(sample_count);
 
   return shadow;
 }

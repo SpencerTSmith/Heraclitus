@@ -207,11 +207,11 @@ entity_has_transparency :: proc(e: Entity) -> bool
 
 // NOTE: This layer of drawing deals with assets not being present yet
 // the draw_model call is only for if we KNOW the model is loaded
-draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, draw_aabbs := false, light_index: u32 = 0)
+draw_entity :: proc(e: Entity, color: vec4 = WHITE, instances: int = 1, light_index: u32 = 0)
 {
-  if draw_aabbs
+  if state.renderer.draw_debug
   {
-    MAX_DISTANCE :: 75.0
+    MAX_DISTANCE :: 25.0
     // Don't have to do the sqrt haha
     if squared_distance(e.position, state.camera.position) < (MAX_DISTANCE * MAX_DISTANCE)
     {

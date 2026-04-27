@@ -18,6 +18,48 @@ Program_Mode :: enum
   MENU,
 }
 
+Point_Light :: struct
+{
+  position:    vec3,
+
+  color:       vec4,
+
+  radius:      f32,
+  intensity:   f32,
+  ambient:     f32,
+
+  // TODO: Maybe flags
+  cast_shadows: bool,
+  dirty_shadow: bool, // For caching shadow maps
+}
+
+Direction_Light :: struct
+{
+  direction: vec3,
+
+  color:     vec4,
+
+  intensity: f32,
+  ambient:   f32,
+  cascades:  u32,
+}
+
+Spot_Light :: struct
+{
+  position:     vec3,
+  direction:    vec3,
+
+  color:        vec4,
+
+  radius:       f32,
+  intensity:    f32,
+  ambient:      f32,
+
+  // Cosines
+  inner_cutoff: f32,
+  outer_cutoff: f32,
+}
+
 MODEL_UP      :: vec3{0.0, 1.0, 0.0}
 MODEL_RIGHT   :: vec3{1.0, 0.0, 0.0}
 MODEL_FORWARD :: vec3{0.0, 0.0, 1.0}
