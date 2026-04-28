@@ -328,17 +328,20 @@ point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform
 // NOTE: Hardcoded center on main camera.
 direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_Light_Uniform)
 {
-  CASCADES: [4]struct{near, far: f32} =
+  CASCADES: []f32 =
   {
-    {state.camera.z_near, 10.0},
-    {10.0,                100.0},
-    {100.0,               500.0},
-    {500.0,               state.camera.z_far},
+    state.camera.z_near,
+    10.0,
+    // 50.0,
+    // 100.0,
+    // state.camera.z_far,
   }
 
-  for cascade in CASCADES
+  for idx in 1..<len(CASCADES)
   {
-    projection := mat4_perspective(radians(state.camera.curr_fov_y), window_aspect_ratio(state.window), cascade.near, cascade.far)
+    near := CASCADES[idx - 1]
+    far  := CASCADES[idx]
+    projection := mat4_perspective(radians(state.camera.curr_fov_y), window_aspect_ratio(state.window), near, far)
     view       := camera_view(state.camera)
 
     // Expensive
@@ -387,15 +390,38 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
       max_z = vmax(max_z, transformed.z)
     }
 
+    radius: f32
+    for corner in subfrustum_corners {
+      radius = vmax(radius, length(corner - center))
+    }
+
     Z_MUL :: 10.0
     if min_z < 0 { min_z *= Z_MUL }
     else         { min_z /= Z_MUL }
     if max_z < 0 { max_z /= Z_MUL }
     else         { max_z *= Z_MUL }
+    // light_projection := mat4_orthographic(min_x, max_x, min_y, max_y, min_z, max_z)
 
-    light_projection := mat4_orthographic(min_x, max_x, min_y, max_y, min_z, max_z)
+    // Use sphere radius for tight, stable bounds
+    light_projection := mat4_orthographic(-radius, radius, -radius, radius, min_z, max_z)
+
     uniform.proj_view = light_projection * light_view
-    break
+
+    // Get the origin in shadow map space
+    shadow_origin := uniform.proj_view * vec4{0, 0, 0, 1}
+    shadow_origin *= f32(SUN_SHADOW_MAP_SIZE) / 2.0
+
+    // Round to nearest texel
+    rounded := vec4{round(shadow_origin.x), round(shadow_origin.y), round(shadow_origin.z), round(shadow_origin.w)}
+    round_offset := rounded - shadow_origin
+    round_offset *= 2.0 / f32(SUN_SHADOW_MAP_SIZE)
+    round_offset.z = 0
+    round_offset.w = 0
+
+    // Apply offset to projection matrix
+    light_projection[3] += round_offset
+
+    uniform.proj_view = light_projection * light_view
   }
 
   uniform.ambient = light.ambient

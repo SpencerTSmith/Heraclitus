@@ -211,6 +211,8 @@ main :: proc()
   last_frame_time := time.tick_now()
   dt_s := 0.0
 
+  sun_map := register_texture(&state.renderer.sun_shadow_target.attachments[0])
+
   for !should_close(state.window)
   {
     // dt and sleeping
@@ -366,6 +368,8 @@ main :: proc()
 
             draw_debug_stats()
             draw_ui()
+
+            draw_quad(vec2{700,700}, 400, 400, texture=sun_map)
 
             immediate_flush(.SCREEN)
           }

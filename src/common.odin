@@ -3,6 +3,7 @@ package main
 import "base:runtime"
 import "core:fmt"
 import "core:log"
+import "core:math"
 import "core:math/linalg"
 import "core:math/linalg/glsl"
 import "core:path/filepath"
@@ -127,6 +128,8 @@ inverse_transpose :: glsl.inverse_transpose
 mat4_translate :: glsl.mat4Translate
 mat4_rotate    :: glsl.mat4Rotate
 mat4_scale     :: glsl.mat4Scale
+
+round :: math.round
 
 // For vulkan clip space.
 mat4_perspective  :: proc(fovy, aspect, near, far: f32) -> (m: mat4)
