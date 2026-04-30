@@ -156,7 +156,7 @@ float direction_shadow(uint shadow_map_index, float3 camera_position, float3 wor
 
     float view_distance = length(camera_position - world_position);
 
-    float disk_radius = 1.5;
+    float disk_radius = 1.0;
 
     float2 texel_size = 1.0 / texture_size_uniform(shadow_map_index);
 

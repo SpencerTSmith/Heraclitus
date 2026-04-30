@@ -4,9 +4,6 @@ import "core:fmt"
 import "core:mem"
 import "core:math/rand"
 import "core:log"
-// import "core:slice"
-
-import "vendor:glfw"
 
 Editor_Gizmo_Kind :: enum
 {
@@ -210,60 +207,6 @@ pick_gizmo :: proc(ray: Ray, center_around: vec3, camera_pos: vec3) -> (gizmo: u
 clear_editor_selected_entity :: proc()
 {
   editor.selected_entity = {}
-}
-
-move_camera_editor :: proc(camera: ^Camera, dt_s: f64)
-{
-  if mouse_down(.MIDDLE) || key_down(.Q)
-  {
-    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    update_camera_look(camera, mouse_position_delta(), dt_s)
-  }
-  else
-  {
-    glfw.SetInputMode(state.window.handle, glfw.CURSOR, glfw.CURSOR_NORMAL)
-  }
-
-  dt_s := f32(dt_s)
-
-  input_direction: vec3
-
-  camera_forward, _, camera_right := camera_axes(camera^)
-
-  // Z, forward
-  if key_down(.W)
-  {
-    input_direction += camera_forward
-  }
-  if key_down(.S)
-  {
-    input_direction -= camera_forward
-  }
-
-  // Y, vertical, but in world space not camera up
-  if key_down(.SPACE)
-  {
-    input_direction += WORLD_UP
-  }
-  if key_down(.LEFT_CONTROL)
-  {
-    input_direction -= WORLD_UP
-  }
-
-  // X, strafe
-  if key_down(.D)
-  {
-    input_direction += camera_right
-  }
-  if key_down(.A)
-  {
-    input_direction -= camera_right
-  }
-
-  FREECAM_SPEED :: 35.0
-  camera.position += input_direction * FREECAM_SPEED * f32(dt_s)
-  camera.velocity  = {0,0,0}
-  camera.on_ground = false
 }
 
 do_editor_ui :: proc() -> (had_interaction: bool)

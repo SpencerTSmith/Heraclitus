@@ -372,37 +372,21 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
 
     light_view := mat4_look_at(center - light.direction, center, WORLD_UP)
 
-    // Now find the bounds of the frustum in light space for the projection matrix
-    min_x := max(f32)
-    max_x := min(f32)
-    min_y := max(f32)
-    max_y := min(f32)
-    min_z := max(f32)
-    max_z := min(f32)
-    for corner in subfrustum_corners
-    {
-      transformed := (light_view * vec4_from_3(corner, 1.0)).xyz
-      min_x = vmin(min_x, transformed.x)
-      max_x = vmax(max_x, transformed.x)
-      min_y = vmin(min_y, transformed.y)
-      max_y = vmax(max_y, transformed.y)
-      min_z = vmin(min_z, transformed.z)
-      max_z = vmax(max_z, transformed.z)
-    }
-
     radius: f32
     for corner in subfrustum_corners {
       radius = vmax(radius, length(corner - center))
     }
+
+    min_z := -radius
+    max_z := radius
 
     Z_MUL :: 10.0
     if min_z < 0 { min_z *= Z_MUL }
     else         { min_z /= Z_MUL }
     if max_z < 0 { max_z /= Z_MUL }
     else         { max_z *= Z_MUL }
-    // light_projection := mat4_orthographic(min_x, max_x, min_y, max_y, min_z, max_z)
 
-    // Use sphere radius for tight, stable bounds
+    // Use sphere radius for semi-stable bounds
     light_projection := mat4_orthographic(-radius, radius, -radius, radius, min_z, max_z)
 
     uniform.proj_view = light_projection * light_view
