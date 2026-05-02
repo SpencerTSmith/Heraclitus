@@ -2,6 +2,7 @@ package main
 
 Render_Target :: struct
 {
+  // Maybe should hold texture handles.
   attachments: [dynamic; 4]Texture,
 }
 

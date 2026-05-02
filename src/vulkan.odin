@@ -1061,14 +1061,11 @@ vk_gpu_buffer_offset :: proc(buffer: $B/GPU_Buffer, arena: Vulkan_Arena) -> (off
 
 vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
 {
-  // TODO: Could probably collapse some of these since use linear allocations....
-
   // FIXME: Just assuming that this only happens from cpu -> gpu
   vk_src_buffer := vks.arenas[.MAPPED].buffer
   vk_dst_buffer := vks.arenas[.DEVICE].buffer
 
   buffer_regions:  [dynamic; N]vk.BufferCopy
-  buffer_barriers: [dynamic; N]vk.BufferMemoryBarrier2
 
   images:              [dynamic; N]vk.Image
   image_mips:          [dynamic; N]u32
@@ -1090,20 +1087,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
           dstOffset = vk_gpu_buffer_offset(dst, vks.arenas[.DEVICE]) + vk.DeviceSize(upload.dst_offset),
           size      = vk.DeviceSize(upload.size),
         }
-        // NOTE: Hardcoded to be barrier at vertex stage
-        barrier: vk.BufferMemoryBarrier2 =
-        {
-          sType         = .BUFFER_MEMORY_BARRIER_2,
-          offset        = region.dstOffset,
-          buffer        = vk_dst_buffer,
-          size          = region.size,
-          srcStageMask  = {.TRANSFER},
-          srcAccessMask = {.TRANSFER_WRITE},
-          dstStageMask  = {.VERTEX_ATTRIBUTE_INPUT},
-          dstAccessMask = {.VERTEX_ATTRIBUTE_READ},
-        }
         append(&buffer_regions, region)
-        append(&buffer_barriers, barrier)
       case Texture:
         region: vk.BufferImageCopy =
         {
@@ -1145,12 +1129,23 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
   }
 
   read_dependencies: vk.DependencyInfo = { sType = .DEPENDENCY_INFO }
+
   if len(buffer_regions) > 0
   {
     vk.CmdCopyBuffer(vk_curr_cmd(), vk_src_buffer, vk_dst_buffer, u32(len(buffer_regions)), raw_data(buffer_regions[:]))
 
-    read_dependencies.pBufferMemoryBarriers    = raw_data(buffer_barriers[:])
-    read_dependencies.bufferMemoryBarrierCount = u32(len(buffer_barriers))
+    // NOTE: One single memory barrier for all buffer stuff, apparently drivers don't care really about granular buffer barriers
+    memory_barrier: vk.MemoryBarrier2 =
+    {
+      sType = .MEMORY_BARRIER_2,
+      srcStageMask =  {.TRANSFER},
+      srcAccessMask = {.TRANSFER_WRITE},
+      dstStageMask  = {.VERTEX_ATTRIBUTE_INPUT},
+      dstAccessMask = {.VERTEX_ATTRIBUTE_READ},
+    }
+
+    read_dependencies.pMemoryBarriers = &memory_barrier
+    read_dependencies.memoryBarrierCount = 1
   }
 
   if len(images) > 0
@@ -1300,11 +1295,10 @@ vk_flush_render_frame :: proc(to_display: Texture)
   // Blit from display texture to the swapchain image
   vk_barrier_images(frame.buffer,
   {
-      // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
-      vk_image_barrier_info(display_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL),
-
-      // Transfer swapchain image to be ready for blitting draw image to it.
-      vk_image_barrier_info(target.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
+    // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
+    vk_image_barrier_info(display_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL),
+    // Transfer swapchain image to be ready for blitting draw image to it.
+    vk_image_barrier_info(target.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
   })
 
   // Blit from to display to the swapchain image
@@ -1533,32 +1527,38 @@ vk_aspect_from_format :: proc(format: Pixel_Format) -> (aspect: vk.ImageAspectFl
   return aspect
 }
 
-  // resolve_region: vk.ImageResolve2 =
-  // {
-  //   sType = .IMAGE_RESOLVE_2,
-  //   extent = {u32(to_display.width), u32(to_display.height), 1},
-  //   srcSubresource =
-  //   {
-  //     aspectMask = {.COLOR},
-  //     layerCount = 1,
-  //   },
-  //   dstSubresource =
-  //   {
-  //     aspectMask = {.COLOR},
-  //     layerCount = 1,
-  //   },
-  // }
-  // resolve_info: vk.ResolveImageInfo2 =
-  // {
-  //   sType = .RESOLVE_IMAGE_INFO_2,
-  //   srcImage       = display_image.image,
-  //   srcImageLayout = .TRANSFER_SRC_OPTIMAL,
-  //   dstImage       = target.image,
-  //   dstImageLayout = .TRANSFER_DST_OPTIMAL,
-  //   pRegions       = &resolve_region,
-  //   regionCount    = 1,
-  // }
-  // vk.CmdResolveImage2(frame.buffer, &resolve_info)
+
+vk_resolve_texture :: proc(source, target: Texture)
+{
+  assert(source.samples > 1, "Idiot, did you mean to resolve from a texture with only one sample?")
+
+  resolve_region: vk.ImageResolve2 =
+  {
+    sType = .IMAGE_RESOLVE_2,
+    extent = {u32(source.width), u32(source.height), 1},
+    srcSubresource =
+    {
+      aspectMask = {.COLOR},
+      layerCount = 1,
+    },
+    dstSubresource =
+    {
+      aspectMask = {.COLOR},
+      layerCount = 1,
+    },
+  }
+  resolve_info: vk.ResolveImageInfo2 =
+  {
+    sType = .RESOLVE_IMAGE_INFO_2,
+    srcImage       = vk_get_image(source.internal).image,
+    srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+    dstImage       = vk_get_image(target.internal).image,
+    dstImageLayout = .TRANSFER_DST_OPTIMAL,
+    pRegions       = &resolve_region,
+    regionCount    = 1,
+  }
+  vk.CmdResolveImage2(vk_curr_cmd(), &resolve_info)
+}
 
 
 vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sampled_targets: []^Render_Target)

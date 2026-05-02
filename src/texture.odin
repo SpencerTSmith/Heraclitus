@@ -256,3 +256,8 @@ make_texture_from_file :: proc(file_name: string, nonlinear_color: bool = false)
 
   return texture, ok
 }
+
+resolve_texture :: proc(source, target: Texture)
+{
+  vk_resolve_texture(source, target)
+}
