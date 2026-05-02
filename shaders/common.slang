@@ -128,45 +128,65 @@ float3 spot_phong(Spot_Light_Uniform light, float3 diffuse_sample, float3 specul
 	return saturate(phong);
 }
 
-float direction_shadow(uint shadow_map_index, float3 camera_position, float3 world_position,
-                       float4 light_space_position, float3 to_light_dir, float3 normal)
+int pick_cascade(float view_depth, float4 depth_planes)
 {
+  int cascade_index = 3;
+
+  for (int i = 0; i < 4; ++i)
+  {
+    if (view_depth < depth_planes[i])
+    {
+      cascade_index = i;
+      break;
+    }
+  }
+
+  return cascade_index;
+}
+
+float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint cascade, float3 world_position, float3 normal, float3 to_light_direction)
+{
+  float shadow = 0.0;
+
+  float4 light_space_position = mul(light.proj_views[cascade], float4(world_position, 1.0));
+
   // Perspective divide
   float3 projected = light_space_position.xyz / light_space_position.w;
-  // From NDC to [0, 1] in only the x direction.
-  projected.xy = projected.xy * 0.5 + 0.5;
-
-  float shadow = 0.0;
 
   if (projected.z <= 1.0)
   {
-    float mapped_depth = sample_2D_uniform(shadow_map_index, projected.xy).r;
+    // From NDC to [0, 1] in only the x direction. Z should already be there.
+    projected.xy = projected.xy * 0.5 + 0.5;
+
     float actual_depth = projected.z;
 
+    float2 full_atlas_size = texture_size_uniform(shadow_map_index);
+
+    // Atlas uv by adding the texel offset to the projected coord in 'texel space' then undividing back to uv
+    float2 atlas_uv = (light.atlas_offset[cascade] + projected.xy * light.atlas_size[cascade]) / full_atlas_size;
+
     int sample_count = 16;
-    float2 sample_offsets[16] = float2[] (
-      float2(-0.94201624, -0.39906216), float2( 0.94558609, -0.76890725),
-      float2(-0.09418410, -0.92938870), float2( 0.34495938,  0.29387760),
-      float2(-0.91588581,  0.45771432), float2(-0.81544232, -0.87912464),
-      float2(-0.38277543,  0.27676845), float2( 0.97484398,  0.75648379),
-      float2( 0.44323325, -0.97511554), float2( 0.53742981, -0.47373420),
-      float2(-0.26496911, -0.41893023), float2( 0.79197514,  0.19090188),
-      float2(-0.24188840,  0.99706507), float2(-0.81409955,  0.91437590),
-      float2( 0.19984126,  0.78641367), float2( 0.14383161, -0.14100790)
+    float2 sample_offsets[16] = float2[](
+        float2(-0.94201624, -0.39906216), float2( 0.94558609, -0.76890725),
+        float2(-0.09418410, -0.92938870), float2( 0.34495938,  0.29387760),
+        float2(-0.91588581,  0.45771432), float2(-0.81544232, -0.87912464),
+        float2(-0.38277543,  0.27676845), float2( 0.97484398,  0.75648379),
+        float2( 0.44323325, -0.97511554), float2( 0.53742981, -0.47373420),
+        float2(-0.26496911, -0.41893023), float2( 0.79197514,  0.19090188),
+        float2(-0.24188840,  0.99706507), float2(-0.81409955,  0.91437590),
+        float2( 0.19984126,  0.78641367), float2( 0.14383161, -0.14100790)
     );
 
     // Fix shadow acne, surfaces facing away get large bias, surfaces facing toward get less
-    float bias = shadow_bias(normal, normalize(to_light_dir));
+    float bias = shadow_bias(normal, normalize(to_light_direction));
 
-    float view_distance = length(camera_position - world_position);
+    float disk_radius = 2.5;
 
-    float disk_radius = 1.0;
-
-    float2 texel_size = 1.0 / texture_size_uniform(shadow_map_index);
+    float2 texel_size = 1.0 / full_atlas_size;
 
     for (int i = 0; i < sample_count; ++i)
     {
-      float2 sample_uv = projected.xy + sample_offsets[i] * disk_radius * texel_size;
+      float2 sample_uv = atlas_uv + sample_offsets[i] * disk_radius * texel_size;
 
       // Sample uvs depth
       float map_depth = sample_2D_uniform(shadow_map_index, sample_uv).r;
@@ -177,6 +197,31 @@ float direction_shadow(uint shadow_map_index, float3 camera_position, float3 wor
     }
 
     shadow /= float(sample_count);
+  }
+
+  return shadow;
+}
+
+float direction_shadow(Direction_Light_Uniform light, uint shadow_map_index, float3 world_position, float3 normal, float view_depth)
+{
+  int cascade = pick_cascade(view_depth, light.depth_plane);
+
+  float3 to_light_direction = -light.direction.xyz;
+
+  float shadow = sample_cascade(light, shadow_map_index, cascade, world_position, normal, to_light_direction);
+
+  float cascade_far   = light.depth_plane[cascade];
+  float cascade_near  = cascade > 0 ? light.depth_plane[cascade - 1] : 0.0;
+  float cascade_range = cascade_far - cascade_near;
+
+  float blend_start = cascade_far - (cascade_range * 0.10); // Last bit is blend zone
+
+  float blend_factor = smoothstep(blend_start, cascade_far, view_depth);
+
+  if (blend_factor > 0.0 && cascade < 3)
+  {
+    float next_shadow = sample_cascade(light, shadow_map_index, cascade + 1, world_position, normal, to_light_direction);
+    shadow = lerp(shadow, next_shadow, blend_factor);
   }
 
   return shadow;

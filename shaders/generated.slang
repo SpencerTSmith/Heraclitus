@@ -1,9 +1,11 @@
-// NOTE: This code was generated on 30-04-2026 (04:09:34 pm)
+// NOTE: This code was generated on 02-05-2026 (08:57:43 am)
 
 struct Direction_Light_Uniform
 {
-  float4x4 proj_view;
-  float2 uv_offset;
+  float4x4 proj_views[4];
+  float2 atlas_size[4];
+  float2 atlas_offset[4];
+  float4 depth_plane;
   float4 direction;
   float4 color;
   float intensity;
@@ -74,7 +76,7 @@ struct Frame_Uniform
   uint shadow_points_count;
   Shadow_Point_Light_Uniform shadow_point_lights[8];
   uint points_count;
-  Point_Light_Uniform point_lights[128];
+  Point_Light_Uniform point_lights[64];
   Spot_Light_Uniform flash_light;
 }
 
@@ -106,6 +108,7 @@ struct Mega_Push
   Draw_Uniform *draw_uniforms;
   Mesh_Vertex *vertices;
   Material_Uniform *material_uniforms;
+  uint cascade_index;
 }
 
 struct Skybox_Push

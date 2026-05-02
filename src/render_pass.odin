@@ -1,9 +1,15 @@
 package main
 
+Render_Target_Flag :: enum
+{
+  WINDOW_SIZED,
+}
+Render_Target_Flags :: bit_set[Render_Target_Flag]
+
 Render_Target :: struct
 {
-  // Maybe should hold texture handles.
   attachments: [dynamic; 4]Texture,
+  flags:       Render_Target_Flags
 }
 
 Attachment_Description :: enum u8
@@ -67,11 +73,6 @@ Render_Pass :: struct
   viewport:    Viewport, // Optional, see flags
 }
 
-Skybox_Push :: struct
-{
-  frame_uniform: [^]Frame_Uniform,
-}
-
 MAIN_PASS :: Render_Pass {
   depth_test = .LESS,
   face_cull  = .BACK,
@@ -84,7 +85,7 @@ POST_PASS :: Render_Pass {
 
 SUN_SHADOW_PASS :: Render_Pass {
   depth_test = .LESS,
-  face_cull  = .FRONT,
+  face_cull  = .NONE,
 }
 
 POINT_SHADOW_PASS :: Render_Pass {
@@ -98,7 +99,7 @@ UI_PASS :: Render_Pass {
   flags      = {.NO_CLEAR},
 }
 
-make_render_target :: proc(width, height, samples: u32, attachments: []Attachment_Description) -> (target: Render_Target)
+make_render_target :: proc(width, height, samples: u32, attachments: []Attachment_Description, flags: Render_Target_Flags = {}) -> (target: Render_Target)
 {
   assert(len(attachments) < cap(target.attachments), "Too many attachments specified for render target creation.")
 
@@ -132,10 +133,12 @@ make_render_target :: proc(width, height, samples: u32, attachments: []Attachmen
     append(&target.attachments, texture)
   }
 
+  target.flags = flags
+
   return target
 }
 
-begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target, sampled: []^Render_Target = {})
+begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target, blit_source: ^Render_Target = nil, sampled: []^Render_Target = {})
 {
   // May also assert that the size of these attachments are the same, but eh
   assert(len(target.attachments) != 0)
@@ -150,10 +153,15 @@ begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target, sampled: []
     pass.viewport.h = target.attachments[0].height
   }
 
-  vk_begin_render_pass(pass, target, sampled)
+  vk_begin_render_pass(pass, target, blit_source, sampled)
 }
 
 end_render_pass :: proc()
 {
   vk_end_render_pass()
+}
+
+set_render_viewport :: proc(viewport: Viewport)
+{
+  vk_set_render_viewport(viewport)
 }

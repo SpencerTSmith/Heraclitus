@@ -25,8 +25,8 @@ should_close :: proc(window: Window) -> bool
   return bool(glfw.WindowShouldClose(window.handle)) || !state.running
 }
 
-make_window :: proc(window_width  := 2560,
-                    window_height := 1440,
+make_window :: proc(window_width  := 3840,
+                    window_height := 2160,
                     window_title  := "Heraclitus") -> (window: Window, ok: bool)
 {
   glfw.InitHint(glfw.PLATFORM, glfw.PLATFORM_X11)
@@ -64,7 +64,6 @@ make_window :: proc(window_width  := 2560,
         state.input.mouse.delta_scroll.x += dir_x
         state.input.mouse.delta_scroll.y += dir_y
       })
-
     }
     else
     {

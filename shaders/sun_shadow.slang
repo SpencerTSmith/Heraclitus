@@ -16,7 +16,7 @@ Vert_Out vert_main(uniform Mega_Push push, uint vertex_id : SV_VulkanVertexID, u
 
   Draw_Uniform draw = push.draw_uniforms[draw_id];
 
-  float4x4 proj_view = push.frame_uniform.sun_light.proj_view;
+  float4x4 proj_view = push.frame_uniform.sun_light.proj_views[push.cascade_index];
 
   Vert_Out o;
   o.position = mul(proj_view, mul(draw.model, float4(vertex.position, 1.0)));

@@ -69,12 +69,21 @@ Vulkan_Image :: struct
   view:  vk.ImageView,
 }
 
-
 // Internal API Objects
 Vulkan_Internal :: union
 {
   Vulkan_Image,
   vk.Pipeline,
+}
+
+Vulkan_Deletion :: struct
+{
+  item: union
+  {
+    Swapchain, // Doesn't really work right now... can't figure out how to make sure no images still being written to
+    Vulkan_Internal,
+  },
+  frame_requested: u64,
 }
 
 @(private="file")
@@ -104,6 +113,9 @@ vks: struct
 
   // API Object Pool
   internals: [dynamic; 512]Vulkan_Internal,
+
+  // Hopefully not deleting too many times!
+  deletions: [dynamic; 32]Vulkan_Deletion,
 }
 
 vk_assert ::  #force_inline proc(result: vk.Result, message: string)
@@ -545,6 +557,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
       sType = .PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
       synchronization2 = true,
       dynamicRendering = true,
+      shaderDemoteToHelperInvocation = true,
     }
     required_device_features12: vk.PhysicalDeviceVulkan12Features =
     {
@@ -867,7 +880,8 @@ make_swapchain :: proc(window: Window, logical: vk.Device, physical: vk.Physical
 {
   if old.handle != 0
   {
-    vk.DeviceWaitIdle(logical)
+    // Wait for presentations to be done
+    vk.QueueWaitIdle(vks.queues[.PRESENT])
   }
 
   surface_format := choose_surface_format(physical, surface)
@@ -1175,7 +1189,7 @@ vk_do_uploads :: proc(uploads: [dynamic; $N]GPU_Upload)
 
         vk.CmdPipelineBarrier2(vk_curr_cmd(), &mip_blit_dependencies)
 
-        blit_region :vk.ImageBlit2 =
+        blit_region: vk.ImageBlit2 =
         {
           sType = .IMAGE_BLIT_2,
           srcOffsets = {{0,0,0}, {i32(prev_mip_w), i32(prev_mip_h), 1}},
@@ -1235,6 +1249,7 @@ vk_begin_render_frame :: proc() -> (ok: bool)
 
   frame := vks.frames[curr_frame_idx()]
 
+  // Frame sync
   if state.renderer.frame_count + 1 > FRAMES_IN_FLIGHT
   {
     wait_value := state.renderer.frame_count + 1 - FRAMES_IN_FLIGHT
@@ -1246,6 +1261,34 @@ vk_begin_render_frame :: proc() -> (ok: bool)
       pValues        = &wait_value,
     }
     vk.WaitSemaphores(vks.logical, &wait_info, A_SECOND)
+  }
+
+  // Process deletions if possible
+  {
+    deletions_completed := make([dynamic]int, context.temp_allocator)
+    for deletion, idx in vks.deletions
+    {
+      if deletion.frame_requested >= state.renderer.frame_count + FRAMES_IN_FLIGHT
+      {
+        switch item in deletion.item
+        {
+        case Swapchain:
+          // free_swapchain(item)
+        case Vulkan_Internal:
+          switch internal in item
+          {
+          case Vulkan_Image:
+            vk.DestroyImage(vks.logical, internal.image, nil)
+            vk.DestroyImageView(vks.logical, internal.view, nil)
+          case vk.Pipeline:
+            vk.DestroyPipeline(vks.logical, internal, nil)
+          }
+        }
+        append(&deletions_completed, idx)
+      }
+    }
+
+    for to_remove in deletions_completed { unordered_remove(&vks.deletions, to_remove) }
   }
 
   // Try to acquire an image, when we do: signal this frames semaphore we can start rendering.
@@ -1287,21 +1330,21 @@ vk_begin_render_frame :: proc() -> (ok: bool)
 
 vk_flush_render_frame :: proc(to_display: Texture)
 {
-  frame := vks.frames[curr_frame_idx()]
+  frame  := vks.frames[curr_frame_idx()]
   target := vks.swapchain.targets[vks.acquired_image]
 
-  display_image := vk_get_image(to_display.internal)
+  vk_to_display := vk_get_image(to_display.internal)
 
   // Blit from display texture to the swapchain image
   vk_barrier_images(frame.buffer,
   {
     // Barrier for all color writes to be finished to the final image, and transition it to be src for transfer
-    vk_image_barrier_info(display_image.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL),
+    vk_image_barrier_info(vk_to_display.image, .COLOR_ATTACHMENT_OPTIMAL, .TRANSFER_SRC_OPTIMAL),
     // Transfer swapchain image to be ready for blitting draw image to it.
     vk_image_barrier_info(target.image, .UNDEFINED, .TRANSFER_DST_OPTIMAL)
   })
 
-  // Blit from to display to the swapchain image
+  // Blit display to the swapchain image
   blit_region :vk.ImageBlit2 =
   {
     sType = .IMAGE_BLIT_2,
@@ -1318,11 +1361,10 @@ vk_flush_render_frame :: proc(to_display: Texture)
       layerCount = 1,
     },
   }
-
   blit_info: vk.BlitImageInfo2 =
   {
     sType          = .BLIT_IMAGE_INFO_2,
-    srcImage       = display_image.image,
+    srcImage       = vk_to_display.image,
     srcImageLayout = .TRANSFER_SRC_OPTIMAL,
     dstImage       = target.image,
     dstImageLayout = .TRANSFER_DST_OPTIMAL,
@@ -1527,44 +1569,10 @@ vk_aspect_from_format :: proc(format: Pixel_Format) -> (aspect: vk.ImageAspectFl
   return aspect
 }
 
-
-vk_resolve_texture :: proc(source, target: Texture)
-{
-  assert(source.samples > 1, "Idiot, did you mean to resolve from a texture with only one sample?")
-
-  resolve_region: vk.ImageResolve2 =
-  {
-    sType = .IMAGE_RESOLVE_2,
-    extent = {u32(source.width), u32(source.height), 1},
-    srcSubresource =
-    {
-      aspectMask = {.COLOR},
-      layerCount = 1,
-    },
-    dstSubresource =
-    {
-      aspectMask = {.COLOR},
-      layerCount = 1,
-    },
-  }
-  resolve_info: vk.ResolveImageInfo2 =
-  {
-    sType = .RESOLVE_IMAGE_INFO_2,
-    srcImage       = vk_get_image(source.internal).image,
-    srcImageLayout = .TRANSFER_SRC_OPTIMAL,
-    dstImage       = vk_get_image(target.internal).image,
-    dstImageLayout = .TRANSFER_DST_OPTIMAL,
-    pRegions       = &resolve_region,
-    regionCount    = 1,
-  }
-  vk.CmdResolveImage2(vk_curr_cmd(), &resolve_info)
-}
-
-
-vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sampled_targets: []^Render_Target)
+vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, blit_source: ^Render_Target, sampled_targets: []^Render_Target)
 {
   // Sort of jank
-  to_layout :: proc(format: Pixel_Format, state: Texture_State) -> (layout: vk.ImageLayout)
+  layout_from_format_state :: proc(format: Pixel_Format, state: Texture_State) -> (layout: vk.ImageLayout)
   {
     switch state
     {
@@ -1593,6 +1601,98 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sam
 
   clearing := .NO_CLEAR not_in pass.flags
 
+  // NOTE: only supporting blitting one color attachment
+  if blit_source != nil
+  {
+    if clearing
+    {
+      log.warnf("Probably didn't mean to clear render-pass when having a blit source.")
+    }
+
+    source := &blit_source.attachments[0]
+    target := &draw_target.attachments[0]
+
+    assert(source.format != .DEPTH32 && source.format != .DEPTH32, "Don't support bltting non-color attachments.")
+
+    vk_source := vk_get_image(source.internal)
+    vk_target := vk_get_image(target.internal)
+
+    vk_barrier_images(vk_curr_cmd(),
+    {
+      vk_image_barrier_info(vk_source.image, layout_from_format_state(source.format, source.state), layout_from_format_state(source.format, .TRANSFER_SRC)),
+      // Don't care about source state, blitting over the entire thing anyways
+      vk_image_barrier_info(vk_target.image, .UNDEFINED, layout_from_format_state(target.format, .TRANSFER_DST))
+    })
+
+    // TODO: Don't like that this isn't contained with the barrier calls...
+    source.state = .TRANSFER_SRC
+    target.state = .TRANSFER_DST
+
+    // Resolve if more than 1 samples, else blit
+    if source.samples > 1
+    {
+      assert(target.format == source.format, "Can only resolve targets that have the same pixel format.")
+
+      resolve_region: vk.ImageResolve2 =
+      {
+        sType = .IMAGE_RESOLVE_2,
+        extent = {u32(source.width), u32(source.height), 1},
+        srcSubresource =
+        {
+          aspectMask = {.COLOR},
+          layerCount = 1,
+        },
+        dstSubresource =
+        {
+          aspectMask = {.COLOR},
+          layerCount = 1,
+        },
+      }
+      resolve_info: vk.ResolveImageInfo2 =
+      {
+        sType = .RESOLVE_IMAGE_INFO_2,
+        srcImage       = vk_source.image,
+        srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+        dstImage       = vk_target.image,
+        dstImageLayout = .TRANSFER_DST_OPTIMAL,
+        pRegions       = &resolve_region,
+        regionCount    = 1,
+      }
+      vk.CmdResolveImage2(vk_curr_cmd(), &resolve_info)
+    }
+    else
+    {
+      blit_region: vk.ImageBlit2 =
+      {
+        sType = .IMAGE_BLIT_2,
+        srcOffsets = {{0,0,0}, {i32(source.width), i32(source.height), 1}},
+        srcSubresource =
+        {
+          aspectMask = {.COLOR},
+          layerCount = 1,
+        },
+        dstOffsets = {{0,0,0}, {i32(target.width), i32(target.height), 1}},
+        dstSubresource =
+        {
+          aspectMask = {.COLOR},
+          layerCount = 1,
+        },
+      }
+      blit_info: vk.BlitImageInfo2 =
+      {
+        sType          = .BLIT_IMAGE_INFO_2,
+        srcImage       = vk_source.image,
+        srcImageLayout = .TRANSFER_SRC_OPTIMAL,
+        dstImage       = vk_target.image,
+        dstImageLayout = .TRANSFER_DST_OPTIMAL,
+        filter         = .LINEAR,
+        pRegions       = &blit_region,
+        regionCount    = 1,
+      }
+      vk.CmdBlitImage2(vk_curr_cmd(), &blit_info)
+    }
+  }
+
   // Put in array so can submit all barriers in one call
   barriers := make([dynamic]vk.ImageMemoryBarrier2, context.temp_allocator)
 
@@ -1604,10 +1704,10 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sam
     vk_image := vk_get_image(attachment.internal)
 
     // Whatever it is right now. But undefined if we are clearing it, we don't care what layout it was in
-    src_layout := to_layout(attachment.format, attachment.state) if !clearing else .UNDEFINED
+    src_layout := layout_from_format_state(attachment.format, attachment.state) if !clearing else .UNDEFINED
 
     // Transition to a target state for attachment
-    dst_layout := to_layout(attachment.format, .TARGET)
+    dst_layout := layout_from_format_state(attachment.format, .TARGET)
 
     append(&barriers, vk_image_barrier_info(vk_image.image, src_layout, dst_layout))
     attachment_info: vk.RenderingAttachmentInfo =
@@ -1633,7 +1733,6 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sam
     }
 
     // This attachment is now a target, so future pipeline barriers can know about it.
-
     attachment.state = .TARGET
   }
 
@@ -1643,10 +1742,10 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sam
     {
       vk_target := vk_get_image(attachment.internal)
 
-      src_layout := to_layout(attachment.format, attachment.state)
+      src_layout := layout_from_format_state(attachment.format, attachment.state)
 
       // Transition to a fragment read state for attachment
-      dst_layout := to_layout(attachment.format, .FRAGMENT_READ)
+      dst_layout := layout_from_format_state(attachment.format, .FRAGMENT_READ)
 
       append(&barriers, vk_image_barrier_info(vk_target.image, src_layout, dst_layout))
 
@@ -1670,23 +1769,7 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sam
   vk.CmdBeginRendering(vk_curr_cmd(), &rendering_info)
 
   // Dynamic state
-  viewport: vk.Viewport =
-  {
-    x        = f32(pass.viewport.x),
-    y        = f32(pass.viewport.y),
-    width    = f32(pass.viewport.w),
-    height   = f32(pass.viewport.h),
-    minDepth = 0.0,
-    maxDepth = 1.0,
-  }
-  scissor: vk.Rect2D =
-  {
-    offset = {0, 0},
-    extent = {pass.viewport.w, pass.viewport.h},
-  }
-
-  vk.CmdSetViewport(vk_curr_cmd(), 0, 1, &viewport)
-  vk.CmdSetScissor(vk_curr_cmd(), 0, 1, &scissor)
+  vk_set_render_viewport(pass.viewport)
 
   VK_CULL_TABLE: [Face_Cull_Mode]vk.CullModeFlags =
   {
@@ -1721,6 +1804,26 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, sam
 vk_end_render_pass :: proc()
 {
   vk.CmdEndRendering(vk_curr_cmd())
+}
+
+vk_set_render_viewport :: proc(viewport: Viewport)
+{
+  vk_viewport: vk.Viewport =
+  {
+    x        = f32(viewport.x),
+    y        = f32(viewport.y),
+    width    = f32(viewport.w),
+    height   = f32(viewport.h),
+    minDepth = 0.0,
+    maxDepth = 1.0,
+  }
+  vk_scissor: vk.Rect2D =
+  {
+    offset = {i32(viewport.x), i32(viewport.y)},
+    extent = {viewport.w, viewport.h},
+  }
+  vk.CmdSetViewport(vk_curr_cmd(), 0, 1, &vk_viewport)
+  vk.CmdSetScissor(vk_curr_cmd(), 0, 1, &vk_scissor)
 }
 
 @(private="file")
@@ -1789,6 +1892,7 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
 
   image: Vulkan_Image
 
+
   vk_assert(vk.CreateImage(vks.logical, &image_info, nil, &image.image),
             "Unable to create vulkan image.")
 
@@ -1825,31 +1929,35 @@ vk_alloc_texture :: proc(type: Texture_Type, usage: Texture_Usage_Flags, format:
   vk_assert(vk.CreateImageView(vks.logical, &view_info, nil, &image.view),
             "Unable to create vulkan image view.")
 
-  // FIXME: Grace!
-  assert(vks.descriptor_counts[type] + 1 < MAX_DESCRIPTORS[type], "No more vulkan texture descriptors available.")
-
-  index = vks.descriptor_counts[type]
-  vks.descriptor_counts[type] += 1
-
-  descriptor_info: vk.DescriptorImageInfo =
+  if vks.descriptor_counts[type] + 1 < MAX_DESCRIPTORS[type]
   {
-    imageLayout = .SHADER_READ_ONLY_OPTIMAL,
-    imageView   = image.view,
-    sampler     = vks.samplers[sampler],// TODO
-  }
+    index = vks.descriptor_counts[type]
+    vks.descriptor_counts[type] += 1
 
-  // Bindless... put into big descriptor set
-  descriptor_write: vk.WriteDescriptorSet =
-  {
-    sType = .WRITE_DESCRIPTOR_SET,
-    dstSet = vks.descriptor_set,
-    dstBinding = DESCRIPTOR_BINDING[type],
-    descriptorCount = 1,
-    descriptorType = .COMBINED_IMAGE_SAMPLER,
-    pImageInfo = &descriptor_info,
-    dstArrayElement = index,
+    descriptor_info: vk.DescriptorImageInfo =
+    {
+      imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+      imageView   = image.view,
+      sampler     = vks.samplers[sampler],
+    }
+
+    descriptor_write: vk.WriteDescriptorSet =
+    {
+      sType = .WRITE_DESCRIPTOR_SET,
+      dstSet = vks.descriptor_set,
+      dstBinding = DESCRIPTOR_BINDING[type],
+      descriptorCount = 1,
+      descriptorType = .COMBINED_IMAGE_SAMPLER,
+      pImageInfo = &descriptor_info,
+      dstArrayElement = index,
+    }
+    vk.UpdateDescriptorSets(vks.logical, 1, &descriptor_write, 0, nil)
   }
-  vk.UpdateDescriptorSets(vks.logical, 1, &descriptor_write, 0, nil)
+  else
+  {
+    log.errorf("No more vulkan texture descriptors available.")
+    // Descriptor index zero should be junk, so just have that be the index
+  }
 
   return vk_push_internal(image), index
 }
@@ -2139,6 +2247,14 @@ vk_barrier_images :: proc(cmd: vk.CommandBuffer, barriers: []vk.ImageMemoryBarri
   }
 
   vk.CmdPipelineBarrier2(cmd, &dependency)
+}
+
+vk_free_internal :: proc(internal: Renderer_Internal)
+{
+  append(&vks.deletions, Vulkan_Deletion{
+    item = vk_get_render_internal(internal),
+    frame_requested = state.renderer.frame_count,
+  })
 }
 
 @(private="file")

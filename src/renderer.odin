@@ -15,37 +15,6 @@ MAX_MATERIALS :: 512
 
 MAX_IMMEDIATE_VERTICES :: 256 * mem.Kilobyte
 
-POINT_SHADOW_MAP_SIZE  :: 512
-SUN_SHADOW_MAP_SIZE    :: 2048
-
-GPU_Upload :: struct
-{
-  // Considering store pointers instead of the actual structs here.
-  src_buffer: GPU_Buffer(byte),
-  src_offset: int,
-
-  dst: union
-  {
-    GPU_Buffer(byte),
-    Texture,
-  },
-  dst_offset: int,
-  size:       int,
-}
-
-Pipeline_Key :: enum
-{
-  PHONG,
-  SKYBOX,
-  RESOLVE_HDR,
-  SUN_DEPTH,
-  POINT_DEPTH,
-  GAUSSIAN,
-  GET_BRIGHT,
-  IMMEDIATE_TRIANGLE,
-  IMMEDIATE_LINE,
-}
-
 Renderer :: struct
 {
   frame_count: u64,
@@ -63,7 +32,7 @@ Renderer :: struct
   point_shadow_target: Render_Target,
   sun_shadow_target:   Render_Target,
 
-  bound_pipeline: Pipeline,
+  bound_pipeline: Pipeline_Key,
 
   upload_queue: [dynamic; 256]GPU_Upload,
 
@@ -101,6 +70,35 @@ Renderer :: struct
   frame_began: bool,
   bloom_on:    bool,
   draw_debug:  bool,
+}
+
+GPU_Upload :: struct
+{
+  // Considering store pointers instead of the actual structs here.
+  src_buffer: GPU_Buffer(byte),
+  src_offset: int,
+
+  dst: union
+  {
+    GPU_Buffer(byte),
+    Texture,
+  },
+  dst_offset: int,
+  size:       int,
+}
+
+Pipeline_Key :: enum
+{
+  NONE,
+  PHONG,
+  SKYBOX,
+  RESOLVE_HDR,
+  SUN_DEPTH,
+  POINT_DEPTH,
+  GAUSSIAN,
+  GET_BRIGHT,
+  IMMEDIATE_TRIANGLE,
+  IMMEDIATE_LINE,
 }
 
 Immediate_Vertex :: struct
@@ -146,6 +144,19 @@ Mega_Push :: struct
   draw_uniforms:     [^]Draw_Uniform,
   vertices:          [^]Mesh_Vertex,
   material_uniforms: [^]Material_Uniform,
+  cascade_index:     u32, // Only for direction shadow mapping passes, see below
+}
+
+// Hmm, might be something to look into using this feature of odin...
+Shadow_Push :: struct
+{
+  using parent: Mega_Push,
+  cascade: u32,
+}
+
+Skybox_Push :: struct
+{
+  frame_uniform: [^]Frame_Uniform,
 }
 
 init_renderer :: proc() -> (ok: bool)
@@ -153,9 +164,8 @@ init_renderer :: proc() -> (ok: bool)
   init_vulkan(state.window)
   generate_slang()
 
-  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), 4, {.COLOR, .DEPTH})
+  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), 1, {.COLOR, .DEPTH})
   state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), 1, {.COLOR})
-
   state.renderer.point_shadow_target = make_render_target(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, 1, {.DEPTH})
   state.renderer.sun_shadow_target   = make_render_target(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, 1, {.DEPTH})
 
@@ -176,16 +186,16 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch.
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA)
+  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 1, blend = .ALPHA_ONE_MINUS_ALPHA)
   assert(ok)
-  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA,
+  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 1, blend = .ALPHA_ONE_MINUS_ALPHA,
                                                                 primitive = .LINES)
   assert(ok)
 
-  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32, 4)
+  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32, 1)
   assert(ok)
 
-  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32, 4)
+  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32, 1)
   assert(ok)
 
   state.renderer.pipelines[.SUN_DEPTH], ok = make_pipeline("sun_shadow.slang", .NONE, .DEPTH32)
@@ -429,7 +439,7 @@ push_draw :: proc(command: Draw_Command, uniform: Draw_Uniform)
   }
 }
 
-mega_draw :: proc(pipeline: Pipeline_Key)
+mega_draw :: proc(pipeline: Pipeline_Key, cascade_index: u32 = 0)
 {
   bind_pipeline(pipeline)
 
@@ -439,6 +449,7 @@ mega_draw :: proc(pipeline: Pipeline_Key)
     draw_uniforms     = &state.renderer.draw_uniforms[curr_frame_idx()].gpu_base[state.renderer.draw_head],
     vertices          = state.renderer.vertex_buffer.gpu_base,
     material_uniforms = state.renderer.material_buffer.gpu_base,
+    cascade_index     = cascade_index,
   }
 
   batch_count := u32(state.renderer.draw_count - state.renderer.draw_head)

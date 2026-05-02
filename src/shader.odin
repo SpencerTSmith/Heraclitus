@@ -33,7 +33,10 @@ Pipeline :: struct
 // NOTE: This is simply a little meta-program to reduce code duplication between glsl and odin
 
 MAX_SHADOW_POINT_LIGHTS :: 8
-MAX_POINT_LIGHTS :: 128
+MAX_POINT_LIGHTS :: 64
+
+POINT_SHADOW_MAP_SIZE  :: 512
+SUN_SHADOW_MAP_SIZE    :: 4096
 
 Shadow_Point_Light_Uniform :: struct #align(4)
 {
@@ -59,11 +62,16 @@ Point_Light_Uniform :: struct
   ambient:   f32,
 }
 
+CASCADE_COUNT :: 4
+
+// Has cascaded shadows
 Direction_Light_Uniform :: struct #align(4)
 {
   // 4 for each cascade.
-  proj_view: mat4,
-  uv_offset: vec2,
+  proj_views:   [CASCADE_COUNT]mat4,
+  atlas_size:   [CASCADE_COUNT]vec2,
+  atlas_offset: [CASCADE_COUNT]vec2,
+  depth_plane:  [CASCADE_COUNT]f32,
 
   direction: vec4,
 
@@ -143,12 +151,6 @@ Draw_Uniform :: struct #align(4)
 
   material_index: u32,
   light_index:    u32, // Here for point light shader
-}
-
-GLSL_Layout :: enum
-{
-  STD430,
-  SCALAR,
 }
 
 Nil_Push :: struct {}
@@ -325,25 +327,26 @@ point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform
   return uniform
 }
 
+viewports: [CASCADE_COUNT]Viewport
+
 // NOTE: Hardcoded center on main camera.
 direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_Light_Uniform)
 {
-  CASCADES: []f32 =
+  ATLAS_SIZE :: SUN_SHADOW_MAP_SIZE*0.5
+  CASCADE_INFO: [CASCADE_COUNT + 1]struct{z: f32, offset: vec2} =
   {
-    state.camera.z_near,
-    10.0,
-    // 50.0,
-    // 100.0,
-    // state.camera.z_far,
+    {state.camera.z_near, {0,          0}},
+    {10.0,                {ATLAS_SIZE, 0}},
+    {25.0,                {ATLAS_SIZE, ATLAS_SIZE}},
+    {50.0,               {0,          ATLAS_SIZE}},
+    {100.0,  {0, 0}}, // Shouldn't use the offset here
   }
 
-  // light := light
-  // light_right, light_up := orthonormal_axes(light.direction)
-  // light.direction = normalize(light.direction)
-  for idx in 1..<len(CASCADES)
+  for idx in 0..<len(CASCADE_INFO) - 1
   {
-    near := CASCADES[idx - 1]
-    far  := CASCADES[idx]
+    near := CASCADE_INFO[idx].z
+    far  := CASCADE_INFO[idx + 1].z
+
     projection := mat4_perspective(radians(state.camera.curr_fov_y), window_aspect_ratio(state.window), near, far)
     view       := camera_view(state.camera)
 
@@ -372,24 +375,44 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
     }
     center /= f32(len(subfrustum_corners))
 
-    radius := length(subfrustum_corners[0] - subfrustum_corners[7]) * 0.5
-    radius = ceil(radius) // HACK: Just for stability, probably a better way
+    // Fit the light frustum to an enclosing sphere of the camera subfrustum
+    radius: f32 = 0
+    for corner in subfrustum_corners {
+        radius = max(radius, length(corner - center))
+    }
+    // HACK: Just for stability, probably a better way
+    // TODO: Could maybe offset radius by the texel_differences below
+    radius = ceil(radius)
 
-    Z_MUL :: 10.0 // FIXME: This probably ought to be scene derived
+    // HACK: Probably not the most efficient way to do texel snapping
 
+    // Form a naive proj_view with no texel snapping
     light_view       := mat4_look_at(center - normalize(light.direction), center, WORLD_UP)
-    light_projection := mat4_orthographic(-radius, radius, -radius, radius, -radius*Z_MUL, radius*Z_MUL)
-    uniform.proj_view = light_projection * light_view
+    light_projection := mat4_orthographic(-radius, radius, -radius, radius, -radius, radius)
 
-    texel_size := 2.0 / f32(SUN_SHADOW_MAP_SIZE)
-    light_space_reference := uniform.proj_view * vec4{0, 0, 0, 1}
+    bad_proj_view := light_projection * light_view
+
+    texel_size := 2.0 / f32(ATLAS_SIZE)
+
+    // Find the difference in light space of moving one texel in x and y
+    light_space_reference := bad_proj_view * vec4{0, 0, 0, 1}
     texel_difference_x := round(light_space_reference.x / texel_size) * texel_size - light_space_reference.x
     texel_difference_y := round(light_space_reference.y / texel_size) * texel_size - light_space_reference.y
-    texel_difference_z := round(light_space_reference.z / texel_size) * texel_size - light_space_reference.z
+
+    // Adjust the translation of the light projection to snap to a texel coordinate
     light_projection[3].x += texel_difference_x
     light_projection[3].y += texel_difference_y
-    light_projection[3].z += texel_difference_z
-    uniform.proj_view = light_projection * light_view
+
+    uniform.proj_views[idx] = light_projection * light_view
+
+    viewports[idx].x = u32(CASCADE_INFO[idx].offset.x)
+    viewports[idx].y = u32(CASCADE_INFO[idx].offset.y)
+    viewports[idx].w = u32(ATLAS_SIZE)
+    viewports[idx].h = u32(ATLAS_SIZE)
+
+    uniform.atlas_size[idx]   = {ATLAS_SIZE, ATLAS_SIZE}
+    uniform.depth_plane[idx]  = far
+    uniform.atlas_offset[idx] = CASCADE_INFO[idx].offset
   }
 
   uniform.ambient = light.ambient
@@ -619,16 +642,20 @@ bind_pipeline_direct :: proc(pipeline: Pipeline)
 {
   ensure(state.renderer.frame_began)
 
-  state.renderer.bound_pipeline = pipeline
   vk_bind_pipeline(pipeline)
 }
 
-bind_pipeline_key :: proc(tag: Pipeline_Key)
+bind_pipeline_key :: proc(key: Pipeline_Key)
 {
-  bind_pipeline_direct(state.renderer.pipelines[tag])
+  if state.renderer.bound_pipeline != key
+  {
+    bind_pipeline_direct(state.renderer.pipelines[key])
+    state.renderer.bound_pipeline = key
+  }
 }
 
 free_pipeline :: proc(pipeline: ^Pipeline)
 {
+  vk_free_internal(pipeline.internal)
   pipeline^ = {}
 }

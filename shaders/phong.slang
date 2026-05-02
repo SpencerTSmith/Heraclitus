@@ -6,7 +6,6 @@ struct Vert_Out
   float4   position : SV_Position;
   float2   uv;
   float4   world_position;
-  float4   sun_space_position;
   float3x3 TBN;
 
   nointerpolation uint draw_id;
@@ -17,7 +16,6 @@ Vert_Out vert_main(uniform Mega_Push push, uint vertex_id : SV_VulkanVertexID, u
 {
   Mesh_Vertex vertex = push.vertices[vertex_id];
 
-  float4x4 sun_proj_view    = push.frame_uniform.sun_light.proj_view;
   float4x4 camera_proj_view = push.frame_uniform.proj_view;
   float4x4 model            = push.draw_uniforms[draw_id].model;
 
@@ -32,7 +30,6 @@ Vert_Out vert_main(uniform Mega_Push push, uint vertex_id : SV_VulkanVertexID, u
   Vert_Out o;
   o.uv                 = vertex.uv;
   o.world_position     = mul(model, float4(vertex.position, 1.0));
-  o.sun_space_position = mul(sun_proj_view, o.world_position);
   o.position           = mul(camera_proj_view, o.world_position);
   o.draw_id            = draw_id;
   o.TBN                = transpose(float3x3(tangent, bitangent, normal)); // HACK: Transpose since the constructor here takes in rows.
@@ -73,7 +70,7 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
   {
     Shadow_Point_Light_Uniform light = frame.shadow_point_lights[shadow_index];
 
-    float point_shadow = 1.0 - point_shadow(shadow_index, shadow_index,
+    float point_shadow = 1.0 - point_shadow(frame.point_shadow_index, shadow_index,
                                             i.world_position.xyz, normal,
                                             light.position.xyz, light.radius,
                                             frame.camera_position.xyz);
@@ -110,10 +107,10 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
   float3 direction_phong = direction_phong(frame.sun_light, diffuse_sample, specular_sample,
                                            material.shininess, normal, view_direction);
 
-  float shadow = 1.0 - direction_shadow(frame.sun_shadow_index, frame.camera_position.xyz, i.world_position.xyz,
-                                        i.sun_space_position, -frame.sun_light.direction.xyz, normal);
+  float view_depth = -mul(frame.view, i.world_position).z;
+  float direction_shadow = 1.0 - direction_shadow(frame.sun_light, frame.sun_shadow_index, i.world_position.xyz, normal, view_depth);
 
-  direction_phong *= shadow;
+  direction_phong *= direction_shadow;
 
   ambient += phong_ambient(frame.sun_light.ambient, frame.sun_light.color.xyz);
 

@@ -200,7 +200,7 @@ main :: proc()
       {
         pos := vec3{
           f32(x) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
-          f32(y) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2),
+          f32(y) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
           f32(z) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) - 100,
         }
         make_entity("cube/BoxTextured.gltf", flags={.RENDERABLE}, position=pos)
@@ -316,7 +316,7 @@ main :: proc()
     // RENDER
     if begin_render_frame()
     {
-      defer flush_render_frame(state.renderer.main_target.attachments[0])
+      defer flush_render_frame(state.renderer.post_target.attachments[0])
 
       switch state.mode
       {
@@ -327,11 +327,15 @@ main :: proc()
             {
               defer end_render_pass()
 
-              for e in all_entities()
+              for cascade in 0..<CASCADE_COUNT
               {
-                draw_entity(e)
+                set_render_viewport(viewports[cascade])
+                for e in all_entities()
+                {
+                  draw_entity(e)
+                }
+                mega_draw(.SUN_DEPTH, cascade_index=u32(cascade))
               }
-              mega_draw(.SUN_DEPTH)
             }
           }
 
@@ -353,16 +357,14 @@ main :: proc()
               for l in state.point_lights
               {
                 // Billboard it!
-                w: f32 = 1.0
-                h: f32 = 1.0
-                draw_quad(l.position, l.position - state.camera.position, w, h, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
+                draw_quad(l.position, l.position - state.camera.position, 1, 1, l.color, uv0=vec2{0,1},uv1=vec2{1,0}, texture=load_texture("point_light.png"))
               }
             }
 
             immediate_flush(.WORLD)
           }
 
-          begin_render_pass(UI_PASS, &state.renderer.main_target)
+          begin_render_pass(UI_PASS, &state.renderer.post_target, blit_source=&state.renderer.main_target)
           {
             defer end_render_pass()
 
