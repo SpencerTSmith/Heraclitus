@@ -2072,6 +2072,7 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format,
     polygonMode = .FILL,
     frontFace   = .COUNTER_CLOCKWISE,
     lineWidth   = 1.0,
+    depthClampEnable = true,
   }
 
   multisample: vk.PipelineMultisampleStateCreateInfo =

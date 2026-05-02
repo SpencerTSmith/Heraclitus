@@ -79,7 +79,7 @@ init_state :: proc() -> (ok: bool)
 
   state.sun =
   {
-    direction = {0.5, -1.0,  0.7},
+    direction = {0.5, -1.0,  0.0},
     color     = {0.8,  0.7,  0.6, 1.0},
     intensity = 1.0,
     ambient   = 0.05,

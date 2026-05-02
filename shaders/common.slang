@@ -144,6 +144,17 @@ int pick_cascade(float view_depth, float4 depth_planes)
   return cascade_index;
 }
 
+float hash(float4 seed4)
+{
+  float dot_product = dot(seed4, float4(12.9898,78.233,45.164,94.673));
+  return frac(sin(dot_product) * 43758.5453);
+}
+
+float hash(float2 seed2)
+{
+  return frac(sin(dot(seed2, float2(12.9898, 78.233))) * 43758.5453);
+}
+
 float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint cascade, float3 world_position, float3 normal, float3 to_light_direction)
 {
   float shadow = 0.0;
@@ -167,26 +178,43 @@ float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint 
 
     int sample_count = 16;
     float2 sample_offsets[16] = float2[](
-        float2(-0.94201624, -0.39906216), float2( 0.94558609, -0.76890725),
-        float2(-0.09418410, -0.92938870), float2( 0.34495938,  0.29387760),
-        float2(-0.91588581,  0.45771432), float2(-0.81544232, -0.87912464),
-        float2(-0.38277543,  0.27676845), float2( 0.97484398,  0.75648379),
-        float2( 0.44323325, -0.97511554), float2( 0.53742981, -0.47373420),
-        float2(-0.26496911, -0.41893023), float2( 0.79197514,  0.19090188),
-        float2(-0.24188840,  0.99706507), float2(-0.81409955,  0.91437590),
-        float2( 0.19984126,  0.78641367), float2( 0.14383161, -0.14100790)
+      float2( -0.94201624, -0.39906216 ),
+      float2( 0.94558609, -0.76890725 ),
+      float2( -0.094184101, -0.92938870 ),
+      float2( 0.34495938, 0.29387760 ),
+      float2( -0.91588581, 0.45771432 ),
+      float2( -0.81544232, -0.87912464 ),
+      float2( -0.38277543, 0.27676845 ),
+      float2( 0.97484398, 0.75648379 ),
+      float2( 0.44323325, -0.97511554 ),
+      float2( 0.53742981, -0.47373420 ),
+      float2( -0.26496911, -0.41893023 ),
+      float2( 0.79197514, 0.19090188 ),
+      float2( -0.24188840, 0.99706507 ),
+      float2( -0.81409955, 0.91437590 ),
+      float2( 0.19984126, 0.78641367 ),
+      float2( 0.14383161, -0.14100790 )
     );
 
     // Fix shadow acne, surfaces facing away get large bias, surfaces facing toward get less
     float bias = shadow_bias(normal, normalize(to_light_direction));
 
-    float disk_radius = 2.5;
+    float disk_radius = 1.0;
 
     float2 texel_size = 1.0 / full_atlas_size;
 
-    for (int i = 0; i < sample_count; ++i)
+    float2 cascade_uv_min = light.atlas_offset[cascade] / full_atlas_size;
+    float2 cascade_uv_max = (light.atlas_offset[cascade] + light.atlas_size[cascade]) / full_atlas_size;
+
+    float angle = hash(atlas_uv) * 2.0 * 3.14159;
+    float2 rot_x = float2(cos(angle), -sin(angle));
+    float2 rot_y = float2(sin(angle), cos(angle));
+
+    for (uint i = 0; i < sample_count; ++i)
     {
-      float2 sample_uv = atlas_uv + sample_offsets[i] * disk_radius * texel_size;
+      float2 rotated_offset = float2(dot(rot_x, sample_offsets[i]), dot(rot_y, sample_offsets[i]));
+      float2 sample_uv = atlas_uv + rotated_offset * disk_radius * texel_size;
+      sample_uv = clamp(sample_uv, cascade_uv_min + texel_size, cascade_uv_max - texel_size);
 
       // Sample uvs depth
       float map_depth = sample_2D_uniform(shadow_map_index, sample_uv).r;
@@ -214,13 +242,13 @@ float direction_shadow(Direction_Light_Uniform light, uint shadow_map_index, flo
   float cascade_near  = cascade > 0 ? light.depth_plane[cascade - 1] : 0.0;
   float cascade_range = cascade_far - cascade_near;
 
-  float blend_start = cascade_far - (cascade_range * 0.10); // Last bit is blend zone
+  float blend_start = cascade_far - (cascade_range * 0.30); // Last bit is blend zone
 
   float blend_factor = smoothstep(blend_start, cascade_far, view_depth);
 
-  if (blend_factor > 0.0 && cascade < 3)
+  if (blend_factor > 0.0)
   {
-    float next_shadow = sample_cascade(light, shadow_map_index, cascade + 1, world_position, normal, to_light_direction);
+    float next_shadow = cascade < 3 ? sample_cascade(light, shadow_map_index, cascade + 1, world_position, normal, to_light_direction) : 0.0;
     shadow = lerp(shadow, next_shadow, blend_factor);
   }
 
