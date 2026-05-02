@@ -144,18 +144,18 @@ int pick_cascade(float view_depth, float4 depth_planes)
   return cascade_index;
 }
 
+// Some random hash functions found on internet
 float hash(float4 seed4)
 {
   float dot_product = dot(seed4, float4(12.9898,78.233,45.164,94.673));
   return frac(sin(dot_product) * 43758.5453);
 }
-
 float hash(float2 seed2)
 {
   return frac(sin(dot(seed2, float2(12.9898, 78.233))) * 43758.5453);
 }
 
-float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint cascade, float3 world_position, float3 normal, float3 to_light_direction)
+float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint cascade, float3 world_position, float2 screen_position, float3 normal, float3 to_light_direction)
 {
   float shadow = 0.0;
 
@@ -206,7 +206,7 @@ float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint 
     float2 cascade_uv_min = light.atlas_offset[cascade] / full_atlas_size;
     float2 cascade_uv_max = (light.atlas_offset[cascade] + light.atlas_size[cascade]) / full_atlas_size;
 
-    float angle = hash(atlas_uv) * 2.0 * 3.14159;
+    float angle = hash(screen_position) * 2.0 * 3.14159;
     float2 rot_x = float2(cos(angle), -sin(angle));
     float2 rot_y = float2(sin(angle), cos(angle));
 
@@ -230,13 +230,13 @@ float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint 
   return shadow;
 }
 
-float direction_shadow(Direction_Light_Uniform light, uint shadow_map_index, float3 world_position, float3 normal, float view_depth)
+float direction_shadow(Direction_Light_Uniform light, uint shadow_map_index, float3 world_position, float2 screen_position, float3 normal, float view_depth)
 {
   int cascade = pick_cascade(view_depth, light.depth_plane);
 
   float3 to_light_direction = -light.direction.xyz;
 
-  float shadow = sample_cascade(light, shadow_map_index, cascade, world_position, normal, to_light_direction);
+  float shadow = sample_cascade(light, shadow_map_index, cascade, world_position, screen_position, normal, to_light_direction);
 
   float cascade_far   = light.depth_plane[cascade];
   float cascade_near  = cascade > 0 ? light.depth_plane[cascade - 1] : 0.0;
@@ -248,7 +248,7 @@ float direction_shadow(Direction_Light_Uniform light, uint shadow_map_index, flo
 
   if (blend_factor > 0.0)
   {
-    float next_shadow = cascade < 3 ? sample_cascade(light, shadow_map_index, cascade + 1, world_position, normal, to_light_direction) : 0.0;
+    float next_shadow = cascade < 3 ? sample_cascade(light, shadow_map_index, cascade + 1, world_position, screen_position, normal, to_light_direction) : 0.0;
     shadow = lerp(shadow, next_shadow, blend_factor);
   }
 
