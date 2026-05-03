@@ -108,7 +108,8 @@ float4 frag_main(uniform Mega_Push push, Vert_Out i) : SV_Target0
                                            material.shininess, normal, view_direction);
 
   float view_depth = -mul(frame.view, i.world_position).z;
-  float direction_shadow = 1.0 - direction_shadow(frame.sun_light, frame.sun_shadow_index, i.world_position.xyz, i.position.xy, normal, view_depth);
+  float direction_shadow = 1.0 - direction_shadow(frame.sun_light, frame.sun_shadow_index,
+                                                  i.world_position.xyz, i.position.xy, normal, view_depth);
 
   direction_phong *= direction_shadow;
 

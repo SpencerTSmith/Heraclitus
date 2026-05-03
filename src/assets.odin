@@ -7,7 +7,7 @@ DATA_DIR    :: "data" + PATH_SLASH
 MODEL_DIR   :: DATA_DIR + "models"   + PATH_SLASH
 TEXTURE_DIR :: DATA_DIR + "textures" + PATH_SLASH
 
-WHITE_TEXTURE    :: Texture_Handle{}
+WHITE_TEXTURE: Texture_Handle
 
 Model_Handle   :: distinct u32
 Texture_Handle :: distinct u32
@@ -33,8 +33,15 @@ assets: Assets
 
 init_assets :: proc()
 {
+  // Nil handles
+  register_texture({})
+  register_model({})
+}
+
+load_default_assets :: proc()
+{
   // Probably will want these so might as well load them now
-  assert(load_texture("white.png") == WHITE_TEXTURE)
+  WHITE_TEXTURE = load_texture("white.png")
   load_texture("black.png")
   load_texture("flat_normal.png")
 
@@ -97,8 +104,7 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) #optional_o
 
     if ok
     {
-      handle = cast(Model_Handle) len(assets.model_catalog.assets)
-      append(&assets.model_catalog.assets, model)
+      handle = register_model(model)
       assets.model_catalog.path_map[path] = handle
     }
     else
@@ -109,6 +115,14 @@ load_model :: proc(name: string) -> (handle: Model_Handle, ok: bool) #optional_o
   }
 
   return handle, ok
+}
+
+register_model :: proc(model: Model) -> (handle: Model_Handle)
+{
+  handle = cast(Model_Handle) len(assets.model_catalog.assets)
+  append(&assets.model_catalog.assets, model)
+
+  return handle
 }
 
 // Should always give valid pointer since give out fallback handles if we can't load a model.
@@ -135,7 +149,7 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
 
     if ok
     {
-      handle = register_texture(&texture)
+      handle = register_texture(texture)
 
       // Save the path for checking later, but only the first time.
       path = strings.clone(path, state.perm_alloc)
@@ -153,10 +167,10 @@ load_texture :: proc(name: string, nonlinear_color: bool = false,
 }
 
 // Sometimes want to add a texture without going through load texture path... i.e. loading fonts
-register_texture :: proc(texture: ^Texture) -> (handle: Texture_Handle)
+register_texture :: proc(texture: Texture) -> (handle: Texture_Handle)
 {
   handle = cast(Texture_Handle) len(assets.texture_catalog.assets)
-  append(&assets.texture_catalog.assets, texture^)
+  append(&assets.texture_catalog.assets, texture)
 
   return handle
 }
@@ -170,7 +184,7 @@ load_skybox :: proc(file_paths: [6]string) -> (handle: Texture_Handle, ok: bool)
 {
   texture: Texture
   texture, ok = make_texture_cube_map(file_paths)
-  handle = register_texture(&texture)
+  handle = register_texture(texture)
 
   return handle, ok
 }

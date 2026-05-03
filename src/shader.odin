@@ -380,19 +380,17 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
     for corner in subfrustum_corners {
         radius = max(radius, length(corner - center))
     }
-    // HACK: Just for stability, probably a better way
-    // TODO: Could maybe offset radius by the texel_differences below
-    radius = ceil(radius)
 
     // HACK: Probably not the most efficient way to do texel snapping
+    texel_size   := 2.0 / f32(ATLAS_SIZE)
+
+    radius = ceil(radius)
 
     // Form a naive proj_view with no texel snapping
     light_view       := mat4_look_at(center - normalize(light.direction), center, WORLD_UP)
     light_projection := mat4_orthographic(-radius, radius, -radius, radius, -radius, radius)
 
     bad_proj_view := light_projection * light_view
-
-    texel_size := 2.0 / f32(ATLAS_SIZE)
 
     // Find the difference in light space of moving one texel in x and y
     light_space_reference := bad_proj_view * vec4{0, 0, 0, 1}

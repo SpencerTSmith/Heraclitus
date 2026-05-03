@@ -588,6 +588,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
         samplerAnisotropy = true,
         imageCubeArray    = true,
         multiDrawIndirect = true,
+        depthClamp        = true,
       },
       pNext = &required_device_features11,
     }
@@ -1609,8 +1610,8 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, bli
       log.warnf("Probably didn't mean to clear render-pass when having a blit source.")
     }
 
-    source := &blit_source.attachments[0]
-    target := &draw_target.attachments[0]
+    source := get_texture(blit_source.attachments[.COLOR_0])
+    target := get_texture(draw_target.attachments[.COLOR_0])
 
     assert(source.format != .DEPTH32 && source.format != .DEPTH32, "Don't support bltting non-color attachments.")
 
@@ -1696,11 +1697,16 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, bli
   // Put in array so can submit all barriers in one call
   barriers := make([dynamic]vk.ImageMemoryBarrier2, context.temp_allocator)
 
-  color_attachment_infos: [dynamic; cap(draw_target.attachments)]vk.RenderingAttachmentInfo
+  color_attachment_infos: [dynamic; len(Render_Target_Attachment)]vk.RenderingAttachmentInfo
   depth_attachment_info: vk.RenderingAttachmentInfo
-  have_depth_attachment := false
-  for &attachment in draw_target.attachments
+
+  have_depth := false
+
+  for handle in draw_target.attachments
   {
+    if handle == {} { continue }
+
+    attachment := get_texture(handle)
     vk_image := vk_get_image(attachment.internal)
 
     // Whatever it is right now. But undefined if we are clearing it, we don't care what layout it was in
@@ -1727,9 +1733,8 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, bli
       case .COLOR_ATTACHMENT_OPTIMAL:
         append(&color_attachment_infos, attachment_info)
       case .DEPTH_ATTACHMENT_OPTIMAL:
-        assert(!have_depth_attachment, "More than 1 depth attachment for render pass.")
         depth_attachment_info = attachment_info
-        have_depth_attachment = true
+        have_depth = true
     }
 
     // This attachment is now a target, so future pipeline barriers can know about it.
@@ -1738,8 +1743,12 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, bli
 
   for to_sample in sampled_targets
   {
-    for &attachment in to_sample.attachments
+    for &handle in to_sample.attachments
     {
+      if handle == {} { continue }
+
+      attachment := get_texture(handle)
+
       vk_target := vk_get_image(attachment.internal)
 
       src_layout := layout_from_format_state(attachment.format, attachment.state)
@@ -1763,7 +1772,7 @@ vk_begin_render_pass :: proc(pass: Render_Pass, draw_target: ^Render_Target, bli
     layerCount           = 1,
     colorAttachmentCount = u32(len(color_attachment_infos)),
     pColorAttachments    = raw_data(color_attachment_infos[:]),
-    pDepthAttachment     = have_depth_attachment ? &depth_attachment_info : nil,
+    pDepthAttachment     = have_depth ? &depth_attachment_info : nil,
   }
 
   vk.CmdBeginRendering(vk_curr_cmd(), &rendering_info)

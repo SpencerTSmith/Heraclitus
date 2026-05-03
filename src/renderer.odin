@@ -164,19 +164,19 @@ init_renderer :: proc() -> (ok: bool)
   init_vulkan(state.window)
   generate_slang()
 
-  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), 1, {.COLOR, .DEPTH})
-  state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), 1, {.COLOR})
-  state.renderer.point_shadow_target = make_render_target(POINT_SHADOW_MAP_SIZE, POINT_SHADOW_MAP_SIZE, 1, {.DEPTH})
-  state.renderer.sun_shadow_target   = make_render_target(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, 1, {.DEPTH})
+  state.renderer.main_target = make_render_target(u32(state.window.w), u32(state.window.h), 4, {.RGBA16F,}, .DEPTH32)
+  state.renderer.post_target = make_render_target(u32(state.window.w), u32(state.window.h), 1, {.RGBA16F,}, .DEPTH32)
+
+  state.renderer.sun_shadow_target = make_render_target(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, 1, {}, .DEPTH32)
 
   state.renderer.vertex_buffer   = make_gpu_buffer(Mesh_Vertex, MAX_VERTICES, {.VERTEX_DATA, .DEVICE_LOCAL})
   state.renderer.index_buffer    = make_gpu_buffer(Mesh_Index, MAX_INDICES, {.INDEX_DATA, .DEVICE_LOCAL})
   state.renderer.material_buffer = make_gpu_buffer(Material_Uniform, MAX_MATERIALS, {.STORAGE_DATA, .DEVICE_LOCAL})
 
-  state.renderer.uniform_buffer = make_ring_gpu_buffers(Frame_Uniform, 1, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
-
   // FIXME: Just brute forcing staging being simple by having a GINORMOUS staging buffer
   state.renderer.staging_buffer = make_gpu_buffer(byte, 448 * mem.Megabyte, {.STORAGE_DATA, .CPU_MAPPED})
+
+  state.renderer.uniform_buffer = make_ring_gpu_buffers(Frame_Uniform, 1, {.UNIFORM_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
 
   state.renderer.draw_commands = make_ring_gpu_buffers(Draw_Command, MAX_DRAWS, {.STORAGE_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
   state.renderer.draw_uniforms = make_ring_gpu_buffers(Draw_Uniform, MAX_DRAWS, {.STORAGE_DATA, .CPU_MAPPED}, FRAMES_IN_FLIGHT)
@@ -186,16 +186,16 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch.
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 1, blend = .ALPHA_ONE_MINUS_ALPHA)
+  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA)
   assert(ok)
-  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 1, blend = .ALPHA_ONE_MINUS_ALPHA,
+  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA,
                                                                 primitive = .LINES)
   assert(ok)
 
-  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32, 1)
+  state.renderer.pipelines[.PHONG], ok = make_pipeline("phong.slang", .RGBA16F, .DEPTH32, 4)
   assert(ok)
 
-  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32, 1)
+  state.renderer.pipelines[.SKYBOX], ok = make_pipeline("skybox.slang", .RGBA16F, .DEPTH32, 4)
   assert(ok)
 
   state.renderer.pipelines[.SUN_DEPTH], ok = make_pipeline("sun_shadow.slang", .NONE, .DEPTH32)
@@ -237,7 +237,7 @@ begin_render_frame :: proc() -> (ok: bool)
       sun_light        = direction_light_uniform(state.sun) if state.sun_on else {},
       flash_light      = spot_light_uniform(state.flashlight) if state.flashlight_on else {},
       skybox_index     = get_texture(state.skybox).index if state.sun_on else get_texture(WHITE_TEXTURE).index,
-      sun_shadow_index = state.renderer.sun_shadow_target.attachments[0].index if state.sun_on else get_texture(WHITE_TEXTURE).index,
+      sun_shadow_index = get_texture(state.renderer.sun_shadow_target.attachments[.DEPTH]).index if state.sun_on else get_texture(WHITE_TEXTURE).index,
     }
 
     camera_frustum := make_frustum(state.camera, window_aspect_ratio(state.window))
@@ -285,8 +285,7 @@ begin_render_frame :: proc() -> (ok: bool)
   return ok
 }
 
-// NOTE: Will use the very first attachment
-flush_render_frame :: proc(to_display: Texture)
+flush_render_frame :: proc(to_display: Render_Target)
 {
   state.renderer.staging_tails[curr_frame_idx()] = state.renderer.staging_offset
 
@@ -297,7 +296,7 @@ flush_render_frame :: proc(to_display: Texture)
   state.renderer.draw_count = 0
   state.renderer.draw_head  = 0
 
-  vk_flush_render_frame(to_display)
+  vk_flush_render_frame(get_texture(to_display.attachments[.COLOR_0])^)
   state.renderer.frame_began = false
   state.renderer.frame_count += 1
 }

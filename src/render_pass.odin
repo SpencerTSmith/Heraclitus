@@ -6,18 +6,22 @@ Render_Target_Flag :: enum
 }
 Render_Target_Flags :: bit_set[Render_Target_Flag]
 
-Render_Target :: struct
+Render_Target_Attachment :: enum
 {
-  attachments: [dynamic; 4]Texture,
-  flags:       Render_Target_Flags
+  DEPTH,
+  COLOR_0,
+  COLOR_1,
+  COLOR_2,
+  COLOR_3,
 }
 
-Attachment_Description :: enum u8
+Render_Target :: struct
 {
-  COLOR, // HDR always right now. If i ever do a gbuffer type thing probably then time to be more granular
-  DEPTH,
-  DEPTH_CUBE,
-  DEPTH_CUBE_ARRAY,
+  attachments: [Render_Target_Attachment]Texture_Handle,
+
+  flags:       Render_Target_Flags,
+  width:       u32,
+  height:      u32,
 }
 
 Face_Cull_Mode :: enum u8
@@ -99,58 +103,39 @@ UI_PASS :: Render_Pass {
   flags      = {.NO_CLEAR},
 }
 
-make_render_target :: proc(width, height, samples: u32, attachments: []Attachment_Description, flags: Render_Target_Flags = {}) -> (target: Render_Target)
+make_render_target :: proc(width, height, samples: u32, color_attachments: []Pixel_Format, depth_attachment: Pixel_Format = .NONE, flags: Render_Target_Flags = {}) -> (target: Render_Target)
 {
-  assert(len(attachments) < cap(target.attachments), "Too many attachments specified for render target creation.")
-
-  for attachment in attachments
+  for format, idx in color_attachments
   {
-    format:  Pixel_Format
-    type:    Texture_Type
-    sampler: Sampler_Preset
+    attachment_key: Render_Target_Attachment = .COLOR_0 + Render_Target_Attachment(idx)
+    texture := alloc_texture(.D2, {.TARGET}, format, .CLAMP_WHITE, width, height, samples=samples)
+    target.attachments[attachment_key] = register_texture(texture)
+  }
 
-    switch attachment
-    {
-      case .COLOR:
-        format  = .RGBA16F
-        type    = .D2
-        sampler = .CLAMP_WHITE
-      case .DEPTH:
-        format  = .DEPTH32
-        type    = .D2
-        sampler = .CLAMP_WHITE
-      case .DEPTH_CUBE:
-        format  = .DEPTH32
-        type    = .CUBE
-        sampler = .CLAMP_WHITE
-      case .DEPTH_CUBE_ARRAY:
-        format  = .DEPTH32
-        type    = .CUBE
-        sampler = .CLAMP_WHITE
-    }
-
-    texture := alloc_texture(type, {.TARGET}, format, sampler, width, height, samples=samples)
-    append(&target.attachments, texture)
+  if depth_attachment != .NONE
+  {
+    texture := alloc_texture(.D2, {.TARGET}, depth_attachment, .CLAMP_WHITE, width, height, samples=samples)
+    target.attachments[.DEPTH] = register_texture(texture)
   }
 
   target.flags = flags
+
+  target.width  = width
+  target.height = height
 
   return target
 }
 
 begin_render_pass :: proc(pass: Render_Pass, target: ^Render_Target, blit_source: ^Render_Target = nil, sampled: []^Render_Target = {})
 {
-  // May also assert that the size of these attachments are the same, but eh
-  assert(len(target.attachments) != 0)
-
   // Viewport, if no custom viewport just set to the whole thing.
   pass := pass
   if .CUSTOM_VIEWPORT not_in pass.flags
   {
     pass.viewport.x = 0
     pass.viewport.y = 0
-    pass.viewport.w = target.attachments[0].width
-    pass.viewport.h = target.attachments[0].height
+    pass.viewport.w = target.width
+    pass.viewport.h = target.height
   }
 
   vk_begin_render_pass(pass, target, blit_source, sampled)

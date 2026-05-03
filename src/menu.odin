@@ -137,7 +137,7 @@ update_menu :: proc()
 
 draw_menu :: proc()
 {
-  begin_render_pass({clear_color=LEARN_OPENGL_BLUE}, &state.renderer.main_target)
+  begin_render_pass({clear_color=LEARN_OPENGL_BLUE}, &state.renderer.post_target)
   defer end_render_pass()
 
   x_title := f32(state.window.w) * 0.5

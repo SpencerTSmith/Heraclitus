@@ -105,9 +105,12 @@ init_state :: proc() -> (ok: bool)
   state.flashlight_on = false
 
   init_entities()
+  init_assets()
+
   init_renderer()
 
-  init_assets()
+  load_default_assets()
+
   state.default_font = make_font("Diablo_Light.ttf", DEFAULT_FONT_SIZE)
 
   init_menu()
@@ -211,8 +214,6 @@ main :: proc()
   last_frame_time := time.tick_now()
   dt_s := 0.0
 
-  sun_map := register_texture(&state.renderer.sun_shadow_target.attachments[0])
-
   for !should_close(state.window)
   {
     // dt and sleeping
@@ -262,6 +263,23 @@ main :: proc()
     if key_pressed(.B)
     {
       state.renderer.bloom_on = !state.renderer.bloom_on
+    }
+
+    if key_down(.M)
+    {
+      state.sun.direction.x += 0.25 * f32(dt_s)
+    }
+    if key_down(.N)
+    {
+      state.sun.direction.x -= 0.25 * f32(dt_s)
+    }
+    if key_down(.J)
+    {
+      state.sun.direction.z += 0.25 * f32(dt_s)
+    }
+    if key_down(.K)
+    {
+      state.sun.direction.z -= 0.25 * f32(dt_s)
     }
 
     // UPDATE
@@ -316,7 +334,7 @@ main :: proc()
     // RENDER
     if begin_render_frame()
     {
-      defer flush_render_frame(state.renderer.post_target.attachments[0])
+      defer flush_render_frame(state.renderer.post_target)
 
       switch state.mode
       {
@@ -371,7 +389,8 @@ main :: proc()
             draw_debug_stats()
             draw_ui()
 
-            draw_quad(vec2{700,700}, 400, 400, texture=sun_map)
+            // Shadow map
+            draw_quad(vec2{f32(state.window.w)*0.75,f32(state.window.h)*0.10}, 400, 400, texture=state.renderer.sun_shadow_target.attachments[.DEPTH])
 
             immediate_flush(.SCREEN)
           }
