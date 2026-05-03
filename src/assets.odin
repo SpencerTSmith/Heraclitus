@@ -126,9 +126,18 @@ register_model :: proc(model: Model) -> (handle: Model_Handle)
 }
 
 // Should always give valid pointer since give out fallback handles if we can't load a model.
-get_model :: proc(handle: Model_Handle) -> ^Model
+get_model :: proc(handle: Model_Handle) -> (model: ^Model)
 {
-  return &assets.model_catalog.assets[handle]
+  if handle == {}
+  {
+    model = &assets.model_catalog.assets[fallback_model_handle()]
+  }
+  else
+  {
+    model = &assets.model_catalog.assets[handle]
+  }
+
+  return model
 }
 
 load_texture :: proc(name: string, nonlinear_color: bool = false,

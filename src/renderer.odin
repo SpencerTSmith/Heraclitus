@@ -92,11 +92,11 @@ Pipeline_Key :: enum
   NONE,
   PHONG,
   SKYBOX,
-  RESOLVE_HDR,
   SUN_DEPTH,
-  POINT_DEPTH,
-  GAUSSIAN,
-  GET_BRIGHT,
+
+  // Figure out a nicer way
+  IMMEDIATE_TRIANGLE_MULTI_SAMPLED,
+  IMMEDIATE_LINE_MULTI_SAMPLED,
   IMMEDIATE_TRIANGLE,
   IMMEDIATE_LINE,
 }
@@ -186,9 +186,15 @@ init_renderer :: proc() -> (ok: bool)
   // Always have a default batch.
   append(&state.renderer.immediate.batches, Immediate_Batch{})
 
-  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA)
+  state.renderer.pipelines[.IMMEDIATE_TRIANGLE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 1, blend = .ALPHA_ONE_MINUS_ALPHA)
   assert(ok)
-  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA,
+  state.renderer.pipelines[.IMMEDIATE_LINE], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 1, blend = .ALPHA_ONE_MINUS_ALPHA,
+                                                                primitive = .LINES)
+  assert(ok)
+
+  state.renderer.pipelines[.IMMEDIATE_TRIANGLE_MULTI_SAMPLED], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA)
+  assert(ok)
+  state.renderer.pipelines[.IMMEDIATE_LINE_MULTI_SAMPLED], ok = make_pipeline("immediate.slang", .RGBA16F, .DEPTH32, 4, blend = .ALPHA_ONE_MINUS_ALPHA,
                                                                 primitive = .LINES)
   assert(ok)
 
@@ -541,12 +547,24 @@ immediate_flush :: proc(space: Immediate_Space)
           transform = perspective
         }
 
-        switch batch.primitive
+        switch batch.space
         {
+        case .SCREEN:
+          switch batch.primitive
+          {
           case .TRIANGLES:
             bind_pipeline(.IMMEDIATE_TRIANGLE)
           case .LINES:
             bind_pipeline(.IMMEDIATE_LINE)
+          }
+        case .WORLD:
+          switch batch.primitive
+          {
+          case .TRIANGLES:
+            bind_pipeline(.IMMEDIATE_TRIANGLE_MULTI_SAMPLED)
+          case .LINES:
+            bind_pipeline(.IMMEDIATE_LINE_MULTI_SAMPLED)
+          }
         }
 
         push: Immediate_Push =

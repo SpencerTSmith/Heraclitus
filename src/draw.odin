@@ -203,19 +203,19 @@ draw_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
 
   // Triangle sides
   immediate_vertex(tip, color)
+  immediate_vertex(base1, color)
   immediate_vertex(base0, color)
-  immediate_vertex(base1, color)
-
-  immediate_vertex(tip, color)
-  immediate_vertex(base1, color)
-  immediate_vertex(base2, color)
 
   immediate_vertex(tip, color)
   immediate_vertex(base2, color)
-  immediate_vertex(base3, color)
+  immediate_vertex(base1, color)
 
   immediate_vertex(tip, color)
   immediate_vertex(base3, color)
+  immediate_vertex(base2, color)
+
+  immediate_vertex(base3, color)
+  immediate_vertex(tip, color)
   immediate_vertex(base0, color)
 
   // Base
@@ -224,8 +224,8 @@ draw_pyramid :: proc(tip, base0, base1, base2, base3: vec3, color := WHITE,
   immediate_vertex(base1, color)
 
   immediate_vertex(base2, color)
-  immediate_vertex(base0, color)
   immediate_vertex(base3, color)
+  immediate_vertex(base0, color)
 }
 
 draw_sphere :: proc(center: vec3, radius: f32, color := WHITE,
@@ -321,7 +321,6 @@ draw_grid :: proc(spacing := 100, range := 500, color: vec4 = WHITE)
   }
 }
 
-// TODO: Rewrite immediate line to take in a radius for line, will probably no longer have to have immediate line primitive... just a  line is ugly
 draw_vector ::proc(origin, direction: vec3, color: vec4 = WHITE, thickness: f32 = 0.025,
                    depth_test: Depth_Test_Mode = .LESS)
 {

@@ -199,7 +199,7 @@ float sample_cascade(Direction_Light_Uniform light, uint shadow_map_index, uint 
     // Fix shadow acne, surfaces facing away get large bias, surfaces facing toward get less
     float bias = shadow_bias(normal, normalize(to_light_direction));
 
-    float disk_radius = 1.4;
+    float disk_radius = 2.5;
 
     float2 texel_size = 1.0 / full_atlas_size;
 

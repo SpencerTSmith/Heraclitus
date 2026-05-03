@@ -589,6 +589,7 @@ init_vulkan :: proc(window: Window) -> (ok: bool)
         imageCubeArray    = true,
         multiDrawIndirect = true,
         depthClamp        = true,
+        wideLines         = true,
       },
       pNext = &required_device_features11,
     }
@@ -2080,7 +2081,7 @@ vk_make_pipeline :: proc(code: []byte, color_format, depth_format: Pixel_Format,
     sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
     polygonMode = .FILL,
     frontFace   = .COUNTER_CLOCKWISE,
-    lineWidth   = 1.0,
+    lineWidth   = 4.0,
     depthClampEnable = true,
   }
 

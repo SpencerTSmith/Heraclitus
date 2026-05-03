@@ -336,8 +336,8 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
   CASCADE_INFO: [CASCADE_COUNT + 1]struct{z: f32, offset: vec2} =
   {
     {state.camera.z_near, {0,          0}},
-    {25.0,                {ATLAS_SIZE, 0}},
-    {50.0,                {ATLAS_SIZE, ATLAS_SIZE}},
+    {15.0,                {ATLAS_SIZE, 0}},
+    {40.0,                {ATLAS_SIZE, ATLAS_SIZE}},
     {100.0,               {0,          ATLAS_SIZE}},
     {200.0,               {0, 0}}, // Shouldn't use the offset here
   }

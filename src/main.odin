@@ -193,23 +193,23 @@ main :: proc()
 
   make_point_light_entity({-5, 1, -10}, BLUE, 30, 1.0, cast_shadows=true)
 
-  GRID_SIZE :: 20
-  GRID_SPACING :: 5
-  for x in 0..<GRID_SIZE
-  {
-    for y in 0..<GRID_SIZE
-    {
-      for z in 0..<GRID_SIZE
-      {
-        pos := vec3{
-          f32(x) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
-          f32(y) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
-          f32(z) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) - 100,
-        }
-        make_entity("cube/BoxTextured.gltf", flags={.RENDERABLE}, position=pos)
-      }
-    }
-  }
+  // GRID_SIZE :: 20
+  // GRID_SPACING :: 5
+  // for x in 0..<GRID_SIZE
+  // {
+  //   for y in 0..<GRID_SIZE
+  //   {
+  //     for z in 0..<GRID_SIZE
+  //     {
+  //       pos := vec3{
+  //         f32(x) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
+  //         f32(y) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) + 100,
+  //         f32(z) * GRID_SPACING - (GRID_SIZE * GRID_SPACING / 2) - 100,
+  //       }
+  //       make_entity("cube/BoxTextured.gltf", flags={.RENDERABLE}, position=pos)
+  //     }
+  //   }
+  // }
 
   last_frame_time := time.tick_now()
   dt_s := 0.0
@@ -388,9 +388,6 @@ main :: proc()
 
             draw_debug_stats()
             draw_ui()
-
-            // Shadow map
-            draw_quad(vec2{f32(state.window.w)*0.75,f32(state.window.h)*0.10}, 400, 400, texture=state.renderer.sun_shadow_target.attachments[.DEPTH])
 
             immediate_flush(.SCREEN)
           }
