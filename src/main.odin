@@ -347,7 +347,7 @@ main :: proc()
 
               for cascade in 0..<CASCADE_COUNT
               {
-                set_render_viewport(viewports[cascade])
+                set_render_viewport(CASCADE_VIEWPORTS[cascade])
                 for e in all_entities()
                 {
                   draw_entity(e)

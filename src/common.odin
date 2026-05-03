@@ -113,10 +113,13 @@ normalize0 :: linalg.normalize0
 length     :: glsl.length
 sign       :: glsl.sign
 
+pow :: glsl.pow
+
 cos :: glsl.cos
 sin :: glsl.sin
 tan :: glsl.tan
 radians :: glsl.radians
+
 
 vmin  :: glsl.min
 vmax  :: glsl.max
@@ -130,6 +133,7 @@ inverse_transpose :: glsl.inverse_transpose
 mat4_translate :: glsl.mat4Translate
 mat4_rotate    :: glsl.mat4Rotate
 mat4_scale     :: glsl.mat4Scale
+
 
 // For vulkan clip space.
 mat4_perspective  :: proc(fovy, aspect, near, far: f32) -> (m: mat4)

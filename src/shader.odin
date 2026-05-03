@@ -327,25 +327,33 @@ point_light_uniform :: proc(light: Point_Light) -> (uniform: Point_Light_Uniform
   return uniform
 }
 
-viewports: [CASCADE_COUNT]Viewport
+ATLAS_SIZE :: SUN_SHADOW_MAP_SIZE*0.5
+CASCADE_VIEWPORTS: [CASCADE_COUNT]Viewport =
+{
+  {x = 0,          y = 0,          w = ATLAS_SIZE, h = ATLAS_SIZE},
+  {x = ATLAS_SIZE, y = 0,          w = ATLAS_SIZE, h = ATLAS_SIZE},
+  {x = ATLAS_SIZE, y = ATLAS_SIZE, w = ATLAS_SIZE, h = ATLAS_SIZE},
+  {x = 0,          y = ATLAS_SIZE, w = ATLAS_SIZE, h = ATLAS_SIZE},
+}
 
 // NOTE: Hardcoded center on main camera.
 direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_Light_Uniform)
 {
-  ATLAS_SIZE :: SUN_SHADOW_MAP_SIZE*0.5
-  CASCADE_INFO: [CASCADE_COUNT + 1]struct{z: f32, offset: vec2} =
-  {
-    {state.camera.z_near, {0,          0}},
-    {15.0,                {ATLAS_SIZE, 0}},
-    {40.0,                {ATLAS_SIZE, ATLAS_SIZE}},
-    {100.0,               {0,          ATLAS_SIZE}},
-    {200.0,               {0, 0}}, // Shouldn't use the offset here
-  }
+  SHADOW_DISTANCE :: 300.0
 
-  for idx in 0..<len(CASCADE_INFO) - 1
+  previous_far := state.camera.z_near
+  for idx in 0..<CASCADE_COUNT
   {
-    near := CASCADE_INFO[idx].z
-    far  := CASCADE_INFO[idx + 1].z
+    // Split plane formula from https://www.slideshare.net/slideshow/02-g-d-c09-shadow-and-decals-frostbite-final3flat/1228973
+    split_factor := f32(idx + 1) / CASCADE_COUNT
+
+    log_distance     := state.camera.z_near * pow(SHADOW_DISTANCE/state.camera.z_near, split_factor)
+    uniform_distance := state.camera.z_near + (SHADOW_DISTANCE - state.camera.z_near) * split_factor
+
+    near := previous_far
+    far  := lerp(uniform_distance, log_distance, 0.7)
+
+    previous_far = far
 
     projection := mat4_perspective(radians(state.camera.curr_fov_y), window_aspect_ratio(state.window), near, far)
     view       := camera_view(state.camera)
@@ -382,8 +390,9 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
     }
 
     // HACK: Probably not the most efficient way to do texel snapping
-    texel_size   := 2.0 / f32(ATLAS_SIZE)
+    texel_size := 2.0 / f32(ATLAS_SIZE)
 
+    // HACK: For stability, doing the inverse proj_view trick makes this unstable across frames, so round it up
     radius = ceil(radius)
 
     // Form a naive proj_view with no texel snapping
@@ -403,14 +412,9 @@ direction_light_uniform :: proc(light: Direction_Light) -> (uniform: Direction_L
 
     uniform.proj_views[idx] = light_projection * light_view
 
-    viewports[idx].x = u32(CASCADE_INFO[idx].offset.x)
-    viewports[idx].y = u32(CASCADE_INFO[idx].offset.y)
-    viewports[idx].w = u32(ATLAS_SIZE)
-    viewports[idx].h = u32(ATLAS_SIZE)
-
-    uniform.atlas_size[idx]   = {ATLAS_SIZE, ATLAS_SIZE}
+    uniform.atlas_size[idx]   = vec2{f32(CASCADE_VIEWPORTS[idx].w), f32(CASCADE_VIEWPORTS[idx].h)}
     uniform.depth_plane[idx]  = far
-    uniform.atlas_offset[idx] = CASCADE_INFO[idx].offset
+    uniform.atlas_offset[idx] = vec2{f32(CASCADE_VIEWPORTS[idx].x), f32(CASCADE_VIEWPORTS[idx].y)}
   }
 
   uniform.ambient = light.ambient
